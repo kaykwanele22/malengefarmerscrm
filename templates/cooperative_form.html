@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block title %}{% if cooperative %}Edit Cooperative{% else %}Add Cooperative{% endif %} | Malenge Farmers CRM{% endblock %}
+
+{% block content %}
+<!-- PAGE HEADER -->
+<div class="page-header">
+    <div>
+        <span class="eyebrow">COOPERATIVE MANAGEMENT</span>
+        <h1>{% if cooperative %}Edit Cooperative{% else %}Add Cooperative{% endif %}</h1>
+        <p>Record the official cooperative details and hierarchy.</p>
+    </div>
+</div>
+
+<!-- FORM -->
+<div class="content-card form-card">
+    <form method="POST" action="{% if cooperative %}{{ url_for('edit_cooperative', cooperative_id=cooperative.id) }}{% else %}{{ url_for('add_cooperative') }}{% endif %}">
+        <div class="form-grid">
+            <!-- NAME -->
+            <div class="form-group full-width">
+                <label for="name">Cooperative Name *</label>
+                <input type="text" id="name" name="name" value="{{ cooperative.name if cooperative else '' }}" placeholder="Enter cooperative name" required>
+            </div>
+
+            <!-- TYPE -->
+            <div class="form-group">
+                <label for="cooperative_type">Cooperative Type *</label>
+                <select id="cooperative_type" name="cooperative_type" required onchange="toggleParentCooperative()">
+                    <option value="">Select type</option>
+                    <option value="Secondary" {% if cooperative and cooperative.cooperative_type == 'Secondary' %}selected{% endif %}>Secondary Cooperative</option>
+                    <option value="Primary" {% if cooperative and cooperative.cooperative_type == 'Primary' %}selected{% endif %}>Primary Cooperative</option>
+                </select>
+            </div>
+
+            <!-- STATUS -->
+            <div class="form-group">
+                <label for="status">Status</label>
+                <select id="status" name="status">
+                    <option value="Active" {% if not cooperative or cooperative.status == 'Active' %}selected{% endif %}>Active</option>
+                    <option value="Inactive" {% if cooperative and cooperative.status == 'Inactive' %}selected{% endif %}>Inactive</option>
+                </select>
+            </div>
+
+            <!-- PARENT (for Primary cooperatives) -->
+            <div class="form-group full-width" id="parentSection">
+                <label for="parent_id">Secondary Cooperative *</label>
+                <select id="parent_id" name="parent_id">
+                    <option value="">Select Secondary Cooperative</option>
+                    {% for secondary in secondary_cooperatives %}
+                    <option value="{{ secondary.id }}" {% if cooperative and cooperative.parent_id == secondary.id %}selected{% endif %}>{{ secondary.name }}</option>
+                    {% endfor %}
+                </select>
+                <small class="form-help">Required only when creating a Primary Cooperative.</small>
+            </div>
+
+            <!-- REGISTRATION NUMBER -->
+            <div class="form-group">
+                <label for="registration_number">Registration Number</label>
+                <input type="text" id="registration_number" name="registration_number" value="{{ cooperative.registration_number if cooperative and cooperative.registration_number else '' }}" placeholder="Registration number">
+            </div>
+
+            <!-- CODE -->
+            <div class="form-group">
+                <label for="code">Cooperative Code</label>
+                <input type="text" id="code" name="code" value="{{ cooperative.code if cooperative and cooperative.code else '' }}" placeholder="e.g. SIYA-001">
+            </div>
+
+            <!-- LOCATION -->
+            <div class="form-group full-width">
+                <label for="location">Location</label>
+                <input type="text" id="location" name="location" value="{{ cooperative.location if cooperative and cooperative.location else '' }}" placeholder="Village / Area / Municipality">
+            </div>
+        </div>
+
+        <!-- ACTIONS -->
+        <div class="form-actions">
+            <a href="{{ url_for('cooperatives') }}" class="secondary-btn">Cancel</a>
+            <button type="submit" class="primary-btn">{% if cooperative %}Save Changes{% else %}Create Cooperative{% endif %}</button>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function toggleParentCooperative() {
+        const cooperativeType = document.getElementById("cooperative_type");
+        const parentSection = document.getElementById("parentSection");
+        const parentSelect = document.getElementById("parent_id");
+
+        if (cooperativeType.value === "Primary") {
+            parentSection.style.display = "";
+            parentSelect.required = true;
+        } else {
+            parentSection.style.display = "none";
+            parentSelect.required = false;
+            parentSelect.value = "";
+        }
+    }
+    document.addEventListener("DOMContentLoaded", toggleParentCooperative);
+</script>
+{% endblock %}
