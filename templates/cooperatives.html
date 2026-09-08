@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+{% block title %}Cooperatives | Malenge Farmers CRM{% endblock %}
+
+{% block content %}
+<!-- PAGE HEADER -->
+<div class="page-header">
+    <div>
+        <span class="eyebrow">COOPERATIVE MANAGEMENT</span>
+        <h1>Cooperatives</h1>
+        <p>Manage the Malenge cooperative structure and hierarchy.</p>
+    </div>
+    <a href="{{ url_for('add_cooperative') }}" class="primary-btn">+ Add Cooperative</a>
+</div>
+
+<!-- COUNTS -->
+{% set total_count = cooperatives|length %}
+{% set secondary_count = cooperatives|selectattr('cooperative_type', 'equalto', 'Secondary')|list|length %}
+{% set primary_count = cooperatives|selectattr('cooperative_type', 'equalto', 'Primary')|list|length %}
+{% set active_count = cooperatives|selectattr('status', 'equalto', 'Active')|list|length %}
+
+<!-- SUMMARY CARDS -->
+<div class="stats-grid">
+    <div class="stat-card"><span>Total Cooperatives</span><strong>{{ total_count }}</strong></div>
+    <div class="stat-card"><span>Secondary</span><strong>{{ secondary_count }}</strong></div>
+    <div class="stat-card"><span>Primary</span><strong>{{ primary_count }}</strong></div>
+    <div class="stat-card"><span>Active</span><strong>{{ active_count }}</strong></div>
+</div>
+
+<!-- SEARCH -->
+<div class="content-card">
+    <form method="GET" action="{{ url_for('cooperatives') }}" class="search-bar">
+        <input type="text" name="search" value="{{ search or '' }}" placeholder="Search cooperative name, code, location or registration number">
+        <button type="submit" class="primary-btn">Search</button>
+        {% if search %}
+        <a href="{{ url_for('cooperatives') }}" class="secondary-btn">Clear</a>
+        {% endif %}
+    </form>
+</div>
+
+<!-- COOPERATIVE STRUCTURE -->
+{% if cooperatives %}
+    {% for cooperative in cooperatives if cooperative.cooperative_type == 'Secondary' %}
+    <!-- SECONDARY COOPERATIVE -->
+    <div class="content-card cooperative-secondary">
+        <div class="record-header">
+            <div>
+                <span class="status-badge">Secondary Cooperative</span>
+                <h2>{{ cooperative.name }}</h2>
+            </div>
+            <span class="record-status">{{ cooperative.status }}</span>
+        </div>
+        <div class="record-details">
+            {% if cooperative.registration_number %}<p><strong>Registration Number:</strong> {{ cooperative.registration_number }}</p>{% endif %}
+            {% if cooperative.code %}<p><strong>Code:</strong> {{ cooperative.code }}</p>{% endif %}
+            {% if cooperative.location %}<p><strong>Location:</strong> {{ cooperative.location }}</p>{% endif %}
+            <p><strong>Linked Primary Cooperatives:</strong> {{ cooperative.primary_cooperatives|length }}</p>
+        </div>
+        <div class="record-actions">
+            <a href="{{ url_for('edit_cooperative', cooperative_id=cooperative.id) }}" class="secondary-btn">Edit Cooperative</a>
+        </div>
+    </div>
+
+    <!-- PRIMARY COOPERATIVES -->
+    {% if cooperative.primary_cooperatives %}
+    <div class="record-grid">
+        {% for primary in cooperative.primary_cooperatives %}
+        <div class="content-card">
+            <div class="record-header">
+                <div>
+                    <span class="status-badge">Primary Cooperative</span>
+                    <h3>{{ primary.name }}</h3>
+                </div>
+                <span class="record-status">{{ primary.status }}</span>
+            </div>
+            <div class="record-details">
+                {% if primary.registration_number %}<p><strong>Registration Number:</strong> {{ primary.registration_number }}</p>{% endif %}
+                {% if primary.code %}<p><strong>Code:</strong> {{ primary.code }}</p>{% endif %}
+                {% if primary.location %}<p><strong>Location:</strong> {{ primary.location }}</p>{% endif %}
+                <p><strong>Secondary:</strong> {{ cooperative.name }}</p>
+            </div>
+            <div class="record-actions">
+                <a href="{{ url_for('edit_cooperative', cooperative_id=primary.id) }}" class="secondary-btn">Edit Cooperative</a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <!-- NO PRIMARY COOPERATIVES -->
+    <div class="content-card empty-state">
+        <h3>No Primary Cooperatives Linked</h3>
+        <p>Add the two Primary Cooperatives and connect them to this Secondary Cooperative.</p>
+        <a href="{{ url_for('add_cooperative') }}" class="primary-btn">+ Add Primary Cooperative</a>
+    </div>
+    {% endif %}
+    {% endfor %}
+
+    <!-- NO SECONDARY FOUND -->
+    {% if secondary_count == 0 %}
+    <div class="content-card empty-state">
+        <h3>No Secondary Cooperative Yet</h3>
+        <p>Create the Secondary Cooperative before creating the two Primary Cooperatives.</p>
+        <a href="{{ url_for('add_cooperative') }}" class="primary-btn">+ Create Secondary Cooperative</a>
+    </div>
+    {% endif %}
+
+{% else %}
+<!-- EMPTY DATABASE -->
+<div class="content-card empty-state">
+    <h3>No Cooperatives Added Yet</h3>
+    <p>Start by creating the Malenge Secondary Cooperative.</p>
+    <a href="{{ url_for('add_cooperative') }}" class="primary-btn">+ Add Cooperative</a>
+</div>
+{% endif %}
+{% endblock %}
