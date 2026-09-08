@@ -21,6 +21,9 @@
             <a href="{{ url_for('dashboard') }}" class="nav-item {% if request.endpoint == 'dashboard' %}active{% endif %}">
                 <span>📊</span><span>Dashboard</span>
             </a>
+            <a href="{{ url_for('cooperatives') }}" class="nav-item {% if request.endpoint in ['cooperatives', 'add_cooperative', 'edit_cooperative'] %}active{% endif %}">
+                <span>🏢</span><span>Cooperatives</span>
+            </a>
             <a href="{{ url_for('farmers') }}" class="nav-item {% if request.endpoint in ['farmers', 'add_farmer', 'edit_farmer'] %}active{% endif %}">
                 <span>👥</span><span>Farmers</span>
             </a>
