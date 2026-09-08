@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login | Malenge Farmers CRM</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="login-page">
+<!-- DECORATIONS -->
+<div class="login-background-decoration decoration-one">🌿</div>
+<div class="login-background-decoration decoration-two">🌾</div>
+
+<div class="login-container">
+    <div class="login-card">
+        <!-- LOGO -->
+        <div class="login-logo-wrapper">
+            <div class="login-logo">🎃</div>
+        </div>
+
+        <!-- TITLE -->
+        <div class="login-heading">
+            <p class="login-brand">MALENGE FARMERS CRM</p>
+            <h1>Welcome Back</h1>
+            <p class="login-subtitle">Sign in to manage farmers, farms, crops, harvests and business records.</p>
+        </div>
+
+        <!-- LOGIN FORM -->
+        <form action="{{ url_for('login') }}" method="POST" class="login-form">
+            <!-- EMAIL -->
+            <div class="form-group">
+                <label for="email">Email Address</label>
+                <div class="input-container">
+                    <span class="input-icon">✉️</span>
+                    <input type="email" id="email" name="email" placeholder="name@example.com" autocomplete="email" required>
+                </div>
+            </div>
+
+            <!-- PASSWORD -->
+            <div class="form-group">
+                <label for="password">Password</label>
+                <div class="input-container password-container">
+                    <span class="input-icon">🔒</span>
+                    <input type="password" id="password" name="password" placeholder="Enter your password" autocomplete="current-password" required>
+                    <button type="button" id="togglePassword" class="password-toggle" aria-label="Show password">👁️</button>
+                </div>
+            </div>
+
+            <!-- OPTIONS -->
+            <div class="login-options">
+                <label class="remember-me">
+                    <input type="checkbox" name="remember">
+                    <span>Remember me</span>
+                </label>
+                <a href="#" class="forgot-password">Forgot password?</a>
+            </div>
+
+            <!-- SUBMIT -->
+            <button type="submit" class="login-submit">
+                <span>Sign In</span>
+                <span class="login-arrow">→</span>
+            </button>
+        </form>
+
+        <!-- DIVIDER -->
+        <div class="login-divider">
+            <span></span>
+            <p>New to Malenge?</p>
+            <span></span>
+        </div>
+
+        <!-- REGISTER -->
+        <a href="{{ url_for('register') }}" class="register-button">Create New Account</a>
+
+        <!-- BACK HOME -->
+        <div class="back-home">
+            <a href="{{ url_for('home') }}">← Back to Home</a>
+        </div>
+
+        <!-- FOOTER -->
+        <div class="login-footer">
+            <span>🌱</span>
+            <p>Supporting farmers. Managing growth.</p>
+        </div>
+    </div>
+</div>
+
+<script>
+    const togglePassword = document.getElementById("togglePassword");
+    const password = document.getElementById("password");
+
+    togglePassword.addEventListener("click", function() {
+        const passwordVisible = password.type === "text";
+        password.type = passwordVisible ? "password" : "text";
+        togglePassword.textContent = passwordVisible ? "👁️" : "🙈";
+        togglePassword.setAttribute("aria-label", passwordVisible ? "Show password" : "Hide password");
+    });
+</script>
+</body>
+</html>

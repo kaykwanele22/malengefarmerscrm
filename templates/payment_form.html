@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}{% if payment %}Edit Payment{% else %}Record Payment{% endif %} | Malenge Farmers CRM{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <div>
+        <h1>{% if payment %}Edit Payment{% else %}Record Payment{% endif %}</h1>
+        <p>Record payment received for a sale.</p>
+    </div>
+    <a href="{{ url_for('payments') }}" class="back-button">← Back to Payments</a>
+</div>
+
+<div class="form-card">
+<form method="POST">
+<div class="form-grid">
+
+    <div class="form-group">
+        <label for="sale_id">Sale *</label>
+        <select id="sale_id" name="sale_id" required>
+            <option value="">Select sale</option>
+            {% for sale in sales %}
+            <option value="{{ sale.id }}" {% if payment and payment.sale_id == sale.id %}selected{% endif %}>
+                {{ sale.buyer_name }} - R {{ "%.2f"|format(sale.total_amount) }} - {{ sale.sale_date }}
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label for="amount">Amount (R) *</label>
+        <input type="number" step="0.01" min="0" id="amount" name="amount" value="{{ payment.amount if payment else '' }}" required>
+    </div>
+
+    <div class="form-group">
+        <label for="payment_date">Payment Date *</label>
+        <input type="date" id="payment_date" name="payment_date" value="{{ payment.payment_date.strftime('%Y-%m-%d') if payment and payment.payment_date else '' }}" required>
+    </div>
+
+    <div class="form-group">
+        <label for="method">Payment Method</label>
+        <select id="method" name="method">
+            <option value="">Select method</option>
+            {% for option in ["Cash", "EFT", "Bank Transfer", "Card", "Mobile Payment"] %}
+            <option value="{{ option }}" {% if payment and payment.method == option %}selected{% endif %}>{{ option }}</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label for="reference">Reference</label>
+        <input type="text" id="reference" name="reference" value="{{ payment.reference if payment and payment.reference else '' }}">
+    </div>
+
+    <div class="form-group">
+        <label for="status">Status</label>
+        <select id="status" name="status">
+            {% for option in ["Received", "Pending", "Partial", "Reversed"] %}
+            <option value="{{ option }}" {% if payment and payment.status == option %}selected{% elif not payment and option == "Received" %}selected{% endif %}>{{ option }}</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="form-group full-width">
+        <label for="notes">Notes</label>
+        <textarea id="notes" name="notes" rows="5">{{ payment.notes if payment and payment.notes else '' }}</textarea>
+    </div>
+
+</div>
+
+<div class="form-actions">
+    <a href="{{ url_for('payments') }}" class="cancel-button">Cancel</a>
+    <button type="submit" class="save-button">{% if payment %}Update Payment{% else %}Save Payment{% endif %}</button>
+</div>
+</form>
+</div>
+
+{% endblock %}

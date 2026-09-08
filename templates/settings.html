@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %}Settings | Malenge Farmers CRM{% endblock %}
+
+{% block content %}
+<!-- PAGE HEADER -->
+<div class="page-header">
+    <div>
+        <h1>Settings</h1>
+        <p>Manage your CRM account and application settings.</p>
+    </div>
+</div>
+
+<!-- ACCOUNT INFORMATION -->
+<section class="dashboard-section">
+    <div class="section-header">
+        <div>
+            <h2>Account Information</h2>
+            <p>Your current Malenge Farmers CRM account details.</p>
+        </div>
+    </div>
+    <div class="settings-info">
+        <p><strong>Name:</strong> {{ user.fullname if user else session.get("fullname", "User") }}</p>
+        <p><strong>Email:</strong> {{ user.email if user else "-" }}</p>
+        <p><strong>Phone:</strong> {{ user.phone if user else "-" }}</p>
+        <p><strong>Farm Location:</strong> {{ user.farm_location if user else "-" }}</p>
+    </div>
+</section>
+
+<!-- CRM CONFIGURATION -->
+<section class="dashboard-section">
+    <div class="section-header">
+        <div>
+            <h2>CRM Configuration</h2>
+            <p>Additional settings can be added here as the CRM grows.</p>
+        </div>
+    </div>
+</section>
+{% endblock %}

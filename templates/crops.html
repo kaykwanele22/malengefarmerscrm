@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}Crops | Malenge Farmers CRM{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/crops.css') }}">
+{% endblock %}
+
+{% block content %}
+<!-- PAGE HEADER -->
+<div class="page-header">
+    <div>
+        <h1>Crops</h1>
+        <p>Manage crops planted on registered farms.</p>
+    </div>
+    <a href="{{ url_for('add_crop') }}" class="primary-button">+ Add Crop</a>
+</div>
+
+<!-- SEARCH FORM -->
+<form method="GET" action="{{ url_for('crops') }}" class="search-form">
+    <input type="text" name="search" placeholder="Search crops, farms, varieties or status..." value="{{ search }}">
+    <button type="submit">Search</button>
+</form>
+
+<!-- CROPS TABLE -->
+<div class="table-container">
+    <table>
+        <thead>
+            <tr>
+                <th>Crop</th>
+                <th>Farm</th>
+                <th>Farmer</th>
+                <th>Variety</th>
+                <th>Planting Date</th>
+                <th>Harvest Date</th>
+                <th>Area</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for crop in crops %}
+            <tr>
+                <td><strong>{{ crop.name }}</strong></td>
+                <td>{{ crop.farm.name }}</td>
+                <td>{{ crop.farm.farmer.fullname }}</td>
+                <td>{{ crop.variety or "-" }}</td>
+                <td>{{ crop.planting_date or "-" }}</td>
+                <td>{{ crop.expected_harvest_date or "-" }}</td>
+                <td>{% if crop.area_planted %}{{ crop.area_planted }} ha{% else %}-{% endif %}</td>
+                <td><span class="crop-status">{{ crop.status }}</span></td>
+                <td class="actions-cell">
+                    <a href="{{ url_for('edit_crop', crop_id=crop.id) }}" class="edit-button">Edit</a>
+                    <form method="POST" action="{{ url_for('delete_crop', crop_id=crop.id) }}" class="delete-form">
+                        <button type="submit" class="delete-button" onclick="return confirm('Delete this crop?');">Delete</button>
+                    </form>
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="9" class="empty-message">
+                    No crops have been registered yet.
+                    <br>
+                    <a href="{{ url_for('add_crop') }}">Add your first crop</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

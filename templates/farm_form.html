@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block title %}{% if farm %}Edit Farm{% else %}Add Farm{% endif %} | Malenge Farmers CRM{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/farms.css') }}">
+{% endblock %}
+
+{% block content %}
+<!-- PAGE HEADER -->
+<div class="page-header">
+    <div>
+        <h1>{% if farm %}Edit Farm{% else %}Add Farm{% endif %}</h1>
+        <p>{% if farm %}Update the registered farm information.{% else %}Register a new farm in the Malenge Farmers CRM.{% endif %}</p>
+    </div>
+    <a href="{{ url_for('farms') }}" class="back-button">← Back to Farms</a>
+</div>
+
+<!-- FARM FORM -->
+<div class="farm-form-card">
+    <form method="POST">
+        <div class="form-section">
+            <h3>Farm Information</h3>
+            <p>Enter the details of the farm below.</p>
+        </div>
+
+        <div class="form-grid">
+            <!-- FARM NAME -->
+            <div class="form-group">
+                <label for="name">Farm Name *</label>
+                <input type="text" id="name" name="name" value="{{ farm.name if farm else '' }}" placeholder="Example: Malenge Green Farm" required>
+            </div>
+
+            <!-- FARMER -->
+            <div class="form-group">
+                <label for="farmer_id">Farmer / Owner *</label>
+                <select id="farmer_id" name="farmer_id" required>
+                    <option value="">Select a farmer</option>
+                    {% for farmer in farmers %}
+                    <option value="{{ farmer.id }}" {% if farm and farm.farmer_id == farmer.id %}selected{% endif %}>
+                        {{ farmer.fullname }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- LOCATION -->
+            <div class="form-group">
+                <label for="location">Farm Location *</label>
+                <input type="text" id="location" name="location" value="{{ farm.location if farm else '' }}" placeholder="Example: Malenge, KwaZulu-Natal" required>
+            </div>
+
+            <!-- SIZE -->
+            <div class="form-group">
+                <label for="size">Farm Size (hectares)</label>
+                <input type="number" id="size" name="size" step="0.01" min="0" value="{{ farm.size if farm and farm.size is not none else '' }}" placeholder="Example: 5.5">
+            </div>
+
+            <!-- FARMING TYPE -->
+            <div class="form-group">
+                <label for="farming_type">Farming Type</label>
+                <select id="farming_type" name="farming_type">
+                    <option value="">Select farming type</option>
+                    <option value="Crop Farming" {% if farm and farm.farming_type == "Crop Farming" %}selected{% endif %}>Crop Farming</option>
+                    <option value="Vegetable Farming" {% if farm and farm.farming_type == "Vegetable Farming" %}selected{% endif %}>Vegetable Farming</option>
+                    <option value="Livestock" {% if farm and farm.farming_type == "Livestock" %}selected{% endif %}>Livestock</option>
+                    <option value="Poultry" {% if farm and farm.farming_type == "Poultry" %}selected{% endif %}>Poultry</option>
+                    <option value="Mixed Farming" {% if farm and farm.farming_type == "Mixed Farming" %}selected{% endif %}>Mixed Farming</option>
+                </select>
+            </div>
+
+            <!-- MAIN CROP -->
+            <div class="form-group">
+                <label for="main_crop">Main Crop</label>
+                <input type="text" id="main_crop" name="main_crop" value="{{ farm.main_crop if farm else '' }}" placeholder="Example: Potatoes">
+            </div>
+
+            <!-- STATUS -->
+            <div class="form-group">
+                <label for="status">Farm Status</label>
+                <select id="status" name="status">
+                    <option value="Active" {% if not farm or farm.status == "Active" %}selected{% endif %}>Active</option>
+                    <option value="Inactive" {% if farm and farm.status == "Inactive" %}selected{% endif %}>Inactive</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- FORM ACTIONS -->
+        <div class="form-actions">
+            <a href="{{ url_for('farms') }}" class="cancel-button">Cancel</a>
+            <button type="submit" class="save-button">{% if farm %}Update Farm{% else %}Save Farm{% endif %}</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

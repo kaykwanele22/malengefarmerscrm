@@ -1,0 +1,110 @@
+/* MALENGE FARMERS CRM - DASHBOARD / APP LAYOUT */
+*{box-sizing:border-box}html,body{margin:0;min-height:100%}body{font-family:Arial,Helvetica,sans-serif;background:#f4f7f5;color:#1f2937}
+
+/* APP LAYOUT */
+.dashboard-layout{min-height:100vh;background:#f4f7f5}
+
+/* SIDEBAR */
+.sidebar{position:fixed;top:0;left:0;bottom:0;width:270px;height:100vh;display:flex;flex-direction:column;padding:24px 18px;background:linear-gradient(180deg,#173b2b 0%,#102c20 100%);color:#fff;overflow-y:auto;overflow-x:hidden;z-index:1000;box-shadow:6px 0 24px rgba(20,52,38,0.08)}
+.brand{display:flex;align-items:center;gap:12px;padding:4px 8px 24px}
+.brand-icon{width:46px;height:46px;display:grid;place-items:center;border-radius:13px;background:rgba(255,255,255,0.10);font-size:24px}
+.brand h2{margin:0;font-size:20px;color:#fff}
+.brand span{display:block;margin-top:3px;font-size:11px;color:rgba(255,255,255,0.65)}
+.sidebar-nav{display:flex;flex-direction:column;gap:4px;padding-bottom:18px}
+.nav-title{margin:18px 10px 7px;color:rgba(255,255,255,0.42);font-size:10px;font-weight:800;letter-spacing:1.1px}
+.nav-item{width:100%;min-height:42px;display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:10px;color:rgba(255,255,255,0.82);text-decoration:none;font-size:13px;font-weight:600;transition:background 0.18s ease,color 0.18s ease,transform 0.18s ease}
+.nav-item:hover{background:rgba(255,255,255,0.08);color:#fff;transform:translateX(2px)}
+.nav-item.active{background:rgba(255,255,255,0.13);color:#fff}
+.nav-item>span:first-child{width:22px;display:inline-flex;justify-content:center}
+.sidebar-bottom{margin-top:auto;padding-top:14px;border-top:1px solid rgba(255,255,255,0.10)}
+.nav-item.logout{color:#ffd5d5}
+.sidebar::-webkit-scrollbar{width:6px}
+.sidebar::-webkit-scrollbar-track{background:transparent}
+.sidebar::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.22);border-radius:999px}
+
+/* MAIN CONTENT */
+.main-content{min-height:100vh;margin-left:270px;padding:30px;background:#f4f7f5}
+
+/* MONITORING DASHBOARD */
+.monitor-page{display:flex;flex-direction:column;gap:26px;width:100%;padding-bottom:40px}
+.monitor-header{display:flex;justify-content:space-between;align-items:flex-start;gap:20px}
+.monitor-eyebrow,.monitor-section-kicker{margin:0 0 7px;color:#2e7d4f;font-size:11px;font-weight:800;letter-spacing:1.2px}
+.monitor-header h1{margin:0;color:#173b2b;font-size:30px}
+.monitor-subtitle{margin:9px 0 0;color:#6b7280;font-size:14px}
+.monitor-header-button{min-height:42px;display:inline-flex;align-items:center;justify-content:center;padding:0 17px;border-radius:10px;background:#173b2b;color:#fff;text-decoration:none;font-size:13px;font-weight:700}
+.monitor-kpi-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+.monitor-kpi-card{display:flex;align-items:center;gap:14px;padding:20px;border:1px solid #e4ebe6;border-radius:15px;background:#fff;color:inherit;text-decoration:none;box-shadow:0 3px 12px rgba(23,59,43,0.04);transition:transform 0.18s ease,box-shadow 0.18s ease}
+.monitor-kpi-card:hover{transform:translateY(-2px);box-shadow:0 8px 22px rgba(23,59,43,0.08)}
+.monitor-kpi-icon{width:47px;height:47px;display:grid;place-items:center;border-radius:12px;background:#eef6f0;font-size:22px}
+.monitor-kpi-card span{display:block;margin-bottom:3px;color:#6b7280;font-size:12px}
+.monitor-kpi-card strong{color:#173b2b;font-size:24px}
+.monitor-section{display:flex;flex-direction:column;gap:15px}
+.monitor-section-heading,.monitor-panel-heading{display:flex;align-items:center;justify-content:space-between;gap:15px}
+.monitor-section-heading h2,.monitor-panel-heading h2{margin:0;color:#1f3a2d;font-size:19px}
+.monitor-section-heading a,.monitor-panel-heading a{color:#2e7d4f;text-decoration:none;font-size:12px;font-weight:700}
+.monitor-finance-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:15px}
+.monitor-finance-card{padding:20px;border:1px solid #e4ebe6;border-radius:14px;background:#fff}
+.monitor-finance-card.attention{border-color:#f1c99f;background:#fffaf5}
+.monitor-finance-card>span{display:block;margin-bottom:7px;color:#6b7280;font-size:12px}
+.monitor-finance-card strong{display:block;color:#173b2b;font-size:22px}
+.monitor-finance-card small{display:block;margin-top:7px;color:#9ca3af;font-size:11px}
+.monitor-alert-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.monitor-alert-card{display:flex;align-items:center;gap:13px;padding:17px;border:1px solid #e4ebe6;border-radius:13px;background:#fff;color:inherit;text-decoration:none}
+.monitor-alert-card.alert-active{border-color:#efc9a1;background:#fffaf4}
+.monitor-alert-icon{font-size:23px}
+.monitor-alert-card strong{display:block;color:#173b2b;font-size:20px}
+.monitor-alert-card div span{color:#6b7280;font-size:11px}
+.monitor-table-wrap{overflow-x:auto;border:1px solid #e4ebe6;border-radius:14px;background:#fff}
+.monitor-performance-table{width:100%;min-width:1100px;border-collapse:collapse}
+.monitor-performance-table th,.monitor-performance-table td{padding:14px 13px;border-bottom:1px solid #eef2ef;text-align:left;white-space:nowrap;font-size:12px}
+.monitor-performance-table th{background:#f7faf8;color:#68736c;font-size:10px;text-transform:uppercase;letter-spacing:0.5px}
+.monitor-performance-table td strong{color:#173b2b}
+.monitor-performance-table td small{display:block;margin-top:3px;color:#9ca3af}
+.monitor-value-warning{color:#b45e12;font-weight:800}
+.monitor-number-badge{min-width:27px;height:27px;display:inline-flex;align-items:center;justify-content:center;border-radius:999px;background:#eef5f0;color:#2e7d4f;font-weight:800}
+.monitor-number-badge.danger{background:#fff0e2;color:#ad570e}
+.monitor-two-column{display:grid;grid-template-columns:1.35fr 0.85fr;gap:18px}
+.monitor-three-column{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
+.monitor-panel{padding:20px;border:1px solid #e4ebe6;border-radius:14px;background:#fff}
+.monitor-panel.compact{padding:18px}
+.monitor-activity-list{display:flex;flex-direction:column;margin-top:13px}
+.monitor-activity-item{display:grid;grid-template-columns:11px 1fr;gap:10px;padding:13px 0;border-bottom:1px solid #eef2ef}
+.monitor-activity-item:last-child{border-bottom:0}
+.monitor-activity-dot{width:8px;height:8px;margin-top:5px;border-radius:50%;background:#2e7d4f}
+.monitor-activity-topline{display:flex;justify-content:space-between;gap:10px}
+.monitor-activity-topline strong{color:#25392e;font-size:12px}
+.monitor-activity-topline span{color:#9ca3af;font-size:10px;white-space:nowrap}
+.monitor-activity-content p{margin:4px 0;color:#6b7280;font-size:11px}
+.monitor-activity-content small{color:#8a948e;font-size:10px}
+.monitor-snapshot-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px;margin-top:14px}
+.monitor-snapshot-grid a{display:flex;align-items:center;gap:10px;padding:13px;border-radius:11px;background:#f7faf8;color:inherit;text-decoration:none}
+.monitor-snapshot-grid a>span{font-size:20px}
+.monitor-snapshot-grid strong{display:block;color:#173b2b;font-size:16px}
+.monitor-snapshot-grid small{color:#7d8781;font-size:10px}
+.monitor-record-row{display:flex;justify-content:space-between;align-items:center;gap:13px;padding:13px 0;border-bottom:1px solid #eef2ef}
+.monitor-record-row:last-child{border-bottom:0}
+.monitor-record-row strong{display:block;color:#25392e;font-size:12px}
+.monitor-record-row small{display:block;margin-top:4px;color:#949d97;font-size:10px}
+.monitor-record-row>span{color:#3f5748;font-size:11px;font-weight:700;text-align:right}
+.monitor-empty{padding:24px;border:1px dashed #d8e1da;border-radius:12px;background:#fbfcfb;color:#8a948e;text-align:center;font-size:12px}
+.monitor-empty.small{margin-top:12px;padding:18px}
+
+/* RESPONSIVE */
+@media(max-width:1200px){
+.monitor-kpi-grid,.monitor-alert-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.monitor-finance-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.monitor-two-column,.monitor-three-column{grid-template-columns:1fr}
+}
+
+@media(max-width:850px){
+.sidebar{position:relative;width:100%;height:auto;min-height:auto}
+.dashboard-layout{display:block}
+.main-content{margin-left:0;padding:20px}
+.sidebar-bottom{margin-top:14px}
+}
+
+@media(max-width:720px){
+.monitor-header{flex-direction:column}
+.monitor-header h1{font-size:25px}
+.monitor-kpi-grid,.monitor-finance-grid,.monitor-alert-grid,.monitor-snapshot-grid{grid-template-columns:1fr}
+}

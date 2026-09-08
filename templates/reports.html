@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+
+{% block title %}Reports | Malenge Farmers CRM{% endblock %}
+
+{% block content %}
+<!-- PAGE HEADER -->
+<div class="page-header">
+    <div>
+        <h1>Reports</h1>
+        <p>Overview of farming activity, sales and payments.</p>
+    </div>
+</div>
+
+<!-- STATISTICS GRID -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-icon">👥</div>
+        <div class="stat-info">
+            <p>Farmers</p>
+            <h2>{{ farmer_count|default(0) }}</h2>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon">🌾</div>
+        <div class="stat-info">
+            <p>Farms</p>
+            <h2>{{ farm_count|default(0) }}</h2>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon">🌱</div>
+        <div class="stat-info">
+            <p>Crops</p>
+            <h2>{{ crop_count|default(0) }}</h2>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon">📦</div>
+        <div class="stat-info">
+            <p>Harvests</p>
+            <h2>{{ harvest_count|default(0) }}</h2>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon">🛒</div>
+        <div class="stat-info">
+            <p>Sales</p>
+            <h2>{{ sales_count|default(0) }}</h2>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon">💰</div>
+        <div class="stat-info">
+            <p>Payments</p>
+            <h2>{{ payment_count|default(0) }}</h2>
+        </div>
+    </div>
+</div>
+
+<!-- FINANCIAL SUMMARY -->
+<section class="dashboard-section">
+    <div class="section-header">
+        <div>
+            <h2>Financial Summary</h2>
+            <p>Current sales and payment position.</p>
+        </div>
+    </div>
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-icon">🧾</div>
+            <div class="stat-info">
+                <p>Total Sales Value</p>
+                <h2>R {{ "{:,.2f}".format(total_sales_value|default(0)) }}</h2>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon">✅</div>
+            <div class="stat-info">
+                <p>Payments Received</p>
+                <h2>R {{ "{:,.2f}".format(total_payments_value|default(0)) }}</h2>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon">⏳</div>
+            <div class="stat-info">
+                <p>Outstanding Balance</p>
+                <h2>R {{ "{:,.2f}".format(outstanding_balance|default(0)) }}</h2>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- RECENT SALES -->
+<section class="dashboard-section">
+    <div class="section-header">
+        <div>
+            <h2>Recent Sales</h2>
+            <p>Latest sales recorded in the CRM.</p>
+        </div>
+        <a href="{{ url_for('sales') }}" class="view-all-link">View All Sales</a>
+    </div>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Buyer</th>
+                    <th>Crop</th>
+                    <th>Quantity</th>
+                    <th>Price / Unit</th>
+                    <th>Total</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sale in recent_sales %}
+                <tr>
+                    <td>{{ sale.sale_date }}</td>
+                    <td><strong>{{ sale.buyer_name }}</strong></td>
+                    <td>{{ sale.harvest.crop.name }}</td>
+                    <td>{{ sale.quantity }} {{ sale.unit }}</td>
+                    <td>R {{ "{:,.2f}".format(sale.price_per_unit) }}</td>
+                    <td><strong>R {{ "{:,.2f}".format(sale.total_amount) }}</strong></td>
+                    <td><span class="status-badge">{{ sale.status }}</span></td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="7" class="empty-message">No sales have been recorded yet.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<!-- RECENT PAYMENTS -->
+<section class="dashboard-section">
+    <div class="section-header">
+        <div>
+            <h2>Recent Payments</h2>
+            <p>Latest payments received from buyers.</p>
+        </div>
+        <a href="{{ url_for('payments') }}" class="view-all-link">View All Payments</a>
+    </div>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Buyer</th>
+                    <th>Amount</th>
+                    <th>Method</th>
+                    <th>Reference</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for payment in recent_payments %}
+                <tr>
+                    <td>{{ payment.payment_date }}</td>
+                    <td><strong>{{ payment.sale.buyer_name }}</strong></td>
+                    <td><strong>R {{ "{:,.2f}".format(payment.amount) }}</strong></td>
+                    <td>{{ payment.method or "-" }}</td>
+                    <td>{{ payment.reference or "-" }}</td>
+                    <td><span class="status-badge">{{ payment.status }}</span></td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="6" class="empty-message">No payments have been recorded yet.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

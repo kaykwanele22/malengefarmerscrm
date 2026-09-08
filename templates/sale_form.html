@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}{% if sale %}Edit Sale{% else %}Record Sale{% endif %} | Malenge Farmers CRM{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <div>
+        <h1>{% if sale %}Edit Sale{% else %}Record Sale{% endif %}</h1>
+        <p>Record the sale of harvested produce.</p>
+    </div>
+    <a href="{{ url_for('sales') }}" class="back-button">← Back to Sales</a>
+</div>
+
+<div class="form-card">
+<form method="POST">
+<div class="form-grid">
+
+    <div class="form-group">
+        <label for="harvest_id">Harvest *</label>
+        <select id="harvest_id" name="harvest_id" required>
+            <option value="">Select harvest</option>
+            {% for harvest in harvests %}
+            <option value="{{ harvest.id }}" {% if sale and sale.harvest_id == harvest.id %}selected{% endif %}>
+                {{ harvest.crop.name }} - {{ harvest.crop.farm.name }} - {{ harvest.quantity }} {{ harvest.unit }}
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label for="buyer_name">Buyer Name *</label>
+        <input type="text" id="buyer_name" name="buyer_name" value="{{ sale.buyer_name if sale else '' }}" required>
+    </div>
+
+    <div class="form-group">
+        <label for="buyer_phone">Buyer Phone</label>
+        <input type="text" id="buyer_phone" name="buyer_phone" value="{{ sale.buyer_phone if sale and sale.buyer_phone else '' }}">
+    </div>
+
+    <div class="form-group">
+        <label for="quantity">Quantity *</label>
+        <input type="number" step="0.01" min="0" id="quantity" name="quantity" value="{{ sale.quantity if sale else '' }}" required>
+    </div>
+
+    <div class="form-group">
+        <label for="unit">Unit</label>
+        <select id="unit" name="unit">
+            {% for option in ["kg", "tonnes", "bags", "crates"] %}
+            <option value="{{ option }}" {% if sale and sale.unit == option %}selected{% elif not sale and option == "kg" %}selected{% endif %}>{{ option }}</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label for="price_per_unit">Price Per Unit (R) *</label>
+        <input type="number" step="0.01" min="0" id="price_per_unit" name="price_per_unit" value="{{ sale.price_per_unit if sale else '' }}" required>
+    </div>
+
+    <div class="form-group">
+        <label for="sale_date">Sale Date *</label>
+        <input type="date" id="sale_date" name="sale_date" value="{{ sale.sale_date.strftime('%Y-%m-%d') if sale and sale.sale_date else '' }}" required>
+    </div>
+
+    <div class="form-group">
+        <label for="status">Status</label>
+        <select id="status" name="status">
+            {% for option in ["Pending", "Confirmed", "Completed", "Cancelled"] %}
+            <option value="{{ option }}" {% if sale and sale.status == option %}selected{% elif not sale and option == "Pending" %}selected{% endif %}>{{ option }}</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="form-group full-width">
+        <label for="notes">Notes</label>
+        <textarea id="notes" name="notes" rows="5">{{ sale.notes if sale and sale.notes else '' }}</textarea>
+    </div>
+
+</div>
+
+<div class="form-actions">
+    <a href="{{ url_for('sales') }}" class="cancel-button">Cancel</a>
+    <button type="submit" class="save-button">{% if sale %}Update Sale{% else %}Save Sale{% endif %}</button>
+</div>
+</form>
+</div>
+
+{% endblock %}

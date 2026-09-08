@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Flask / local database
+instance/
+*.db
+*.sqlite
+*.sqlite3
+
+# Environment variables / secrets
+.env
+.env.*
+!.env.example
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary / backup files
+*_backup*
+app_before_*.py
+
+# Local test seed/setup scripts
+seed_cooperative_test_data.py
+setup_cooperative_hierarchy.py

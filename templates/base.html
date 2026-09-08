@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Malenge Farmers CRM{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/crm.css') }}">
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+<div class="dashboard-layout">
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+        <div class="brand">
+            <div class="brand-icon">🌱</div>
+            <div><h2>Malenge</h2><span>Farmers CRM</span></div>
+        </div>
+        <nav class="sidebar-nav">
+            <p class="nav-title">MAIN</p>
+            <a href="{{ url_for('dashboard') }}" class="nav-item {% if request.endpoint == 'dashboard' %}active{% endif %}">
+                <span>📊</span><span>Dashboard</span>
+            </a>
+            <a href="{{ url_for('farmers') }}" class="nav-item {% if request.endpoint in ['farmers', 'add_farmer', 'edit_farmer'] %}active{% endif %}">
+                <span>👥</span><span>Farmers</span>
+            </a>
+            <a href="{{ url_for('farms') }}" class="nav-item {% if request.endpoint in ['farms', 'add_farm', 'edit_farm'] %}active{% endif %}">
+                <span>🌾</span><span>Farms</span>
+            </a>
+            <a href="{{ url_for('crops') }}" class="nav-item {% if request.endpoint in ['crops', 'add_crop', 'edit_crop'] %}active{% endif %}">
+                <span>🌱</span><span>Crops</span>
+            </a>
+            <a href="{{ url_for('harvests') }}" class="nav-item {% if request.endpoint in ['harvests', 'add_harvest', 'edit_harvest'] %}active{% endif %}">
+                <span>📦</span><span>Harvests</span>
+            </a>
+            <p class="nav-title">BUSINESS</p>
+            <a href="{{ url_for('sales') }}" class="nav-item {% if request.endpoint in ['sales', 'add_sale', 'edit_sale'] %}active{% endif %}">
+                <span>🛒</span><span>Sales</span>
+            </a>
+            <a href="{{ url_for('payments') }}" class="nav-item {% if request.endpoint in ['payments', 'add_payment', 'edit_payment'] %}active{% endif %}">
+                <span>💰</span><span>Payments</span>
+            </a>
+            <a href="{{ url_for('reports') }}" class="nav-item {% if request.endpoint == 'reports' %}active{% endif %}">
+                <span>📈</span><span>Reports</span>
+            </a>
+        </nav>
+        <div class="sidebar-bottom">
+            <a href="{{ url_for('settings') }}" class="nav-item {% if request.endpoint == 'settings' %}active{% endif %}">
+                <span>⚙️</span><span>Settings</span>
+            </a>
+            <a href="{{ url_for('logout') }}" class="nav-item logout">
+                <span>🚪</span><span>Logout</span>
+            </a>
+        </div>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+</div>
+{% block extra_js %}{% endblock %}
+</body>
+</html>

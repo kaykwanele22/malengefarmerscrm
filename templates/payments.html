@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Payments | Malenge Farmers CRM{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <div><h1>Payments</h1><p>Manage sale payment records.</p></div>
+    <a href="{{ url_for('add_payment') }}" class="primary-button">+ Record Payment</a>
+</div>
+
+<form method="GET" action="{{ url_for('payments') }}" class="search-form">
+    <input type="text" name="search" placeholder="Search buyer, method, reference or status..." value="{{ search }}">
+    <button type="submit">Search</button>
+</form>
+
+<div class="table-container">
+<table>
+    <thead>
+    <tr>
+        <th>Buyer</th><th>Sale Total</th><th>Payment</th><th>Date</th>
+        <th>Method</th><th>Reference</th><th>Status</th><th>Actions</th>
+    </tr>
+    </thead>
+    <tbody>
+    {% for payment in payments %}
+    <tr>
+        <td><strong>{{ payment.sale.buyer_name }}</strong></td>
+        <td>R {{ "%.2f"|format(payment.sale.total_amount) }}</td>
+        <td>R {{ "%.2f"|format(payment.amount) }}</td>
+        <td>{{ payment.payment_date }}</td>
+        <td>{{ payment.method or "-" }}</td>
+        <td>{{ payment.reference or "-" }}</td>
+        <td><span class="status-badge">{{ payment.status }}</span></td>
+        <td class="actions-cell">
+            <a href="{{ url_for('edit_payment', payment_id=payment.id) }}" class="edit-button">Edit</a>
+            <form method="POST" action="{{ url_for('delete_payment', payment_id=payment.id) }}" class="delete-form">
+                <button type="submit" class="delete-button" onclick="return confirm('Delete this payment?');">Delete</button>
+            </form>
+        </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="8" class="empty-message">No payments recorded yet.<br><a href="{{ url_for('add_payment') }}">Record your first payment</a></td></tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
+
+{% endblock %}

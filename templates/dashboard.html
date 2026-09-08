@@ -1,0 +1,573 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard | Malenge Farmers CRM{% endblock %}
+
+{% block content %}
+
+{% set secondary_roles = [
+    'Admin',
+    'Secondary Chairperson',
+    'Secondary Secretary',
+    'Secondary Treasurer',
+    'Secondary Manager'
+] %}
+
+{% set is_secondary = current_access and current_access.role in secondary_roles %}
+
+<div class="monitor-page">
+
+    <div class="monitor-header">
+        <div>
+            <p class="monitor-eyebrow">
+                {% if is_secondary %}
+                    SECONDARY COOPERATIVE OVERSIGHT
+                {% else %}
+                    PRIMARY COOPERATIVE OPERATIONS
+                {% endif %}
+            </p>
+
+            <h1>
+                {% if is_secondary %}
+                    Cooperative Monitoring Dashboard
+                {% else %}
+                    {{ current_cooperative.name if current_cooperative else 'Cooperative Dashboard' }}
+                {% endif %}
+            </h1>
+
+            <p class="monitor-subtitle">
+                {% if current_access %}
+                    Signed in as <strong>{{ current_access.role }}</strong>
+                {% endif %}
+
+                {% if current_cooperative %}
+                    · {{ current_cooperative.name }}
+                {% endif %}
+            </p>
+        </div>
+
+        {% if is_secondary %}
+        <a href="{{ url_for('cooperatives') }}" class="monitor-header-button">
+            Manage Cooperatives
+        </a>
+        {% endif %}
+    </div>
+
+
+    <!-- MAIN OPERATIONAL KPIs -->
+    <section class="monitor-kpi-grid">
+
+        <a href="{{ url_for('farmers') }}" class="monitor-kpi-card">
+            <div class="monitor-kpi-icon">👥</div>
+            <div>
+                <span>Farmers</span>
+                <strong>{{ farmer_count }}</strong>
+            </div>
+        </a>
+
+        <a href="{{ url_for('farms') }}" class="monitor-kpi-card">
+            <div class="monitor-kpi-icon">🌾</div>
+            <div>
+                <span>Farms</span>
+                <strong>{{ farm_count }}</strong>
+            </div>
+        </a>
+
+        <a href="{{ url_for('crops') }}" class="monitor-kpi-card">
+            <div class="monitor-kpi-icon">🌱</div>
+            <div>
+                <span>Crops</span>
+                <strong>{{ crop_count }}</strong>
+            </div>
+        </a>
+
+        <a href="{{ url_for('harvests') }}" class="monitor-kpi-card">
+            <div class="monitor-kpi-icon">📦</div>
+            <div>
+                <span>Harvests</span>
+                <strong>{{ harvest_count }}</strong>
+            </div>
+        </a>
+
+    </section>
+
+
+    <!-- FINANCIAL OVERSIGHT -->
+    <section class="monitor-section">
+        <div class="monitor-section-heading">
+            <div>
+                <p class="monitor-section-kicker">FINANCIAL OVERSIGHT</p>
+                <h2>Financial Position</h2>
+            </div>
+
+            <a href="{{ url_for('reports') }}">
+                Open Reports →
+            </a>
+        </div>
+
+        <div class="monitor-finance-grid">
+
+            <div class="monitor-finance-card">
+                <span>Total Sales</span>
+                <strong>R {{ "{:,.2f}".format(total_sales_value|float) }}</strong>
+                <small>{{ sales_count }} sale records</small>
+            </div>
+
+            <div class="monitor-finance-card">
+                <span>Payments Received</span>
+                <strong>R {{ "{:,.2f}".format(total_payments_value|float) }}</strong>
+                <small>{{ payment_count }} payment records</small>
+            </div>
+
+            <div class="monitor-finance-card {% if outstanding_balance|float > 0 %}attention{% endif %}">
+                <span>Outstanding</span>
+                <strong>R {{ "{:,.2f}".format(outstanding_balance|float) }}</strong>
+                <small>Sales still awaiting payment</small>
+            </div>
+
+            <div class="monitor-finance-card">
+                <span>Expenses</span>
+                <strong>R {{ "{:,.2f}".format(total_expenses_value|float) }}</strong>
+                <small>{{ expense_count }} expense records</small>
+            </div>
+
+            <div class="monitor-finance-card">
+                <span>Net Cash Position</span>
+                <strong>R {{ "{:,.2f}".format(net_cash_position|float) }}</strong>
+                <small>Payments received less expenses</small>
+            </div>
+
+            <div class="monitor-finance-card">
+                <span>Contributions</span>
+                <strong>R {{ "{:,.2f}".format(total_contributions_value|float) }}</strong>
+                <small>Received cooperative contributions</small>
+            </div>
+
+        </div>
+    </section>
+
+
+    <!-- MONITORING ALERTS -->
+    <section class="monitor-section">
+        <div class="monitor-section-heading">
+            <div>
+                <p class="monitor-section-kicker">ATTENTION REQUIRED</p>
+                <h2>Monitoring Alerts</h2>
+            </div>
+        </div>
+
+        <div class="monitor-alert-grid">
+
+            <a href="{{ url_for('tasks') }}"
+               class="monitor-alert-card {% if overdue_task_count > 0 %}alert-active{% endif %}">
+                <span class="monitor-alert-icon">⏰</span>
+                <div>
+                    <strong>{{ overdue_task_count }}</strong>
+                    <span>Overdue Tasks</span>
+                </div>
+            </a>
+
+            <a href="{{ url_for('inventory') }}"
+               class="monitor-alert-card {% if low_stock_count > 0 %}alert-active{% endif %}">
+                <span class="monitor-alert-icon">📉</span>
+                <div>
+                    <strong>{{ low_stock_count }}</strong>
+                    <span>Low Stock Items</span>
+                </div>
+            </a>
+
+            <a href="{{ url_for('equipment') }}"
+               class="monitor-alert-card {% if service_due_count > 0 %}alert-active{% endif %}">
+                <span class="monitor-alert-icon">🚜</span>
+                <div>
+                    <strong>{{ service_due_count }}</strong>
+                    <span>Equipment Service Due</span>
+                </div>
+            </a>
+
+            <a href="{{ url_for('memberships') }}"
+               class="monitor-alert-card {% if unpaid_membership_count > 0 %}alert-active{% endif %}">
+                <span class="monitor-alert-icon">🪪</span>
+                <div>
+                    <strong>{{ unpaid_membership_count }}</strong>
+                    <span>Membership Fees Outstanding</span>
+                </div>
+            </a>
+
+        </div>
+    </section>
+
+
+    <!-- COOPERATIVE COMPARISON -->
+    <section class="monitor-section">
+        <div class="monitor-section-heading">
+            <div>
+                <p class="monitor-section-kicker">
+                    {% if is_secondary %}
+                        PRIMARY COOPERATIVE COMPARISON
+                    {% else %}
+                        COOPERATIVE PERFORMANCE
+                    {% endif %}
+                </p>
+
+                <h2>
+                    {% if is_secondary %}
+                        Siyaphumla vs Vimba
+                    {% else %}
+                        Your Cooperative Performance
+                    {% endif %}
+                </h2>
+            </div>
+        </div>
+
+        {% if primary_performance %}
+
+        <div class="monitor-table-wrap">
+
+            <table class="monitor-performance-table">
+
+                <thead>
+                    <tr>
+                        <th>Cooperative</th>
+                        <th>Farmers</th>
+                        <th>Farms</th>
+                        <th>Crops</th>
+                        <th>Harvests</th>
+                        <th>Sales</th>
+                        <th>Payments</th>
+                        <th>Outstanding</th>
+                        <th>Expenses</th>
+                        <th>Open Tasks</th>
+                        <th>Low Stock</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    {% for item in primary_performance %}
+
+                    <tr>
+                        <td>
+                            <strong>{{ item.cooperative.name }}</strong>
+                            <small>{{ item.cooperative.status }}</small>
+                        </td>
+
+                        <td>{{ item.farmer_count }}</td>
+                        <td>{{ item.farm_count }}</td>
+                        <td>{{ item.crop_count }}</td>
+                        <td>{{ item.harvest_count }}</td>
+
+                        <td>
+                            R {{ "{:,.2f}".format(item.sales_value|float) }}
+                        </td>
+
+                        <td>
+                            R {{ "{:,.2f}".format(item.payments_value|float) }}
+                        </td>
+
+                        <td>
+                            <span class="{% if item.outstanding_balance|float > 0 %}monitor-value-warning{% endif %}">
+                                R {{ "{:,.2f}".format(item.outstanding_balance|float) }}
+                            </span>
+                        </td>
+
+                        <td>
+                            R {{ "{:,.2f}".format(item.expenses_value|float) }}
+                        </td>
+
+                        <td>
+                            <span class="monitor-number-badge">
+                                {{ item.open_tasks }}
+                            </span>
+                        </td>
+
+                        <td>
+                            <span class="monitor-number-badge {% if item.low_stock_items > 0 %}danger{% endif %}">
+                                {{ item.low_stock_items }}
+                            </span>
+                        </td>
+                    </tr>
+
+                    {% endfor %}
+                </tbody>
+
+            </table>
+
+        </div>
+
+        {% else %}
+
+        <div class="monitor-empty">
+            No primary cooperative performance data is available yet.
+        </div>
+
+        {% endif %}
+    </section>
+
+
+    <!-- ACTIVITY + OPERATIONAL SNAPSHOT -->
+    <section class="monitor-two-column">
+
+        <div class="monitor-panel">
+
+            <div class="monitor-panel-heading">
+                <div>
+                    <p class="monitor-section-kicker">LIVE OVERSIGHT</p>
+                    <h2>Recent Cooperative Activity</h2>
+                </div>
+
+                {% if is_secondary %}
+                <a href="{{ url_for('audit_logs') }}">
+                    Audit Logs →
+                </a>
+                {% endif %}
+            </div>
+
+            {% if recent_cooperative_activity %}
+
+            <div class="monitor-activity-list">
+
+                {% for activity in recent_cooperative_activity %}
+
+                <div class="monitor-activity-item">
+
+                    <div class="monitor-activity-dot"></div>
+
+                    <div class="monitor-activity-content">
+
+                        <div class="monitor-activity-topline">
+
+                            <strong>
+                                {{ activity.action }} {{ activity.entity_type }}
+                            </strong>
+
+                            <span>
+                                {{ activity.created_at.strftime('%d %b %Y %H:%M') if activity.created_at else '' }}
+                            </span>
+
+                        </div>
+
+                        <p>
+                            {% if activity.cooperative %}
+                                {{ activity.cooperative.name }}
+                            {% else %}
+                                Cooperative activity
+                            {% endif %}
+
+                            {% if activity.user %}
+                                · by {{ activity.user.fullname }}
+                            {% endif %}
+                        </p>
+
+                        {% if activity.details %}
+                        <small>{{ activity.details }}</small>
+                        {% endif %}
+
+                    </div>
+
+                </div>
+
+                {% endfor %}
+
+            </div>
+
+            {% else %}
+
+            <div class="monitor-empty">
+                No cooperative activity has been recorded yet.
+            </div>
+
+            {% endif %}
+
+        </div>
+
+
+        <div class="monitor-panel">
+
+            <div class="monitor-panel-heading">
+                <div>
+                    <p class="monitor-section-kicker">OPERATIONS</p>
+                    <h2>Operational Snapshot</h2>
+                </div>
+            </div>
+
+            <div class="monitor-snapshot-grid">
+
+                <a href="{{ url_for('customers') }}">
+                    <span>🤝</span>
+                    <div>
+                        <strong>{{ customer_count }}</strong>
+                        <small>Customers</small>
+                    </div>
+                </a>
+
+                <a href="{{ url_for('suppliers') }}">
+                    <span>🚚</span>
+                    <div>
+                        <strong>{{ supplier_count }}</strong>
+                        <small>Suppliers</small>
+                    </div>
+                </a>
+
+                <a href="{{ url_for('inventory') }}">
+                    <span>📋</span>
+                    <div>
+                        <strong>{{ inventory_count }}</strong>
+                        <small>Inventory Items</small>
+                    </div>
+                </a>
+
+                <a href="{{ url_for('equipment') }}">
+                    <span>🚜</span>
+                    <div>
+                        <strong>{{ equipment_count }}</strong>
+                        <small>Equipment</small>
+                    </div>
+                </a>
+
+                <a href="{{ url_for('tasks') }}">
+                    <span>✅</span>
+                    <div>
+                        <strong>{{ open_task_count }}</strong>
+                        <small>Open Tasks</small>
+                    </div>
+                </a>
+
+                <a href="{{ url_for('contributions') }}">
+                    <span>🏦</span>
+                    <div>
+                        <strong>R {{ "{:,.0f}".format(total_contributions_value|float) }}</strong>
+                        <small>Contributions</small>
+                    </div>
+                </a>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <!-- RECENT RECORDS -->
+    <section class="monitor-three-column">
+
+        <div class="monitor-panel compact">
+
+            <div class="monitor-panel-heading">
+                <h2>Recent Farmers</h2>
+                <a href="{{ url_for('farmers') }}">View all</a>
+            </div>
+
+            {% if recent_farmers %}
+
+                {% for farmer in recent_farmers %}
+
+                <div class="monitor-record-row">
+
+                    <div>
+                        <strong>{{ farmer.fullname }}</strong>
+                        <small>
+                            {{ farmer.cooperative.name if farmer.cooperative else 'Unassigned' }}
+                        </small>
+                    </div>
+
+                    <span>{{ farmer.status }}</span>
+
+                </div>
+
+                {% endfor %}
+
+            {% else %}
+
+                <div class="monitor-empty small">
+                    No farmers yet.
+                </div>
+
+            {% endif %}
+
+        </div>
+
+
+        <div class="monitor-panel compact">
+
+            <div class="monitor-panel-heading">
+                <h2>Recent Sales</h2>
+                <a href="{{ url_for('sales') }}">View all</a>
+            </div>
+
+            {% if recent_sales %}
+
+                {% for sale in recent_sales %}
+
+                <div class="monitor-record-row">
+
+                    <div>
+                        <strong>{{ sale.buyer_name }}</strong>
+                        <small>
+                            {{ sale.cooperative.name if sale.cooperative else 'Unassigned' }}
+                        </small>
+                    </div>
+
+                    <span>
+                        R {{ "{:,.2f}".format(sale.total_amount|float) }}
+                    </span>
+
+                </div>
+
+                {% endfor %}
+
+            {% else %}
+
+                <div class="monitor-empty small">
+                    No sales yet.
+                </div>
+
+            {% endif %}
+
+        </div>
+
+
+        <div class="monitor-panel compact">
+
+            <div class="monitor-panel-heading">
+                <h2>Recent Payments</h2>
+                <a href="{{ url_for('payments') }}">View all</a>
+            </div>
+
+            {% if recent_payments %}
+
+                {% for payment in recent_payments %}
+
+                <div class="monitor-record-row">
+
+                    <div>
+                        <strong>
+                            {{ payment.sale.buyer_name if payment.sale else 'Payment' }}
+                        </strong>
+
+                        <small>
+                            {{ payment.cooperative.name if payment.cooperative else 'Unassigned' }}
+                        </small>
+                    </div>
+
+                    <span>
+                        R {{ "{:,.2f}".format(payment.amount|float) }}
+                    </span>
+
+                </div>
+
+                {% endfor %}
+
+            {% else %}
+
+                <div class="monitor-empty small">
+                    No payments yet.
+                </div>
+
+            {% endif %}
+
+        </div>
+
+    </section>
+
+</div>
+
+{% endblock %}

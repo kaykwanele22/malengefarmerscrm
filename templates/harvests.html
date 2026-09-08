@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Harvests | Malenge Farmers CRM{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <div><h1>Harvests</h1><p>Manage crop harvest records.</p></div>
+    <a href="{{ url_for('add_harvest') }}" class="primary-button">+ Add Harvest</a>
+</div>
+
+<form method="GET" action="{{ url_for('harvests') }}" class="search-form">
+    <input type="text" name="search" placeholder="Search crop, farm, farmer, storage or status..." value="{{ search }}">
+    <button type="submit">Search</button>
+</form>
+
+<div class="table-container">
+<table>
+    <thead>
+    <tr>
+        <th>Crop</th><th>Farm</th><th>Farmer</th><th>Date</th>
+        <th>Quantity</th><th>Grade</th><th>Storage</th><th>Status</th><th>Actions</th>
+    </tr>
+    </thead>
+    <tbody>
+    {% for harvest in harvests %}
+    <tr>
+        <td><strong>{{ harvest.crop.name }}</strong></td>
+        <td>{{ harvest.crop.farm.name }}</td>
+        <td>{{ harvest.crop.farm.farmer.fullname }}</td>
+        <td>{{ harvest.harvest_date }}</td>
+        <td>{{ harvest.quantity }} {{ harvest.unit }}</td>
+        <td>{{ harvest.quality_grade or "-" }}</td>
+        <td>{{ harvest.storage_location or "-" }}</td>
+        <td><span class="status-badge">{{ harvest.status }}</span></td>
+        <td class="actions-cell">
+            <a href="{{ url_for('edit_harvest', harvest_id=harvest.id) }}" class="edit-button">Edit</a>
+            <form method="POST" action="{{ url_for('delete_harvest', harvest_id=harvest.id) }}" class="delete-form">
+                <button type="submit" class="delete-button" onclick="return confirm('Delete this harvest?');">Delete</button>
+            </form>
+        </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="9" class="empty-message">No harvests recorded yet.<br><a href="{{ url_for('add_harvest') }}">Add your first harvest</a></td></tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
+
+{% endblock %}

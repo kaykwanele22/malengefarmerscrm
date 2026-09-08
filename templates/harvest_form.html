@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}{% if harvest %}Edit Harvest{% else %}Add Harvest{% endif %} | Malenge Farmers CRM{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <div>
+        <h1>{% if harvest %}Edit Harvest{% else %}Add Harvest{% endif %}</h1>
+        <p>Record harvested produce from a registered crop.</p>
+    </div>
+    <a href="{{ url_for('harvests') }}" class="back-button">← Back to Harvests</a>
+</div>
+
+<div class="form-card">
+<form method="POST">
+<div class="form-grid">
+
+    <div class="form-group">
+        <label for="crop_id">Crop *</label>
+        <select id="crop_id" name="crop_id" required>
+            <option value="">Select crop</option>
+            {% for crop in crops %}
+            <option value="{{ crop.id }}" {% if harvest and harvest.crop_id == crop.id %}selected{% endif %}>
+                {{ crop.name }} - {{ crop.farm.name }} - {{ crop.farm.farmer.fullname }}
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label for="harvest_date">Harvest Date *</label>
+        <input type="date" id="harvest_date" name="harvest_date"
+               value="{{ harvest.harvest_date.strftime('%Y-%m-%d') if harvest and harvest.harvest_date else '' }}" required>
+    </div>
+
+    <div class="form-group">
+        <label for="quantity">Quantity *</label>
+        <input type="number" step="0.01" min="0" id="quantity" name="quantity"
+               value="{{ harvest.quantity if harvest else '' }}" required>
+    </div>
+
+    <div class="form-group">
+        <label for="unit">Unit</label>
+        <select id="unit" name="unit">
+            {% for option in ["kg", "tonnes", "bags", "crates"] %}
+            <option value="{{ option }}" {% if harvest and harvest.unit == option %}selected{% elif not harvest and option == "kg" %}selected{% endif %}>{{ option }}</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label for="quality_grade">Quality Grade</label>
+        <select id="quality_grade" name="quality_grade">
+            <option value="">Select grade</option>
+            {% for option in ["Grade A", "Grade B", "Grade C", "Mixed"] %}
+            <option value="{{ option }}" {% if harvest and harvest.quality_grade == option %}selected{% endif %}>{{ option }}</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label for="storage_location">Storage Location</label>
+        <input type="text" id="storage_location" name="storage_location"
+               value="{{ harvest.storage_location if harvest and harvest.storage_location else '' }}">
+    </div>
+
+    <div class="form-group">
+        <label for="status">Status</label>
+        <select id="status" name="status">
+            {% for option in ["Available", "Reserved", "Sold", "Spoiled"] %}
+            <option value="{{ option }}" {% if harvest and harvest.status == option %}selected{% elif not harvest and option == "Available" %}selected{% endif %}>{{ option }}</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="form-group full-width">
+        <label for="notes">Notes</label>
+        <textarea id="notes" name="notes" rows="5">{{ harvest.notes if harvest and harvest.notes else '' }}</textarea>
+    </div>
+
+</div>
+
+<div class="form-actions">
+    <a href="{{ url_for('harvests') }}" class="cancel-button">Cancel</a>
+    <button type="submit" class="save-button">{% if harvest %}Update Harvest{% else %}Save Harvest{% endif %}</button>
+</div>
+</form>
+</div>
+
+{% endblock %}
