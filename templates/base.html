@@ -7,6 +7,7 @@
 
     <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/crm.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile.css') }}">
     {% block extra_css %}{% endblock %}
 </head>
 
@@ -45,10 +46,28 @@
 
     <div class="dashboard-layout">
 
+        <header class="mobile-topbar">
+            <button type="button" class="mobile-menu-button" id="mobileMenuButton"
+                    aria-label="Open navigation" aria-controls="crmSidebar"
+                    aria-expanded="false">☰</button>
+            <div class="mobile-brand">
+                <strong>{{ system_settings.brand_name if system_settings else 'Malenge' }}</strong>
+                <small>{{ system_settings.product_name if system_settings else 'Farmers CRM' }}</small>
+            </div>
+            {% if current_access %}
+            <div class="mobile-user">
+                <strong>{{ session.get('fullname', 'CRM User') }}</strong>
+                <small>{% if is_admin %}Administrator{% else %}{{ role }}{% endif %}</small>
+            </div>
+            {% endif %}
+        </header>
+        <button type="button" class="mobile-sidebar-overlay" id="mobileSidebarOverlay"
+                aria-label="Close navigation"></button>
+
         <!-- =====================================================
              SIDEBAR
         ====================================================== -->
-        <aside class="sidebar">
+        <aside class="sidebar" id="crmSidebar">
 
             <!-- Brand -->
             <div class="brand">
@@ -485,6 +504,66 @@
             {% block content %}{% endblock %}
         </main>
     </div>
+
+
+    <script>
+    (function () {
+        const body = document.body;
+        const menuButton = document.getElementById("mobileMenuButton");
+        const sidebar = document.getElementById("crmSidebar");
+        const overlay = document.getElementById("mobileSidebarOverlay");
+
+        function setSidebar(open) {
+            body.classList.toggle("sidebar-open", open);
+            if (menuButton) {
+                menuButton.setAttribute("aria-expanded", open ? "true" : "false");
+                menuButton.setAttribute("aria-label", open ? "Close navigation" : "Open navigation");
+                menuButton.textContent = open ? "✕" : "☰";
+            }
+        }
+
+        if (menuButton && sidebar) {
+            menuButton.addEventListener("click", function () {
+                setSidebar(!body.classList.contains("sidebar-open"));
+            });
+        }
+        if (overlay) overlay.addEventListener("click", function () { setSidebar(false); });
+        if (sidebar) {
+            sidebar.querySelectorAll("a").forEach(function (link) {
+                link.addEventListener("click", function () {
+                    if (window.matchMedia("(max-width: 1024px)").matches) setSidebar(false);
+                });
+            });
+        }
+        document.addEventListener("keydown", function (event) {
+            if (event.key === "Escape") setSidebar(false);
+        });
+        window.addEventListener("resize", function () {
+            if (window.innerWidth > 1024) setSidebar(false);
+        });
+
+        function makeTablesResponsive() {
+            document.querySelectorAll("table").forEach(function (table) {
+                const headers = Array.from(table.querySelectorAll("thead th"))
+                    .map(function (th) { return th.textContent.trim(); });
+                if (!headers.length) return;
+                table.classList.add("responsive-table");
+                table.querySelectorAll("tbody tr").forEach(function (row) {
+                    Array.from(row.children).forEach(function (cell, index) {
+                        if (cell.tagName !== "TD" || cell.hasAttribute("colspan")) return;
+                        const label = headers[index] || "";
+                        if (label) cell.setAttribute("data-label", label);
+                    });
+                });
+            });
+        }
+        if (document.readyState === "loading") {
+            document.addEventListener("DOMContentLoaded", makeTablesResponsive);
+        } else {
+            makeTablesResponsive();
+        }
+    })();
+    </script>
 
     {% block extra_js %}{% endblock %}
 </body>

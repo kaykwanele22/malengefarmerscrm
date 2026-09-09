@@ -1,0 +1,26 @@
+Malenge Farmers CRM Mobile & Tablet Upgrade
+
+Changed:
+- Off-canvas sidebar for <=1024px
+- Sticky mobile/tablet topbar with hamburger menu
+- Responsive dashboard grids
+- One-column forms on smaller screens
+- 44px-ish touch targets
+- 16px mobile form controls
+- Phone tables automatically become labeled record cards
+- Search/action bars stack on phones
+- Desktop layout remains unchanged above 1024px
+
+Files changed/added:
+- templates/base.html
+- static/css/mobile.css
+- requirements.txt (retains PostgreSQL driver)
+- mobile_regression_tests.py
+
+No Flask routes, models, permissions, or business logic were changed.
+
+Run:
+python -m py_compile app.py
+python permission_regression_tests.py
+python full_regression_tests.py
+python mobile_regression_tests.py

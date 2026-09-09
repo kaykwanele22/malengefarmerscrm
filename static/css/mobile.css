@@ -1,0 +1,59 @@
+/* MALENGE FARMERS CRM — MOBILE & TABLET OPTIMIZATION */
+:root{--mobile-topbar-height:64px;--touch-size:44px}
+html{max-width:100%;overflow-x:hidden}body{max-width:100%;overflow-x:hidden}
+img,svg,video,canvas{max-width:100%;height:auto}
+input,select,textarea,button{max-width:100%}
+.main-content{min-width:0}
+.table-container,.dashboard-table-container,.table-card,.table-wrap,.monitor-table-wrap{max-width:100%;-webkit-overflow-scrolling:touch}
+.mobile-topbar,.mobile-sidebar-overlay{display:none}
+
+@media (max-width:1024px){
+body{overflow-x:hidden}
+.sidebar{position:fixed!important;top:0!important;left:0!important;bottom:0!important;width:min(320px,88vw)!important;height:100dvh!important;min-height:100dvh!important;padding:20px 16px!important;transform:translateX(-105%);transition:transform .24s ease;z-index:1200!important;box-shadow:12px 0 32px rgba(0,0,0,.18);overscroll-behavior:contain}
+body.sidebar-open .sidebar{transform:translateX(0)}
+.mobile-sidebar-overlay{display:block;position:fixed;inset:0;border:0;background:rgba(9,28,19,.46);opacity:0;visibility:hidden;transition:opacity .2s ease,visibility .2s ease;z-index:1150;backdrop-filter:blur(1px)}
+body.sidebar-open .mobile-sidebar-overlay{opacity:1;visibility:visible}
+.mobile-topbar{position:sticky;top:0;z-index:1100;min-height:var(--mobile-topbar-height);display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 16px;background:#173b2b;color:#fff;box-shadow:0 4px 18px rgba(10,41,27,.15)}
+.mobile-menu-button{width:44px;height:44px;flex:0 0 44px;display:grid;place-items:center;border:1px solid rgba(255,255,255,.14);border-radius:11px;background:rgba(255,255,255,.08);color:#fff;font-size:22px;cursor:pointer}
+.mobile-brand{min-width:0;flex:1}.mobile-brand strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:15px;line-height:1.2}.mobile-brand small{display:block;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:rgba(255,255,255,.68);font-size:10px}
+.mobile-user{max-width:34%;overflow:hidden;text-align:right}.mobile-user strong,.mobile-user small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.mobile-user strong{font-size:11px}.mobile-user small{margin-top:2px;color:rgba(255,255,255,.65);font-size:9px}
+.dashboard-layout{display:block!important}.main-content{margin-left:0!important;padding:22px!important;width:100%;min-height:calc(100vh - var(--mobile-topbar-height))}
+.nav-item{min-height:48px!important;padding:12px 13px!important;font-size:14px!important}.nav-title{margin-top:20px!important}.brand{padding-bottom:18px!important}
+.monitor-kpi-grid,.monitor-alert-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}.monitor-finance-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}.monitor-two-column,.monitor-three-column{grid-template-columns:1fr!important}.stats-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}.record-grid{grid-template-columns:1fr!important}
+.form-grid{grid-template-columns:1fr!important}.full-width{grid-column:auto!important}.form-card,.farm-form-card,.crop-form-card{max-width:none!important}
+.table-container,.dashboard-table-container,.table-card,.table-wrap,.monitor-table-wrap{overflow-x:auto!important;scrollbar-width:thin}table{max-width:none}
+}
+
+@media (max-width:700px){
+.mobile-topbar{padding:9px 12px}.mobile-user{display:none}.main-content{padding:16px 12px 28px!important}
+.page-header,.page-head,.monitor-header,.record-header,.monitor-section-heading,.monitor-panel-heading{flex-direction:column!important;align-items:stretch!important;gap:12px!important}
+.page-header h1,.page-head h1,.monitor-header h1{font-size:24px!important;line-height:1.2}.page-header p,.page-head p,.monitor-subtitle{font-size:13px!important;line-height:1.5}
+.monitor-kpi-grid,.monitor-finance-grid,.monitor-alert-grid,.monitor-snapshot-grid,.stats-grid{grid-template-columns:1fr!important;gap:12px!important}.monitor-page{gap:18px!important}.monitor-kpi-card,.monitor-finance-card,.monitor-panel,.content-card,.stat-card{padding:16px!important}
+.search-form,.search-wrapper,.search-bar,.form-actions{flex-direction:column!important;align-items:stretch!important;gap:10px!important}.search-form{padding:14px!important}
+.search-form input,.search-form button,.search-wrapper input,.search-wrapper button,.search-wrapper a,.search-bar input,.search-bar a,.search-bar button{width:100%!important;min-height:46px}
+input,select,textarea{font-size:16px!important}
+button,.primary-button,.save-button,.back-button,.cancel-button,.primary-btn,.secondary-btn,.primary-action,.secondary-action,.edit-action{min-height:var(--touch-size)!important}
+.primary-button,.save-button,.back-button,.cancel-button,.primary-btn,.secondary-btn,.primary-action,.secondary-action{width:100%!important;display:flex!important;align-items:center;justify-content:center;text-align:center}
+.form-card,.farm-form-card,.crop-form-card{padding:16px!important;border-radius:12px!important}.form-actions{margin-top:22px!important;padding-top:16px!important}
+.flash-messages{width:100%}.flash-message{width:100%;padding:12px 14px!important;font-size:13px!important;line-height:1.45}
+.actions,.action-buttons{gap:8px!important}
+.responsive-table,.table-container table,.dashboard-table-container table,.table-card table{min-width:0!important;width:100%!important}
+.responsive-table thead,.table-container table thead,.dashboard-table-container table thead,.table-card table thead{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
+.responsive-table tbody,.responsive-table tr,.responsive-table td,.table-container table tbody,.table-container table tr,.table-container table td,.dashboard-table-container table tbody,.dashboard-table-container table tr,.dashboard-table-container table td,.table-card table tbody,.table-card table tr,.table-card table td{display:block!important;width:100%!important}
+.responsive-table tr,.table-container table tbody tr,.dashboard-table-container table tbody tr,.table-card table tbody tr{margin:0 0 14px!important;padding:10px 12px!important;border:1px solid #e1e9e3!important;border-radius:12px!important;background:#fff!important;box-shadow:0 2px 8px rgba(23,59,43,.04)}
+.responsive-table td,.table-container table tbody td,.dashboard-table-container table tbody td,.table-card table tbody td{min-height:38px;display:grid!important;grid-template-columns:minmax(100px,38%) minmax(0,1fr)!important;gap:12px;align-items:start;padding:9px 4px!important;border:0!important;border-bottom:1px solid #eef2ef!important;white-space:normal!important;overflow-wrap:anywhere;text-align:right!important}
+.responsive-table td:last-child,.table-container table tbody td:last-child,.dashboard-table-container table tbody td:last-child,.table-card table tbody td:last-child{border-bottom:0!important}
+.responsive-table td::before,.table-container table tbody td::before,.dashboard-table-container table tbody td::before,.table-card table tbody td::before{content:attr(data-label);color:#6b776f;font-size:10px;font-weight:800;letter-spacing:.45px;text-align:left;text-transform:uppercase}
+.responsive-table td[colspan],.table-container table tbody td[colspan],.dashboard-table-container table tbody td[colspan],.table-card table tbody td[colspan]{display:block!important;text-align:center!important;padding:28px 12px!important}td[colspan]::before{display:none!important}
+td .actions,td .action-buttons{justify-content:flex-end;flex-wrap:wrap}td .actions a,td .actions button,td .action-buttons a,td .action-buttons button{min-height:40px;display:inline-flex;align-items:center;justify-content:center}
+}
+
+@media (max-width:420px){
+.main-content{padding:13px 9px 24px!important}.mobile-topbar{padding-left:9px;padding-right:9px}.mobile-brand strong{font-size:14px}.sidebar{width:92vw!important}
+.responsive-table td,.table-container table tbody td,.dashboard-table-container table tbody td,.table-card table tbody td{grid-template-columns:1fr!important;gap:4px!important;text-align:left!important}
+td .actions,td .action-buttons{justify-content:flex-start}
+}
+
+@media (max-height:520px) and (max-width:1024px){
+.sidebar{padding-top:12px!important;padding-bottom:12px!important}.brand{padding-bottom:10px!important}.nav-title{margin-top:10px!important}.nav-item{min-height:42px!important;padding-top:9px!important;padding-bottom:9px!important}
+}
