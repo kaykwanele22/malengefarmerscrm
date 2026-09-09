@@ -4,62 +4,488 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Malenge Farmers CRM{% endblock %}</title>
+
     <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/crm.css') }}">
     {% block extra_css %}{% endblock %}
 </head>
+
 <body>
-<div class="dashboard-layout">
-    <!-- SIDEBAR -->
-    <aside class="sidebar">
-        <div class="brand">
-            <div class="brand-icon">🌱</div>
-            <div><h2>Malenge</h2><span>Farmers CRM</span></div>
-        </div>
-        <nav class="sidebar-nav">
-            <p class="nav-title">MAIN</p>
-            <a href="{{ url_for('dashboard') }}" class="nav-item {% if request.endpoint == 'dashboard' %}active{% endif %}">
-                <span>📊</span><span>Dashboard</span>
-            </a>
-            <a href="{{ url_for('cooperatives') }}" class="nav-item {% if request.endpoint in ['cooperatives', 'add_cooperative', 'edit_cooperative'] %}active{% endif %}">
-                <span>🏢</span><span>Cooperatives</span>
-            </a>
-            <a href="{{ url_for('farmers') }}" class="nav-item {% if request.endpoint in ['farmers', 'add_farmer', 'edit_farmer'] %}active{% endif %}">
-                <span>👥</span><span>Farmers</span>
-            </a>
-            <a href="{{ url_for('farms') }}" class="nav-item {% if request.endpoint in ['farms', 'add_farm', 'edit_farm'] %}active{% endif %}">
-                <span>🌾</span><span>Farms</span>
-            </a>
-            <a href="{{ url_for('crops') }}" class="nav-item {% if request.endpoint in ['crops', 'add_crop', 'edit_crop'] %}active{% endif %}">
-                <span>🌱</span><span>Crops</span>
-            </a>
-            <a href="{{ url_for('harvests') }}" class="nav-item {% if request.endpoint in ['harvests', 'add_harvest', 'edit_harvest'] %}active{% endif %}">
-                <span>📦</span><span>Harvests</span>
-            </a>
-            <p class="nav-title">BUSINESS</p>
-            <a href="{{ url_for('sales') }}" class="nav-item {% if request.endpoint in ['sales', 'add_sale', 'edit_sale'] %}active{% endif %}">
-                <span>🛒</span><span>Sales</span>
-            </a>
-            <a href="{{ url_for('payments') }}" class="nav-item {% if request.endpoint in ['payments', 'add_payment', 'edit_payment'] %}active{% endif %}">
-                <span>💰</span><span>Payments</span>
-            </a>
-            <a href="{{ url_for('reports') }}" class="nav-item {% if request.endpoint == 'reports' %}active{% endif %}">
-                <span>📈</span><span>Reports</span>
-            </a>
-        </nav>
-        <div class="sidebar-bottom">
-            <a href="{{ url_for('settings') }}" class="nav-item {% if request.endpoint == 'settings' %}active{% endif %}">
-                <span>⚙️</span><span>Settings</span>
-            </a>
-            <a href="{{ url_for('logout') }}" class="nav-item logout">
-                <span>🚪</span><span>Logout</span>
-            </a>
-        </div>
-    </aside>
-    <main class="main-content">
-        {% block content %}{% endblock %}
-    </main>
-</div>
-{% block extra_js %}{% endblock %}
+    {% set role = current_access.role if current_access else '' %}
+
+    {% set is_admin = role == 'Admin' %}
+
+    {% set is_chairperson = role in [
+        'Secondary Chairperson',
+        'Primary Chairperson'
+    ] %}
+
+    {% set is_vice_chairperson = role in [
+        'Secondary Vice Chairperson',
+        'Primary Vice Chairperson'
+    ] %}
+
+    {% set is_secretary = role in [
+        'Secondary Secretary',
+        'Primary Secretary'
+    ] %}
+
+    {% set is_vice_secretary = role in [
+        'Secondary Vice Secretary',
+        'Primary Vice Secretary'
+    ] %}
+
+    {% set is_treasurer = role in [
+        'Secondary Treasurer',
+        'Primary Treasurer'
+    ] %}
+
+    {% set is_secretariat = is_secretary or is_vice_secretary %}
+    {% set is_leadership = is_chairperson or is_vice_chairperson %}
+
+    <div class="dashboard-layout">
+
+        <!-- =====================================================
+             SIDEBAR
+        ====================================================== -->
+        <aside class="sidebar">
+
+            <!-- Brand -->
+            <div class="brand">
+                <div class="brand-icon">🌱</div>
+                <div>
+                    <h2>{{ system_settings.brand_name if system_settings else 'Malenge' }}</h2>
+                    <span>{{ system_settings.product_name if system_settings else 'Farmers CRM' }}</span>
+                </div>
+            </div>
+
+            <!-- Current User -->
+            {% if current_access %}
+            <div class="sidebar-user">
+                <div>
+                    <strong>{{ session.get('fullname', 'CRM User') }}</strong>
+                </div>
+
+                <div>
+                    {% if is_admin %}
+                        <span>System Administrator</span>
+                    {% else %}
+                        <span>{{ role }}</span>
+                    {% endif %}
+                </div>
+
+                {% if current_cooperative %}
+                <div>
+                    <small>{{ current_cooperative.name }}</small>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            <!-- =================================================
+                 NAVIGATION
+            ================================================== -->
+            <nav class="sidebar-nav">
+
+                <!-- MAIN -->
+                <p class="nav-title">MAIN</p>
+
+                <a href="{{ url_for('dashboard') }}"
+                   class="nav-item {% if request.endpoint == 'dashboard' %}active{% endif %}">
+                    <span>📊</span>
+                    <span>Dashboard</span>
+                </a>
+
+
+                <!-- =================================================
+                     ADMIN MENU
+                     Admin handles system access only.
+                ================================================== -->
+                {% if is_admin %}
+
+                <p class="nav-title">SYSTEM ADMINISTRATION</p>
+
+                <a href="{{ url_for('users_list') }}"
+                   class="nav-item {% if request.endpoint in [
+                       'users_list','add_user','edit_user','reset_user_password','update_user_access'
+                   ] %}active{% endif %}">
+                    <span>👤</span><span>Users &amp; Access</span>
+                </a>
+
+                <a href="{{ url_for('cooperatives_list') }}"
+                   class="nav-item {% if request.endpoint in [
+                       'cooperatives_list','add_cooperative','edit_cooperative'
+                   ] %}active{% endif %}">
+                    <span>🏢</span><span>Cooperative Structure</span>
+                </a>
+
+                <a href="{{ url_for('audit_logs') }}"
+                   class="nav-item {% if request.endpoint == 'audit_logs' %}active{% endif %}">
+                    <span>🧾</span><span>Audit Logs</span>
+                </a>
+
+                <a href="{{ url_for('admin_security') }}"
+                   class="nav-item {% if request.endpoint == 'admin_security' %}active{% endif %}">
+                    <span>🛡️</span><span>Security</span>
+                </a>
+
+                <a href="{{ url_for('admin_backup_restore') }}"
+                   class="nav-item {% if request.endpoint in [
+                       'admin_backup_restore','admin_backup_create','admin_backup_download',
+                       'admin_backup_delete','admin_backup_restore_file','database_backup'
+                   ] %}active{% endif %}">
+                    <span>💾</span><span>Backup &amp; Restore</span>
+                </a>
+
+                <a href="{{ url_for('admin_system_health') }}"
+                   class="nav-item {% if request.endpoint == 'admin_system_health' %}active{% endif %}">
+                    <span>❤️</span><span>System Health</span>
+                </a>
+
+                <a href="{{ url_for('admin_data_exports') }}"
+                   class="nav-item {% if request.endpoint in [
+                       'admin_data_exports','admin_export_dataset'
+                   ] %}active{% endif %}">
+                    <span>📤</span><span>Data Exports</span>
+                </a>
+
+                <a href="{{ url_for('admin_role_permissions') }}"
+                   class="nav-item {% if request.endpoint == 'admin_role_permissions' %}active{% endif %}">
+                    <span>🔐</span><span>Role Permissions</span>
+                </a>
+
+                <a href="{{ url_for('admin_system_settings') }}"
+                   class="nav-item {% if request.endpoint == 'admin_system_settings' %}active{% endif %}">
+                    <span>⚙️</span><span>System Settings</span>
+                </a>
+
+
+                <!-- =================================================
+                     SECRETARY / VICE SECRETARY MENU
+                     Membership administration.
+                ================================================== -->
+                {% elif is_secretariat %}
+
+                    {% if can_view_cooperatives %}
+                    <a href="{{ url_for('cooperatives_list') }}"
+                       class="nav-item {% if request.endpoint in [
+                           'cooperatives_list',
+                           'add_cooperative',
+                           'edit_cooperative'
+                       ] %}active{% endif %}">
+                        <span>🏢</span>
+                        <span>Cooperatives</span>
+                    </a>
+                    {% endif %}
+
+                    <p class="nav-title">MEMBERSHIP</p>
+
+                    <a href="{{ url_for('farmers_list') }}"
+                       class="nav-item {% if request.endpoint in [
+                           'farmers_list',
+                           'add_farmer',
+                           'edit_farmer'
+                       ] %}active{% endif %}">
+                        <span>👥</span>
+                        <span>Farmers</span>
+                    </a>
+
+                    <a href="{{ url_for('memberships_list') }}"
+                       class="nav-item {% if request.endpoint in [
+                           'memberships_list',
+                           'add_membership',
+                           'edit_membership',
+                           'delete_membership'
+                       ] %}active{% endif %}">
+                        <span>🪪</span>
+                        <span>Members</span>
+                    </a>
+
+                    <p class="nav-title">RECORDS</p>
+
+                    <a href="{{ url_for('reports') }}"
+                       class="nav-item {% if request.endpoint == 'reports' %}active{% endif %}">
+                        <span>📈</span>
+                        <span>Reports</span>
+                    </a>
+
+
+                <!-- =================================================
+                     TREASURER MENU
+                     Financial recording.
+                ================================================== -->
+                {% elif is_treasurer %}
+
+                    {% if can_view_cooperatives %}
+                    <a href="{{ url_for('cooperatives_list') }}"
+                       class="nav-item {% if request.endpoint in [
+                           'cooperatives_list',
+                           'add_cooperative',
+                           'edit_cooperative'
+                       ] %}active{% endif %}">
+                        <span>🏢</span>
+                        <span>Cooperatives</span>
+                    </a>
+                    {% endif %}
+
+                    <p class="nav-title">FINANCE</p>
+
+                    <a href="{{ url_for('memberships_list') }}"
+                       class="nav-item {% if request.endpoint == 'memberships_list' %}active{% endif %}">
+                        <span>🪪</span>
+                        <span>Members</span>
+                    </a>
+
+                    <a href="{{ url_for('sales_list') }}"
+                       class="nav-item {% if request.endpoint in [
+                           'sales_list',
+                           'add_sale',
+                           'edit_sale'
+                       ] %}active{% endif %}">
+                        <span>🛒</span>
+                        <span>Sales</span>
+                    </a>
+
+                    <a href="{{ url_for('payments_list') }}"
+                       class="nav-item {% if request.endpoint in [
+                           'payments_list',
+                           'add_payment',
+                           'edit_payment'
+                       ] %}active{% endif %}">
+                        <span>💰</span>
+                        <span>Payments</span>
+                    </a>
+
+                    <a href="{{ url_for('contributions_list') }}"
+                       class="nav-item {% if request.endpoint in [
+                           'contributions_list',
+                           'add_contribution',
+                           'delete_contribution'
+                       ] %}active{% endif %}">
+                        <span>🏦</span>
+                        <span>Contributions</span>
+                    </a>
+
+                    <a href="{{ url_for('expenses_list') }}"
+                       class="nav-item {% if request.endpoint in [
+                           'expenses_list',
+                           'add_expense',
+                           'edit_expense',
+                           'delete_expense'
+                       ] %}active{% endif %}">
+                        <span>🧾</span>
+                        <span>Expenses</span>
+                    </a>
+
+                    <a href="{{ url_for('reports') }}"
+                       class="nav-item {% if request.endpoint == 'reports' %}active{% endif %}">
+                        <span>📈</span>
+                        <span>Reports</span>
+                    </a>
+
+
+                <!-- =================================================
+                     CHAIRPERSON / VICE CHAIRPERSON MENU
+                     Leadership, operations and oversight.
+                ================================================== -->
+                {% elif is_leadership %}
+
+                    {% if can_view_cooperatives %}
+                    <a href="{{ url_for('cooperatives_list') }}"
+                       class="nav-item {% if request.endpoint in [
+                           'cooperatives_list',
+                           'add_cooperative',
+                           'edit_cooperative'
+                       ] %}active{% endif %}">
+                        <span>🏢</span>
+                        <span>Cooperatives</span>
+                    </a>
+                    {% endif %}
+
+                    <p class="nav-title">OPERATIONS</p>
+
+                    <a href="{{ url_for('farmers_list') }}"
+                       class="nav-item {% if request.endpoint in [
+                           'farmers_list',
+                           'add_farmer',
+                           'edit_farmer'
+                       ] %}active{% endif %}">
+                        <span>👥</span>
+                        <span>Farmers</span>
+                    </a>
+
+                    <a href="{{ url_for('memberships_list') }}"
+                       class="nav-item {% if request.endpoint == 'memberships_list' %}active{% endif %}">
+                        <span>🪪</span>
+                        <span>Members</span>
+                    </a>
+
+                    <a href="{{ url_for('farms_list') }}"
+                       class="nav-item {% if request.endpoint in [
+                           'farms_list',
+                           'add_farm',
+                           'edit_farm'
+                       ] %}active{% endif %}">
+                        <span>🌾</span>
+                        <span>Farms</span>
+                    </a>
+
+                    <a href="{{ url_for('crops_list') }}"
+                       class="nav-item {% if request.endpoint in [
+                           'crops_list',
+                           'add_crop',
+                           'edit_crop'
+                       ] %}active{% endif %}">
+                        <span>🌱</span>
+                        <span>Crops</span>
+                    </a>
+
+                    <a href="{{ url_for('harvests_list') }}"
+                       class="nav-item {% if request.endpoint in [
+                           'harvests_list',
+                           'add_harvest',
+                           'edit_harvest'
+                       ] %}active{% endif %}">
+                        <span>📦</span>
+                        <span>Harvests</span>
+                    </a>
+
+                    <p class="nav-title">
+                        {% if is_chairperson %}FINANCIAL APPROVAL{% else %}FINANCIAL OVERSIGHT{% endif %}
+                    </p>
+
+                    <a href="{{ url_for('sales_list') }}"
+                       class="nav-item {% if request.endpoint in [
+                           'sales_list',
+                           'add_sale',
+                           'edit_sale'
+                       ] %}active{% endif %}">
+                        <span>🛒</span>
+                        <span>Sales</span>
+                    </a>
+
+                    <a href="{{ url_for('payments_list') }}"
+                       class="nav-item {% if request.endpoint in [
+                           'payments_list',
+                           'add_payment',
+                           'edit_payment'
+                       ] %}active{% endif %}">
+                        <span>💰</span>
+                        <span>Payments</span>
+                    </a>
+
+                    <a href="{{ url_for('contributions_list') }}"
+                       class="nav-item {% if request.endpoint in [
+                           'contributions_list',
+                           'decide_contribution'
+                       ] %}active{% endif %}">
+                        <span>🏦</span>
+                        <span>Contributions</span>
+                    </a>
+
+                    <a href="{{ url_for('expenses_list') }}"
+                       class="nav-item {% if request.endpoint in [
+                           'expenses_list',
+                           'decide_expense'
+                       ] %}active{% endif %}">
+                        <span>🧾</span>
+                        <span>Expenses</span>
+                    </a>
+
+                    <a href="{{ url_for('reports') }}"
+                       class="nav-item {% if request.endpoint == 'reports' %}active{% endif %}">
+                        <span>📈</span>
+                        <span>Reports</span>
+                    </a>
+
+                    {% if can_view_audit_logs %}
+                    <p class="nav-title">OVERSIGHT</p>
+
+                    <a href="{{ url_for('audit_logs') }}"
+                       class="nav-item {% if request.endpoint == 'audit_logs' %}active{% endif %}">
+                        <span>🧾</span>
+                        <span>Audit Logs</span>
+                    </a>
+                    {% endif %}
+
+
+                <!-- =================================================
+                     FALLBACK FOR ANY FUTURE VALID ROLE
+                ================================================== -->
+                {% else %}
+
+                    <a href="{{ url_for('farmers_list') }}"
+                       class="nav-item {% if request.endpoint == 'farmers_list' %}active{% endif %}">
+                        <span>👥</span>
+                        <span>Farmers</span>
+                    </a>
+
+                    <a href="{{ url_for('farms_list') }}"
+                       class="nav-item {% if request.endpoint == 'farms_list' %}active{% endif %}">
+                        <span>🌾</span>
+                        <span>Farms</span>
+                    </a>
+
+                    <a href="{{ url_for('reports') }}"
+                       class="nav-item {% if request.endpoint == 'reports' %}active{% endif %}">
+                        <span>📈</span>
+                        <span>Reports</span>
+                    </a>
+
+                {% endif %}
+            </nav>
+
+
+            <!-- =================================================
+                 SIDEBAR BOTTOM
+            ================================================== -->
+            <div class="sidebar-bottom">
+
+                {% if not is_admin %}
+                <a href="{{ url_for('settings') }}"
+                   class="nav-item {% if request.endpoint in [
+                       'settings',
+                       'change_password'
+                   ] %}active{% endif %}">
+                    <span>⚙️</span>
+                    <span>Settings</span>
+                </a>
+                {% endif %}
+
+                <a href="{{ url_for('logout') }}"
+                   class="nav-item logout">
+                    <span>🚪</span>
+                    <span>Logout</span>
+                </a>
+
+                <div class="developer-credit">
+                    <small>Developed by {{ system_settings.developer_name if system_settings else 'KayCode Labs' }}</small>
+                </div>
+            </div>
+        </aside>
+
+
+        <!-- =====================================================
+             MAIN CONTENT
+        ====================================================== -->
+        <main class="main-content">
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                <div class="flash-messages">
+                    {% for category, message in messages %}
+                    <div class="flash-message flash-{{ category }}">
+                        {{ message }}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            {% endwith %}
+
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+
+    {% block extra_js %}{% endblock %}
 </body>
 </html>

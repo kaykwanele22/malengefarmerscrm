@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+
+{% block title %}{% if expense %}Edit Expense{% else %}Record Expense{% endif %} | Malenge Farmers CRM{% endblock %}
+
+{% block extra_css %}
+<style>
+    .form-page{display:flex;flex-direction:column;gap:20px;max-width:1000px}
+    .form-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap}
+    .form-head h1{margin:0;color:#173b2b;font-size:29px}
+    .form-head p{margin:7px 0 0;color:#6b7280;font-size:13px}
+    .back-btn,.cancel-btn{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:0 14px;border:1px solid #dce7df;border-radius:9px;color:#315441;background:#fff;text-decoration:none;font-size:12px;font-weight:700}
+    .form-note{padding:14px 16px;border:1px solid #eadfbf;border-radius:11px;background:#fffaf0;color:#705d2a;font-size:12px;line-height:1.55}
+    .form-card{padding:22px;background:#fff;border:1px solid #e1e9e3;border-radius:14px}
+    .form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+    .group{display:flex;flex-direction:column;gap:7px}.group.full{grid-column:1/-1}
+    label{color:#31493b;font-size:12px;font-weight:700}
+    input,select,textarea{width:100%;padding:11px 12px;border:1px solid #d7e1da;border-radius:9px;background:#fff;color:#263d30;font:inherit;font-size:13px;box-sizing:border-box}
+    textarea{min-height:110px;resize:vertical}
+    .actions{grid-column:1/-1;display:flex;justify-content:flex-end;gap:10px;padding-top:18px;border-top:1px solid #edf2ee}
+    .save-btn{min-height:42px;padding:0 17px;border:0;border-radius:9px;background:#2e7d4f;color:#fff;font-size:12px;font-weight:800;cursor:pointer}
+    @media(max-width:700px){.form-grid{grid-template-columns:1fr}}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="form-page">
+    <div class="form-head">
+        <div>
+            <h1>{% if expense %}Edit Expense{% else %}Record Expense{% endif %}</h1>
+            <p>Treasurer financial entry.</p>
+        </div>
+        <a href="{{ url_for('expenses_list') }}" class="back-btn">← Back to Expenses</a>
+    </div>
+
+    <div class="form-note">
+        {% if expense and expense.status == 'Rejected' %}
+        Correct this rejected record and save it to send it back for Chairperson confirmation.
+        {% else %}
+        Saving this expense sends it to the Chairperson as <strong>Pending Confirmation</strong>.
+        {% endif %}
+    </div>
+
+    <form method="POST" class="form-card">
+        <div class="form-grid">
+            <div class="group">
+                <label for="category">Category *</label>
+                <input id="category" name="category" type="text" required maxlength="100" value="{{ expense.category if expense else '' }}" placeholder="e.g. Seeds, Fuel, Equipment">
+            </div>
+
+            <div class="group">
+                <label for="amount">Amount (R) *</label>
+                <input id="amount" name="amount" type="number" min="0.01" step="0.01" required value="{{ expense.amount if expense else '' }}">
+            </div>
+
+            <div class="group full">
+                <label for="description">Description *</label>
+                <input id="description" name="description" type="text" required maxlength="250" value="{{ expense.description if expense else '' }}">
+            </div>
+
+            <div class="group">
+                <label for="expense_date">Expense Date *</label>
+                <input id="expense_date" name="expense_date" type="date" required value="{{ expense.expense_date.strftime('%Y-%m-%d') if expense and expense.expense_date else '' }}">
+            </div>
+
+            <div class="group">
+                <label for="payment_method">Payment Method</label>
+                {% set current_method = expense.payment_method if expense else '' %}
+                <select id="payment_method" name="payment_method">
+                    <option value="">Select method</option>
+                    {% for option in ['Cash','Bank Transfer','Card','Mobile Payment','Other'] %}
+                    <option value="{{ option }}" {% if current_method == option %}selected{% endif %}>{{ option }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="group">
+                <label for="farm_id">Farm</label>
+                <select id="farm_id" name="farm_id">
+                    <option value="">No farm selected</option>
+                    {% for farm in farms %}
+                    <option value="{{ farm.id }}" {% if expense and expense.farm_id == farm.id %}selected{% endif %}>{{ farm.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="group">
+                <label for="supplier_id">Supplier</label>
+                <select id="supplier_id" name="supplier_id">
+                    <option value="">No supplier selected</option>
+                    {% for supplier in suppliers %}
+                    <option value="{{ supplier.id }}" {% if expense and expense.supplier_id == supplier.id %}selected{% endif %}>{{ supplier.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="group">
+                <label for="reference">Reference</label>
+                <input id="reference" name="reference" type="text" maxlength="120" value="{{ expense.reference if expense and expense.reference else '' }}">
+            </div>
+
+            <div class="group full">
+                <label for="notes">Notes</label>
+                <textarea id="notes" name="notes">{{ expense.notes if expense and expense.notes else '' }}</textarea>
+            </div>
+
+            <div class="actions">
+                <a href="{{ url_for('expenses_list') }}" class="cancel-btn">Cancel</a>
+                <button type="submit" class="save-btn">{% if expense %}Resubmit for Confirmation{% else %}Submit for Confirmation{% endif %}</button>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}

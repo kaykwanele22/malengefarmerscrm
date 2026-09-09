@@ -1,95 +1,370 @@
 {% extends "base.html" %}
 
-{% block title %}{% if farm %}Edit Farm{% else %}Add Farm{% endif %} | Malenge Farmers CRM{% endblock %}
+{% block title %}
+    {% if farm %}Edit Farm{% else %}Add Farm{% endif %} | Malenge Farmers CRM
+{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/farms.css') }}">
 {% endblock %}
 
 {% block content %}
-<!-- PAGE HEADER -->
 <div class="page-header">
     <div>
         <h1>{% if farm %}Edit Farm{% else %}Add Farm{% endif %}</h1>
-        <p>{% if farm %}Update the registered farm information.{% else %}Register a new farm in the Malenge Farmers CRM.{% endif %}</p>
+        <p>
+            {% if farm %}
+                Update the registered farm information.
+            {% else %}
+                Register a farm and link it to its farmer or owner.
+            {% endif %}
+        </p>
     </div>
-    <a href="{{ url_for('farms') }}" class="back-button">← Back to Farms</a>
+    <a href="{{ url_for('farms_list') }}" class="back-button">← Back to Farms</a>
 </div>
 
-<!-- FARM FORM -->
 <div class="farm-form-card">
-    <form method="POST">
+    <form method="POST" id="farm-form" novalidate>
+        <!-- Form Introduction -->
         <div class="form-section">
             <h3>Farm Information</h3>
-            <p>Enter the details of the farm below.</p>
+            <p class="form-help">
+                The farm record is the source of truth for farm size.
+                Crop details are recorded separately under Crops.
+            </p>
         </div>
 
+        <!-- Form Grid -->
         <div class="form-grid">
-            <!-- FARM NAME -->
-            <div class="form-group">
-                <label for="name">Farm Name *</label>
-                <input type="text" id="name" name="name" value="{{ farm.name if farm else '' }}" placeholder="Example: Malenge Green Farm" required>
+            <!-- Farm Name -->
+            <div class="form-group full-width">
+                <label for="name">
+                    Farm Name <span class="required">*</span>
+                </label>
+                <input
+                    type="text"
+                    id="name"
+                    name="name"
+                    value="{{ farm.name if farm else '' }}"
+                    placeholder="Example: Malenge Green Farm"
+                    required
+                    autofocus
+                >
             </div>
 
-            <!-- FARMER -->
-            <div class="form-group">
-                <label for="farmer_id">Farmer / Owner *</label>
+            <!-- Farmer / Owner -->
+            <div class="form-group full-width">
+                <label for="farmer_id">
+                    Farmer / Owner <span class="required">*</span>
+                </label>
                 <select id="farmer_id" name="farmer_id" required>
                     <option value="">Select a farmer</option>
                     {% for farmer in farmers %}
-                    <option value="{{ farmer.id }}" {% if farm and farm.farmer_id == farmer.id %}selected{% endif %}>
+                    <option
+                        value="{{ farmer.id }}"
+                        {% if farm and farm.farmer_id == farmer.id %}selected{% endif %}
+                    >
                         {{ farmer.fullname }}
+                        {% if farmer.cooperative %}
+                            — {{ farmer.cooperative.name }}
+                        {% endif %}
                     </option>
                     {% endfor %}
                 </select>
             </div>
 
-            <!-- LOCATION -->
+            <!-- Farm Location -->
             <div class="form-group">
-                <label for="location">Farm Location *</label>
-                <input type="text" id="location" name="location" value="{{ farm.location if farm else '' }}" placeholder="Example: Malenge, KwaZulu-Natal" required>
+                <label for="location">
+                    Farm Location <span class="required">*</span>
+                </label>
+                <input
+                    type="text"
+                    id="location"
+                    name="location"
+                    value="{{ farm.location if farm else '' }}"
+                    placeholder="Example: Malenge, KwaZulu-Natal"
+                    required
+                >
             </div>
 
-            <!-- SIZE -->
+            <!-- Farm Size -->
             <div class="form-group">
                 <label for="size">Farm Size (hectares)</label>
-                <input type="number" id="size" name="size" step="0.01" min="0" value="{{ farm.size if farm and farm.size is not none else '' }}" placeholder="Example: 5.5">
+                <input
+                    type="number"
+                    id="size"
+                    name="size"
+                    step="0.01"
+                    min="0"
+                    value="{{ farm.size if farm and farm.size is not none else '' }}"
+                    placeholder="Example: 5.5"
+                >
             </div>
 
-            <!-- FARMING TYPE -->
+            <!-- Farming Type -->
             <div class="form-group">
                 <label for="farming_type">Farming Type</label>
                 <select id="farming_type" name="farming_type">
                     <option value="">Select farming type</option>
-                    <option value="Crop Farming" {% if farm and farm.farming_type == "Crop Farming" %}selected{% endif %}>Crop Farming</option>
-                    <option value="Vegetable Farming" {% if farm and farm.farming_type == "Vegetable Farming" %}selected{% endif %}>Vegetable Farming</option>
-                    <option value="Livestock" {% if farm and farm.farming_type == "Livestock" %}selected{% endif %}>Livestock</option>
-                    <option value="Poultry" {% if farm and farm.farming_type == "Poultry" %}selected{% endif %}>Poultry</option>
-                    <option value="Mixed Farming" {% if farm and farm.farming_type == "Mixed Farming" %}selected{% endif %}>Mixed Farming</option>
+                    <option value="Crop Farming" {% if farm and farm.farming_type == "Crop Farming" %}selected{% endif %}>
+                        Crop Farming
+                    </option>
+                    <option value="Vegetable Farming" {% if farm and farm.farming_type == "Vegetable Farming" %}selected{% endif %}>
+                        Vegetable Farming
+                    </option>
+                    <option value="Livestock" {% if farm and farm.farming_type == "Livestock" %}selected{% endif %}>
+                        Livestock
+                    </option>
+                    <option value="Poultry" {% if farm and farm.farming_type == "Poultry" %}selected{% endif %}>
+                        Poultry
+                    </option>
+                    <option value="Mixed Farming" {% if farm and farm.farming_type == "Mixed Farming" %}selected{% endif %}>
+                        Mixed Farming
+                    </option>
                 </select>
             </div>
 
-            <!-- MAIN CROP -->
-            <div class="form-group">
-                <label for="main_crop">Main Crop</label>
-                <input type="text" id="main_crop" name="main_crop" value="{{ farm.main_crop if farm else '' }}" placeholder="Example: Potatoes">
-            </div>
-
-            <!-- STATUS -->
+            <!-- Farm Status -->
             <div class="form-group">
                 <label for="status">Farm Status</label>
                 <select id="status" name="status">
-                    <option value="Active" {% if not farm or farm.status == "Active" %}selected{% endif %}>Active</option>
-                    <option value="Inactive" {% if farm and farm.status == "Inactive" %}selected{% endif %}>Inactive</option>
+                    <option value="Active" {% if not farm or farm.status == "Active" %}selected{% endif %}>
+                        Active
+                    </option>
+                    <option value="Inactive" {% if farm and farm.status == "Inactive" %}selected{% endif %}>
+                        Inactive
+                    </option>
                 </select>
             </div>
         </div>
 
-        <!-- FORM ACTIONS -->
+        <!-- Form Actions -->
         <div class="form-actions">
-            <a href="{{ url_for('farms') }}" class="cancel-button">Cancel</a>
-            <button type="submit" class="save-button">{% if farm %}Update Farm{% else %}Save Farm{% endif %}</button>
+            <a href="{{ url_for('farms_list') }}" class="cancel-button">Cancel</a>
+            <button type="submit" class="save-button">
+                {% if farm %}Update Farm{% else %}Save Farm{% endif %}
+            </button>
         </div>
     </form>
 </div>
+
+<style>
+    /* Page Header */
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 24px;
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+
+    .page-header h1 {
+        margin: 0 0 6px;
+        font-size: 28px;
+        color: #173b2b;
+    }
+
+    .page-header p {
+        margin: 0;
+        color: #5f6f65;
+    }
+
+    /* Back Button */
+    .back-button {
+        display: inline-flex;
+        align-items: center;
+        padding: 8px 16px;
+        background: #f3f7f4;
+        color: #315441;
+        border: 1px solid #d7e3db;
+        border-radius: 8px;
+        text-decoration: none;
+        font-size: 14px;
+        transition: background 0.2s;
+        white-space: nowrap;
+    }
+
+    .back-button:hover {
+        background: #e8eee9;
+    }
+
+    /* Form Card */
+    .farm-form-card {
+        max-width: 800px;
+        padding: 30px;
+        background: #fff;
+        border-radius: 14px;
+        box-shadow: 0 4px 20px rgba(18, 63, 41, 0.06);
+    }
+
+    /* Form Section */
+    .form-section {
+        margin-bottom: 24px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid #eef3f0;
+    }
+
+    .form-section h3 {
+        margin: 0 0 6px;
+        font-size: 18px;
+        color: #173b2b;
+    }
+
+    .form-help {
+        margin: 0;
+        color: #5f6f65;
+        font-size: 14px;
+        line-height: 1.6;
+    }
+
+    /* Form Grid */
+    .form-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        margin-bottom: 30px;
+    }
+
+    .full-width {
+        grid-column: 1 / -1;
+    }
+
+    .form-group {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .form-group label {
+        font-weight: 600;
+        font-size: 14px;
+        color: #173b2b;
+    }
+
+    .required {
+        color: #c83f3f;
+        font-weight: 700;
+    }
+
+    .form-group input,
+    .form-group select {
+        padding: 10px 14px;
+        border: 1px solid #d7e3db;
+        border-radius: 8px;
+        font-size: 14px;
+        font-family: inherit;
+        transition: border-color 0.2s, box-shadow 0.2s;
+        background: #fff;
+        width: 100%;
+    }
+
+    .form-group input:focus,
+    .form-group select:focus {
+        outline: none;
+        border-color: #2e7d4f;
+        box-shadow: 0 0 0 3px rgba(46, 125, 79, 0.1);
+    }
+
+    .form-group input:disabled,
+    .form-group select:disabled {
+        background: #f7faf8;
+        cursor: not-allowed;
+    }
+
+    /* Form Actions */
+    .form-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 12px;
+        padding-top: 20px;
+        border-top: 1px solid #eef3f0;
+    }
+
+    .save-button,
+    .cancel-button {
+        padding: 10px 24px;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 600;
+        text-decoration: none;
+        cursor: pointer;
+        transition: background 0.2s;
+        border: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .save-button {
+        background: #2e7d4f;
+        color: #fff;
+    }
+
+    .save-button:hover {
+        background: #23693f;
+    }
+
+    .cancel-button {
+        background: #f3f7f4;
+        color: #315441;
+        border: 1px solid #d7e3db;
+    }
+
+    .cancel-button:hover {
+        background: #e8eee9;
+    }
+
+    /* Responsive Design */
+    @media (max-width: 768px) {
+        .page-header {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .page-header .back-button {
+            align-self: flex-start;
+        }
+
+        .farm-form-card {
+            padding: 20px;
+        }
+
+        .form-grid {
+            grid-template-columns: 1fr;
+            gap: 16px;
+        }
+
+        .full-width {
+            grid-column: 1;
+        }
+    }
+
+    @media (max-width: 480px) {
+        .page-header h1 {
+            font-size: 22px;
+        }
+
+        .farm-form-card {
+            padding: 16px;
+            border-radius: 10px;
+        }
+
+        .form-actions {
+            flex-direction: column-reverse;
+            gap: 8px;
+        }
+
+        .form-actions .save-button,
+        .form-actions .cancel-button {
+            width: 100%;
+            justify-content: center;
+        }
+
+        .form-section h3 {
+            font-size: 16px;
+        }
+    }
+</style>
 {% endblock %}

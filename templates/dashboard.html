@@ -2,572 +2,538 @@
 
 {% block title %}Dashboard | Malenge Farmers CRM{% endblock %}
 
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/monitoring_dashboard.css') }}">
+<style>
+    .dash-shell{display:flex;flex-direction:column;gap:22px}
+    .dash-hero{padding:24px;background:linear-gradient(135deg,#123f29,#1e6943);border-radius:18px;color:#fff;display:flex;justify-content:space-between;gap:22px;align-items:flex-start;box-shadow:0 12px 34px rgba(18,63,41,.15)}
+    .dash-hero .eyebrow{margin:0 0 7px;color:#bfe4cd;font-size:10px;font-weight:900;letter-spacing:1.4px;text-transform:uppercase}
+    .dash-hero h1{margin:0 0 8px;font-size:30px;line-height:1.15}
+    .dash-hero p{margin:0;color:#dbece1;font-size:12px;line-height:1.55}
+    .dash-hero-meta{margin-top:12px;display:flex;gap:8px;flex-wrap:wrap}
+    .dash-hero-pill{display:inline-flex;min-height:28px;padding:0 10px;align-items:center;border:1px solid rgba(255,255,255,.18);border-radius:999px;background:rgba(255,255,255,.08);font-size:10px;font-weight:800}
+    .dash-primary-btn,.dash-secondary-btn{min-height:42px;padding:0 15px;display:inline-flex;align-items:center;justify-content:center;border-radius:9px;text-decoration:none;font-size:11px;font-weight:900;white-space:nowrap}
+    .dash-primary-btn{background:#fff;color:#17482f}
+    .dash-secondary-btn{background:#edf7f0;color:#23613e;border:1px solid #d5e7da}
+    .dash-section{background:#fff;border:1px solid #e1e9e3;border-radius:16px;box-shadow:0 8px 24px rgba(18,63,41,.04);overflow:hidden}
+    .dash-section-head{padding:19px 21px;border-bottom:1px solid #edf2ee;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+    .dash-section-head .eyebrow{margin:0 0 4px;color:#2b8250;font-size:9px;font-weight:900;letter-spacing:1.1px;text-transform:uppercase}
+    .dash-section-head h2{margin:0;color:#173e29;font-size:19px}
+    .dash-section-head a{color:#2c7650;text-decoration:none;font-size:11px;font-weight:800}
+    .dash-section-body{padding:20px}
+    .dash-stat-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+    .dash-stat{padding:18px;border:1px solid #e2eae4;border-radius:13px;background:#fbfdfb}
+    .dash-stat span{display:block;margin-bottom:8px;color:#738078;font-size:10px;font-weight:700}
+    .dash-stat strong{display:block;color:#153e28;font-size:23px;line-height:1.1}
+    .dash-stat small{display:block;margin-top:6px;color:#879189;font-size:9px;line-height:1.4}
+    .dash-stat.attention{background:#fff9ee;border-color:#eadcb9}
+    .dash-stat.attention strong{color:#8d641c}
+    .dash-stat.good{background:#f3faf5;border-color:#d9e9de}
+    .dash-workspace-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+    .dash-action{padding:18px;border:1px solid #e1e9e3;border-radius:13px;background:#fff;text-decoration:none;color:#173e29;display:flex;gap:13px;align-items:flex-start}
+    .dash-action:hover{border-color:#bdd5c5;background:#fbfdfb}
+    .dash-action .icon{font-size:22px;line-height:1}
+    .dash-action strong{display:block;margin-bottom:4px;font-size:12px}
+    .dash-action small{display:block;color:#77837b;font-size:9px;line-height:1.45}
+    .dash-finance-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px}
+    .dash-money{padding:16px;border:1px solid #e2eae4;border-radius:12px;background:#fbfdfb}
+    .dash-money small{display:block;color:#7b867f;font-size:9px;margin-bottom:7px}
+    .dash-money strong{display:block;color:#173e29;font-size:16px}
+    .dash-money.warning{background:#fff9ee;border-color:#eadcb9}
+    .dash-money.warning strong{color:#93651d}
+    .dash-two{display:grid;grid-template-columns:1.05fr .95fr;gap:18px}
+    .dash-three{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
+    .dash-list{display:flex;flex-direction:column}
+    .dash-row{padding:13px 0;border-bottom:1px solid #edf2ee;display:flex;align-items:flex-start;justify-content:space-between;gap:14px}
+    .dash-row:last-child{border-bottom:0}
+    .dash-row strong{display:block;color:#284536;font-size:11px}
+    .dash-row small{display:block;margin-top:3px;color:#7f8a83;font-size:9px;line-height:1.45}
+    .dash-row .value{text-align:right;color:#294a38;font-size:10px;font-weight:800;white-space:nowrap}
+    .dash-badge{display:inline-flex;min-height:24px;padding:0 8px;align-items:center;border-radius:999px;background:#eaf6ee;color:#247347;font-size:8px;font-weight:900}
+    .dash-badge.pending{background:#fff1cc;color:#8c631c}
+    .dash-badge.rejected{background:#fde6e6;color:#a23a3a}
+    .dash-badge.muted{background:#eef2ef;color:#66756c}
+    .dash-team{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+    .dash-team-card{padding:13px;border:1px solid #e2eae4;border-radius:11px;background:#fbfdfb}
+    .dash-team-card strong{display:block;color:#284536;font-size:10px;margin-bottom:4px}
+    .dash-team-card small{display:block;color:#7d8981;font-size:8px;line-height:1.4}
+    .dash-note{padding:14px 16px;border:1px solid #d9e7dd;border-radius:11px;background:#f4f9f5;color:#496053;font-size:10px;line-height:1.55}
+    .dash-warning{padding:14px 16px;border:1px solid #ead8ad;border-radius:11px;background:#fff8ea;color:#725b21;font-size:10px;line-height:1.55}
+    .dash-table-wrap{overflow-x:auto}
+    .dash-table{width:100%;border-collapse:collapse;min-width:1000px}
+    .dash-table th{padding:11px 12px;background:#f6f9f7;border-bottom:1px solid #e5ece7;color:#718078;font-size:8px;text-align:left;text-transform:uppercase;letter-spacing:.4px}
+    .dash-table td{padding:13px 12px;border-bottom:1px solid #edf2ee;color:#35483c;font-size:9px;vertical-align:top}
+    .dash-table tr:last-child td{border-bottom:0}
+    .dash-table td strong{display:block;color:#234433;font-size:10px}
+    .dash-table td small{display:block;margin-top:3px;color:#849087;font-size:8px}
+    .dash-empty{padding:22px;text-align:center;color:#7d8981;font-size:10px}
+    .admin-quick-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+    .admin-quick-card{padding:18px;border:1px solid #e1e9e3;border-radius:13px;background:#fff;text-decoration:none;color:#173e29}
+    .admin-quick-card span{font-size:22px}.admin-quick-card strong{display:block;margin:10px 0 4px;font-size:12px}.admin-quick-card small{display:block;color:#748179;font-size:9px;line-height:1.45}
+    @media(max-width:1200px){.dash-finance-grid{grid-template-columns:repeat(3,1fr)}.dash-team{grid-template-columns:repeat(3,1fr)}}
+    @media(max-width:980px){.dash-stat-grid{grid-template-columns:repeat(2,1fr)}.dash-workspace-grid,.admin-quick-grid{grid-template-columns:repeat(2,1fr)}.dash-two,.dash-three{grid-template-columns:1fr}}
+    @media(max-width:650px){.dash-hero{flex-direction:column}.dash-stat-grid,.dash-workspace-grid,.admin-quick-grid,.dash-finance-grid,.dash-team{grid-template-columns:1fr}}
+</style>
+{% endblock %}
+
 {% block content %}
+{% set role = current_access.role if current_access else '' %}
+{% set is_admin = role == 'Admin' %}
+{% set is_secondary = role.startswith('Secondary') %}
+{% set is_primary = role.startswith('Primary') %}
+{% set is_chairperson = role in ['Secondary Chairperson','Primary Chairperson'] %}
+{% set is_vice_chairperson = role in ['Secondary Vice Chairperson','Primary Vice Chairperson'] %}
+{% set is_secretary = role in ['Secondary Secretary','Primary Secretary'] %}
+{% set is_vice_secretary = role in ['Secondary Vice Secretary','Primary Vice Secretary'] %}
+{% set is_secretariat = is_secretary or is_vice_secretary %}
+{% set is_treasurer = role in ['Secondary Treasurer','Primary Treasurer'] %}
 
-{% set secondary_roles = [
-    'Admin',
-    'Secondary Chairperson',
-    'Secondary Secretary',
-    'Secondary Treasurer',
-    'Secondary Manager'
-] %}
+<div class="dash-shell">
 
-{% set is_secondary = current_access and current_access.role in secondary_roles %}
-
-<div class="monitor-page">
-
-    <div class="monitor-header">
+    <!-- =====================================================
+         HEADER
+    ====================================================== -->
+    <header class="dash-hero">
         <div>
-            <p class="monitor-eyebrow">
-                {% if is_secondary %}
-                    SECONDARY COOPERATIVE OVERSIGHT
+            <p class="eyebrow">
+                {% if is_admin %}
+                    System Administration
+                {% elif is_secondary and is_chairperson %}
+                    Secondary Leadership &amp; Network Oversight
+                {% elif is_secondary and is_vice_chairperson %}
+                    Secondary Leadership Support &amp; Network Oversight
+                {% elif is_secondary and is_treasurer %}
+                    Secondary Finance &amp; Network Oversight
+                {% elif is_secondary and is_secretariat %}
+                    Secondary Secretariat &amp; Membership Oversight
+                {% elif is_chairperson %}
+                    Primary Cooperative Leadership
+                {% elif is_vice_chairperson %}
+                    Primary Cooperative Leadership Support
+                {% elif is_treasurer %}
+                    Primary Cooperative Finance
                 {% else %}
-                    PRIMARY COOPERATIVE OPERATIONS
+                    Primary Cooperative Secretariat
                 {% endif %}
             </p>
 
             <h1>
-                {% if is_secondary %}
-                    Cooperative Monitoring Dashboard
+                {% if is_admin %}
+                    CRM Administration Dashboard
+                {% elif is_secondary %}
+                    {{ current_cooperative.name if current_cooperative else 'Secondary Cooperative' }} Dashboard
                 {% else %}
-                    {{ current_cooperative.name if current_cooperative else 'Cooperative Dashboard' }}
+                    {{ current_cooperative.name if current_cooperative else 'Primary Cooperative' }} Dashboard
                 {% endif %}
             </h1>
 
-            <p class="monitor-subtitle">
-                {% if current_access %}
-                    Signed in as <strong>{{ current_access.role }}</strong>
-                {% endif %}
-
-                {% if current_cooperative %}
-                    · {{ current_cooperative.name }}
+            <p>
+                {% if is_admin %}
+                    System-wide account, security, backup and configuration administration.
+                {% elif current_cooperative %}
+                    {{ role }} · {{ current_cooperative.name }}
+                {% else %}
+                    {{ role }} · Cooperative assignment required
                 {% endif %}
             </p>
+
+            <div class="dash-hero-meta">
+                {% if not is_admin and current_cooperative %}
+                <span class="dash-hero-pill">{{ current_cooperative.cooperative_type }} Cooperative</span>
+                <span class="dash-hero-pill">{{ current_cooperative.status }}</span>
+                <span class="dash-hero-pill">Executive positions {{ own_positions_filled }}/5 filled</span>
+                {% endif %}
+                {% if is_secondary %}<span class="dash-hero-pill">{{ primary_cooperatives|length }} Primary Cooperatives visible</span>{% endif %}
+            </div>
         </div>
 
-        {% if is_secondary %}
-        <a href="{{ url_for('cooperatives') }}" class="monitor-header-button">
-            Manage Cooperatives
-        </a>
-        {% endif %}
-    </div>
-
-
-    <!-- MAIN OPERATIONAL KPIs -->
-    <section class="monitor-kpi-grid">
-
-        <a href="{{ url_for('farmers') }}" class="monitor-kpi-card">
-            <div class="monitor-kpi-icon">👥</div>
-            <div>
-                <span>Farmers</span>
-                <strong>{{ farmer_count }}</strong>
-            </div>
-        </a>
-
-        <a href="{{ url_for('farms') }}" class="monitor-kpi-card">
-            <div class="monitor-kpi-icon">🌾</div>
-            <div>
-                <span>Farms</span>
-                <strong>{{ farm_count }}</strong>
-            </div>
-        </a>
-
-        <a href="{{ url_for('crops') }}" class="monitor-kpi-card">
-            <div class="monitor-kpi-icon">🌱</div>
-            <div>
-                <span>Crops</span>
-                <strong>{{ crop_count }}</strong>
-            </div>
-        </a>
-
-        <a href="{{ url_for('harvests') }}" class="monitor-kpi-card">
-            <div class="monitor-kpi-icon">📦</div>
-            <div>
-                <span>Harvests</span>
-                <strong>{{ harvest_count }}</strong>
-            </div>
-        </a>
-
-    </section>
-
-
-    <!-- FINANCIAL OVERSIGHT -->
-    <section class="monitor-section">
-        <div class="monitor-section-heading">
-            <div>
-                <p class="monitor-section-kicker">FINANCIAL OVERSIGHT</p>
-                <h2>Financial Position</h2>
-            </div>
-
-            <a href="{{ url_for('reports') }}">
-                Open Reports →
-            </a>
+        <div>
+            {% if is_admin %}
+                <a href="{{ url_for('users_list') }}" class="dash-primary-btn">Manage Users &amp; Access</a>
+            {% elif is_chairperson and own_pending_finance > 0 %}
+                <a href="{{ url_for('contributions_list') }}" class="dash-primary-btn">Review {{ own_pending_finance }} Pending Approvals</a>
+            {% elif is_treasurer %}
+                <a href="{{ url_for('add_contribution') }}" class="dash-primary-btn">Record Money</a>
+            {% elif is_secretariat %}
+                <a href="{{ url_for('add_membership') }}" class="dash-primary-btn">Register Member</a>
+            {% else %}
+                <a href="{{ url_for('reports') }}" class="dash-primary-btn">Open Reports</a>
+            {% endif %}
         </div>
+    </header>
 
-        <div class="monitor-finance-grid">
+    <!-- =====================================================
+         STRICT ADMIN DASHBOARD
+    ====================================================== -->
+    {% if is_admin %}
 
-            <div class="monitor-finance-card">
-                <span>Total Sales</span>
-                <strong>R {{ "{:,.2f}".format(total_sales_value|float) }}</strong>
-                <small>{{ sales_count }} sale records</small>
+    <section class="dash-section">
+        <div class="dash-section-head">
+            <div><p class="eyebrow">Administration</p><h2>System Overview</h2></div>
+        </div>
+        <div class="dash-section-body">
+            <div class="dash-stat-grid">
+                <div class="dash-stat"><span>CRM Users</span><strong>{{ admin_user_count }}</strong><small>All login holders</small></div>
+                <div class="dash-stat"><span>Active Accounts</span><strong>{{ admin_active_access_count }}</strong><small>Currently authorized</small></div>
+                <div class="dash-stat"><span>Cooperatives</span><strong>{{ admin_cooperative_count }}</strong><small>System structure</small></div>
+                <div class="dash-stat"><span>Audit Entries</span><strong>{{ admin_audit_count }}</strong><small>Recorded system activity</small></div>
             </div>
-
-            <div class="monitor-finance-card">
-                <span>Payments Received</span>
-                <strong>R {{ "{:,.2f}".format(total_payments_value|float) }}</strong>
-                <small>{{ payment_count }} payment records</small>
-            </div>
-
-            <div class="monitor-finance-card {% if outstanding_balance|float > 0 %}attention{% endif %}">
-                <span>Outstanding</span>
-                <strong>R {{ "{:,.2f}".format(outstanding_balance|float) }}</strong>
-                <small>Sales still awaiting payment</small>
-            </div>
-
-            <div class="monitor-finance-card">
-                <span>Expenses</span>
-                <strong>R {{ "{:,.2f}".format(total_expenses_value|float) }}</strong>
-                <small>{{ expense_count }} expense records</small>
-            </div>
-
-            <div class="monitor-finance-card">
-                <span>Net Cash Position</span>
-                <strong>R {{ "{:,.2f}".format(net_cash_position|float) }}</strong>
-                <small>Payments received less expenses</small>
-            </div>
-
-            <div class="monitor-finance-card">
-                <span>Contributions</span>
-                <strong>R {{ "{:,.2f}".format(total_contributions_value|float) }}</strong>
-                <small>Received cooperative contributions</small>
-            </div>
-
         </div>
     </section>
 
-
-    <!-- MONITORING ALERTS -->
-    <section class="monitor-section">
-        <div class="monitor-section-heading">
-            <div>
-                <p class="monitor-section-kicker">ATTENTION REQUIRED</p>
-                <h2>Monitoring Alerts</h2>
+    <section class="dash-section">
+        <div class="dash-section-head"><div><p class="eyebrow">System Administration</p><h2>Admin Modules</h2></div></div>
+        <div class="dash-section-body">
+            <div class="admin-quick-grid">
+                <a href="{{ url_for('users_list') }}" class="admin-quick-card"><span>👤</span><strong>Users &amp; Access</strong><small>Create logins, assign roles, cooperatives and status.</small></a>
+                <a href="{{ url_for('cooperatives_list') }}" class="admin-quick-card"><span>🏢</span><strong>Cooperative Structure</strong><small>Maintain Secondary and Primary cooperative structure.</small></a>
+                <a href="{{ url_for('audit_logs') }}" class="admin-quick-card"><span>🧾</span><strong>Audit Logs</strong><small>Review recorded CRM activity.</small></a>
+                <a href="{{ url_for('admin_security') }}" class="admin-quick-card"><span>🛡️</span><strong>Security</strong><small>Review login and access events.</small></a>
+                <a href="{{ url_for('admin_backup_restore') }}" class="admin-quick-card"><span>💾</span><strong>Backup &amp; Restore</strong><small>Create and restore verified backups.</small></a>
+                <a href="{{ url_for('admin_system_health') }}" class="admin-quick-card"><span>❤️</span><strong>System Health</strong><small>Check database and runtime status.</small></a>
+                <a href="{{ url_for('admin_data_exports') }}" class="admin-quick-card"><span>📤</span><strong>Data Exports</strong><small>Download system-wide CSV datasets.</small></a>
+                <a href="{{ url_for('admin_role_permissions') }}" class="admin-quick-card"><span>🔐</span><strong>Role Permissions</strong><small>Review executive responsibilities and boundaries.</small></a>
+                <a href="{{ url_for('admin_system_settings') }}" class="admin-quick-card"><span>⚙️</span><strong>System Settings</strong><small>Manage safe global CRM settings.</small></a>
             </div>
-        </div>
-
-        <div class="monitor-alert-grid">
-
-            <a href="{{ url_for('tasks') }}"
-               class="monitor-alert-card {% if overdue_task_count > 0 %}alert-active{% endif %}">
-                <span class="monitor-alert-icon">⏰</span>
-                <div>
-                    <strong>{{ overdue_task_count }}</strong>
-                    <span>Overdue Tasks</span>
-                </div>
-            </a>
-
-            <a href="{{ url_for('inventory') }}"
-               class="monitor-alert-card {% if low_stock_count > 0 %}alert-active{% endif %}">
-                <span class="monitor-alert-icon">📉</span>
-                <div>
-                    <strong>{{ low_stock_count }}</strong>
-                    <span>Low Stock Items</span>
-                </div>
-            </a>
-
-            <a href="{{ url_for('equipment') }}"
-               class="monitor-alert-card {% if service_due_count > 0 %}alert-active{% endif %}">
-                <span class="monitor-alert-icon">🚜</span>
-                <div>
-                    <strong>{{ service_due_count }}</strong>
-                    <span>Equipment Service Due</span>
-                </div>
-            </a>
-
-            <a href="{{ url_for('memberships') }}"
-               class="monitor-alert-card {% if unpaid_membership_count > 0 %}alert-active{% endif %}">
-                <span class="monitor-alert-icon">🪪</span>
-                <div>
-                    <strong>{{ unpaid_membership_count }}</strong>
-                    <span>Membership Fees Outstanding</span>
-                </div>
-            </a>
-
+            <div class="dash-note" style="margin-top:14px">Admin remains strictly system-level. Secretary owns membership records, Treasurer records money, and Chairperson confirms financial entries.</div>
         </div>
     </section>
 
+    <section class="dash-section">
+        <div class="dash-section-head">
+            <div><p class="eyebrow">System Activity</p><h2>Recent Administration Activity</h2></div>
+            <a href="{{ url_for('audit_logs') }}">Open Audit Logs →</a>
+        </div>
+        <div class="dash-section-body">
+            <div class="dash-list">
+                {% for activity in admin_recent_activity %}
+                <div class="dash-row">
+                    <div><strong>{{ activity.action }} {{ activity.entity_type }}</strong><small>{% if activity.user %}{{ activity.user.fullname }}{% else %}System / Unknown user{% endif %}{% if activity.cooperative %} · {{ activity.cooperative.name }}{% endif %}</small></div>
+                    <div class="value">{{ activity.created_at.strftime('%d %b %H:%M') if activity.created_at else '' }}</div>
+                </div>
+                {% else %}<div class="dash-empty">No administration activity recorded yet.</div>{% endfor %}
+            </div>
+        </div>
+    </section>
 
-    <!-- COOPERATIVE COMPARISON -->
-    <section class="monitor-section">
-        <div class="monitor-section-heading">
+    {% else %}
+
+    <!-- =====================================================
+         COOPERATIVE IDENTITY / GOVERNANCE HEALTH
+    ====================================================== -->
+    <section class="dash-section">
+        <div class="dash-section-head">
+            <div><p class="eyebrow">Cooperative Governance</p><h2>Your Executive Structure</h2></div>
+            {% if is_secondary and can_view_cooperatives %}<a href="{{ url_for('cooperatives_list') }}">View Cooperative Structure →</a>{% endif %}
+        </div>
+        <div class="dash-section-body">
+            <div class="dash-stat-grid" style="margin-bottom:16px">
+                <div class="dash-stat good"><span>Executive Positions Filled</span><strong>{{ own_positions_filled }}/5</strong><small>Active assigned offices</small></div>
+                <div class="dash-stat {% if own_positions_vacant > 0 %}attention{% endif %}"><span>Vacant Positions</span><strong>{{ own_positions_vacant }}</strong><small>Out of five executive offices</small></div>
+                <div class="dash-stat"><span>Members</span><strong>{{ own_member_count }}</strong><small>{{ own_active_member_count }} active</small></div>
+                <div class="dash-stat"><span>Farmers</span><strong>{{ own_farmer_count }}</strong><small>Own cooperative records</small></div>
+            </div>
+
+            {% if own_executives %}
+            <div class="dash-team">
+                {% for executive in own_executives %}
+                <div class="dash-team-card">
+                    <strong>{{ executive.role }}</strong>
+                    <small>{{ executive.user.fullname if executive.user else 'Assigned user' }}</small>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="dash-warning">No active executive assignments were found for this cooperative.</div>
+            {% endif %}
+        </div>
+    </section>
+
+    <!-- =====================================================
+         CHAIRPERSON DASHBOARD
+    ====================================================== -->
+    {% if is_chairperson %}
+
+    <section class="dash-section">
+        <div class="dash-section-head">
+            <div><p class="eyebrow">Leadership</p><h2>Chairperson Overview</h2></div>
+        </div>
+        <div class="dash-section-body">
+            <div class="dash-stat-grid">
+                <div class="dash-stat {% if own_pending_finance > 0 %}attention{% endif %}"><span>Pending Financial Approvals</span><strong>{{ own_pending_finance }}</strong><small>{{ own_pending_contributions }} contributions · {{ own_pending_expenses }} expenses</small></div>
+                <div class="dash-stat"><span>Farms</span><strong>{{ own_farm_count }}</strong><small>Registered under your cooperative</small></div>
+                <div class="dash-stat"><span>Crops</span><strong>{{ own_crop_count }}</strong><small>Crop records</small></div>
+                <div class="dash-stat"><span>Cash Position</span><strong>R {{ "{:,.0f}".format(own_cash_position|float) }}</strong><small>Payments + contributions − confirmed expenses</small></div>
+            </div>
+
+            {% if own_pending_finance > 0 %}
+            <div class="dash-warning" style="margin-top:14px">
+                Treasurer entries are waiting for your decision. You may approve or reject records belonging to <strong>your cooperative only</strong>.
+            </div>
+            <div class="dash-workspace-grid" style="margin-top:14px">
+                <a href="{{ url_for('contributions_list') }}" class="dash-action"><span class="icon">🏦</span><div><strong>Review Contributions</strong><small>{{ own_pending_contributions }} awaiting confirmation.</small></div></a>
+                <a href="{{ url_for('expenses_list') }}" class="dash-action"><span class="icon">🧾</span><div><strong>Review Expenses</strong><small>{{ own_pending_expenses }} awaiting confirmation.</small></div></a>
+                <a href="{{ url_for('reports') }}" class="dash-action"><span class="icon">📈</span><div><strong>Review Reports</strong><small>Open the cooperative financial and operational report.</small></div></a>
+            </div>
+            {% endif %}
+        </div>
+    </section>
+
+    <section class="dash-section">
+        <div class="dash-section-head"><div><p class="eyebrow">Financial Oversight</p><h2>{{ current_cooperative.name }} Financial Position</h2></div><a href="{{ url_for('reports') }}">Reports →</a></div>
+        <div class="dash-section-body">
+            <div class="dash-finance-grid">
+                <div class="dash-money"><small>Sales</small><strong>R {{ "{:,.2f}".format(own_sales_value|float) }}</strong></div>
+                <div class="dash-money"><small>Sale Payments</small><strong>R {{ "{:,.2f}".format(own_payments_value|float) }}</strong></div>
+                <div class="dash-money"><small>Contributions</small><strong>R {{ "{:,.2f}".format(own_contributions_value|float) }}</strong></div>
+                <div class="dash-money"><small>Confirmed Expenses</small><strong>R {{ "{:,.2f}".format(own_expenses_value|float) }}</strong></div>
+                <div class="dash-money {% if own_outstanding_balance > 0 %}warning{% endif %}"><small>Sales Outstanding</small><strong>R {{ "{:,.2f}".format(own_outstanding_balance|float) }}</strong></div>
+                <div class="dash-money"><small>Cash Position</small><strong>R {{ "{:,.2f}".format(own_cash_position|float) }}</strong></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- =====================================================
+         VICE CHAIRPERSON DASHBOARD
+    ====================================================== -->
+    {% elif is_vice_chairperson %}
+
+    <section class="dash-section">
+        <div class="dash-section-head"><div><p class="eyebrow">Leadership Support</p><h2>Operational Overview</h2></div><a href="{{ url_for('reports') }}">Reports →</a></div>
+        <div class="dash-section-body">
+            <div class="dash-stat-grid">
+                <div class="dash-stat"><span>Farms</span><strong>{{ own_farm_count }}</strong><small>Registered farms</small></div>
+                <div class="dash-stat"><span>Crops</span><strong>{{ own_crop_count }}</strong><small>Crop records</small></div>
+                <div class="dash-stat"><span>Harvests</span><strong>{{ own_harvest_count }}</strong><small>Harvest records</small></div>
+                <div class="dash-stat"><span>Members</span><strong>{{ own_member_count }}</strong><small>{{ own_active_member_count }} active</small></div>
+            </div>
+            <div class="dash-note" style="margin-top:14px">Vice Chairperson provides leadership and operational oversight. Financial confirmation remains with the Chairperson.</div>
+        </div>
+    </section>
+
+    <!-- =====================================================
+         SECRETARY / VICE SECRETARY DASHBOARD
+    ====================================================== -->
+    {% elif is_secretariat %}
+
+    <section class="dash-section">
+        <div class="dash-section-head"><div><p class="eyebrow">Membership Administration</p><h2>Secretariat Overview</h2></div><a href="{{ url_for('memberships_list') }}">Members →</a></div>
+        <div class="dash-section-body">
+            <div class="dash-stat-grid">
+                <div class="dash-stat"><span>Total Members</span><strong>{{ own_member_count }}</strong><small>Membership records</small></div>
+                <div class="dash-stat good"><span>Active Members</span><strong>{{ own_active_member_count }}</strong><small>Currently active</small></div>
+                <div class="dash-stat {% if own_membership_fee_due > 0 %}attention{% endif %}"><span>Membership Fees Due</span><strong>R {{ "{:,.0f}".format(own_membership_fee_due|float) }}</strong><small>Expected less confirmed payments</small></div>
+                <div class="dash-stat"><span>Farmers</span><strong>{{ own_farmer_count }}</strong><small>People available for membership records</small></div>
+            </div>
+
+            <div class="dash-workspace-grid" style="margin-top:14px">
+                <a href="{{ url_for('add_membership') }}" class="dash-action"><span class="icon">🪪</span><div><strong>Register Member</strong><small>Create a cooperative membership record.</small></div></a>
+                <a href="{{ url_for('farmers_list') }}" class="dash-action"><span class="icon">👥</span><div><strong>View Farmers</strong><small>Review people registered under the cooperative.</small></div></a>
+                <a href="{{ url_for('reports') }}" class="dash-action"><span class="icon">📈</span><div><strong>Membership &amp; Cooperative Reports</strong><small>Review current cooperative information.</small></div></a>
+            </div>
+
+            <div class="dash-note" style="margin-top:14px">The Secretariat records membership information and expected fees. Actual money is recorded by the Treasurer and confirmed by the Chairperson.</div>
+        </div>
+    </section>
+
+    <!-- =====================================================
+         TREASURER DASHBOARD
+    ====================================================== -->
+    {% elif is_treasurer %}
+
+    <section class="dash-section">
+        <div class="dash-section-head"><div><p class="eyebrow">Finance</p><h2>Treasurer Overview</h2></div><a href="{{ url_for('reports') }}">Reports →</a></div>
+        <div class="dash-section-body">
+            <div class="dash-stat-grid">
+                <div class="dash-stat"><span>Confirmed Contributions</span><strong>R {{ "{:,.0f}".format(own_contributions_value|float) }}</strong><small>Chairperson-confirmed money</small></div>
+                <div class="dash-stat"><span>Confirmed Expenses</span><strong>R {{ "{:,.0f}".format(own_expenses_value|float) }}</strong><small>Chairperson-confirmed expenditure</small></div>
+                <div class="dash-stat"><span>Sale Payments</span><strong>R {{ "{:,.0f}".format(own_payments_value|float) }}</strong><small>Recorded receipts from sales</small></div>
+                <div class="dash-stat {% if own_pending_finance > 0 %}attention{% endif %}"><span>Awaiting Chairperson</span><strong>{{ own_pending_finance }}</strong><small>Pending contributions + expenses</small></div>
+            </div>
+
+            <div class="dash-workspace-grid" style="margin-top:14px">
+                <a href="{{ url_for('add_contribution') }}" class="dash-action"><span class="icon">🏦</span><div><strong>Record Contribution</strong><small>Submit money for Chairperson confirmation.</small></div></a>
+                <a href="{{ url_for('add_expense') }}" class="dash-action"><span class="icon">🧾</span><div><strong>Record Expense</strong><small>Submit expenditure for Chairperson confirmation.</small></div></a>
+                <a href="{{ url_for('payments_list') }}" class="dash-action"><span class="icon">💰</span><div><strong>Sale Payments</strong><small>Review money received against sales.</small></div></a>
+            </div>
+        </div>
+    </section>
+
+    <section class="dash-section">
+        <div class="dash-section-head"><div><p class="eyebrow">Confirmed Finance</p><h2>{{ current_cooperative.name }} Financial Position</h2></div></div>
+        <div class="dash-section-body">
+            <div class="dash-finance-grid">
+                <div class="dash-money"><small>Sales</small><strong>R {{ "{:,.2f}".format(own_sales_value|float) }}</strong></div>
+                <div class="dash-money"><small>Sale Payments</small><strong>R {{ "{:,.2f}".format(own_payments_value|float) }}</strong></div>
+                <div class="dash-money"><small>Contributions</small><strong>R {{ "{:,.2f}".format(own_contributions_value|float) }}</strong></div>
+                <div class="dash-money"><small>Expenses</small><strong>R {{ "{:,.2f}".format(own_expenses_value|float) }}</strong></div>
+                <div class="dash-money {% if own_outstanding_balance > 0 %}warning{% endif %}"><small>Sales Outstanding</small><strong>R {{ "{:,.2f}".format(own_outstanding_balance|float) }}</strong></div>
+                <div class="dash-money"><small>Cash Position</small><strong>R {{ "{:,.2f}".format(own_cash_position|float) }}</strong></div>
+            </div>
+        </div>
+    </section>
+
+    {% endif %}
+
+    <!-- =====================================================
+         RECENT ROLE-SPECIFIC RECORDS
+    ====================================================== -->
+    {% if is_secretariat %}
+    <section class="dash-two">
+        <div class="dash-section">
+            <div class="dash-section-head"><div><p class="eyebrow">Membership</p><h2>Recent Members</h2></div><a href="{{ url_for('memberships_list') }}">View all →</a></div>
+            <div class="dash-section-body"><div class="dash-list">
+                {% for membership in own_recent_memberships %}
+                <div class="dash-row"><div><strong>{{ membership.farmer.fullname if membership.farmer else membership.member_number }}</strong><small>{{ membership.member_number }} · Joined {{ membership.join_date.strftime('%d %b %Y') if membership.join_date else 'date not set' }}</small></div><div class="value"><span class="dash-badge {% if membership.status != 'Active' %}muted{% endif %}">{{ membership.status }}</span></div></div>
+                {% else %}<div class="dash-empty">No membership records yet.</div>{% endfor %}
+            </div></div>
+        </div>
+        <div class="dash-section">
+            <div class="dash-section-head"><div><p class="eyebrow">People</p><h2>Recent Farmers</h2></div><a href="{{ url_for('farmers_list') }}">View all →</a></div>
+            <div class="dash-section-body"><div class="dash-list">
+                {% for farmer in own_recent_farmers %}
+                <div class="dash-row"><div><strong>{{ farmer.fullname }}</strong><small>{{ farmer.phone }} · {{ farmer.location }}</small></div><div class="value"><span class="dash-badge {% if farmer.status != 'Active' %}muted{% endif %}">{{ farmer.status }}</span></div></div>
+                {% else %}<div class="dash-empty">No farmers yet.</div>{% endfor %}
+            </div></div>
+        </div>
+    </section>
+    {% elif is_treasurer %}
+    <section class="dash-two">
+        <div class="dash-section">
+            <div class="dash-section-head"><div><p class="eyebrow">Money In</p><h2>Recent Contributions</h2></div><a href="{{ url_for('contributions_list') }}">View all →</a></div>
+            <div class="dash-section-body"><div class="dash-list">
+                {% for item in own_recent_contributions %}
+                <div class="dash-row"><div><strong>{{ item.farmer.fullname if item.farmer else 'Contribution' }}</strong><small>{{ item.category or 'Contribution' }} · {{ item.contribution_date.strftime('%d %b %Y') if item.contribution_date else '' }}</small></div><div class="value">R {{ "{:,.2f}".format(item.amount|float) }}<br><span class="dash-badge {% if item.status == 'Pending Confirmation' %}pending{% elif item.status == 'Rejected' %}rejected{% endif %}">{{ item.status }}</span></div></div>
+                {% else %}<div class="dash-empty">No contributions yet.</div>{% endfor %}
+            </div></div>
+        </div>
+        <div class="dash-section">
+            <div class="dash-section-head"><div><p class="eyebrow">Money Out</p><h2>Recent Expenses</h2></div><a href="{{ url_for('expenses_list') }}">View all →</a></div>
+            <div class="dash-section-body"><div class="dash-list">
+                {% for item in own_recent_expenses %}
+                <div class="dash-row"><div><strong>{{ item.category }}</strong><small>{{ item.description }} · {{ item.expense_date.strftime('%d %b %Y') if item.expense_date else '' }}</small></div><div class="value">R {{ "{:,.2f}".format(item.amount|float) }}<br><span class="dash-badge {% if item.status == 'Pending Confirmation' %}pending{% elif item.status == 'Rejected' %}rejected{% endif %}">{{ item.status }}</span></div></div>
+                {% else %}<div class="dash-empty">No expenses yet.</div>{% endfor %}
+            </div></div>
+        </div>
+    </section>
+    {% endif %}
+
+    <!-- =====================================================
+         SECONDARY NETWORK OVERSIGHT
+    ====================================================== -->
+    {% if is_secondary %}
+    <section class="dash-section">
+        <div class="dash-section-head">
             <div>
-                <p class="monitor-section-kicker">
-                    {% if is_secondary %}
-                        PRIMARY COOPERATIVE COMPARISON
-                    {% else %}
-                        COOPERATIVE PERFORMANCE
-                    {% endif %}
-                </p>
-
+                <p class="eyebrow">Primary Cooperative Network</p>
                 <h2>
-                    {% if is_secondary %}
-                        Siyaphumla vs Vimba
-                    {% else %}
-                        Your Cooperative Performance
-                    {% endif %}
+                    {% if is_secretariat %}Membership &amp; Operations Comparison
+                    {% elif is_treasurer %}Financial Oversight Comparison
+                    {% else %}Primary Cooperative Performance{% endif %}
                 </h2>
             </div>
+            {% if can_view_cooperatives %}<a href="{{ url_for('cooperatives_list') }}">View Cooperatives →</a>{% endif %}
         </div>
 
         {% if primary_performance %}
-
-        <div class="monitor-table-wrap">
-
-            <table class="monitor-performance-table">
-
+        <div class="dash-table-wrap">
+            <table class="dash-table">
                 <thead>
                     <tr>
-                        <th>Cooperative</th>
+                        <th>Primary Cooperative</th>
+                        <th>Members</th>
                         <th>Farmers</th>
                         <th>Farms</th>
-                        <th>Crops</th>
-                        <th>Harvests</th>
-                        <th>Sales</th>
-                        <th>Payments</th>
-                        <th>Outstanding</th>
-                        <th>Expenses</th>
-                        <th>Open Tasks</th>
-                        <th>Low Stock</th>
+                        {% if is_secretariat %}
+                            <th>Crops</th><th>Membership Fees Due</th>
+                        {% elif is_treasurer %}
+                            <th>Payments</th><th>Contributions</th><th>Expenses</th><th>Cash Position</th><th>Pending Approval</th>
+                        {% else %}
+                            <th>Crops</th><th>Harvests</th><th>Sales</th><th>Payments</th><th>Contributions</th><th>Expenses</th><th>Cash Position</th><th>Pending Approval</th>
+                        {% endif %}
                     </tr>
                 </thead>
-
                 <tbody>
                     {% for item in primary_performance %}
-
                     <tr>
-                        <td>
-                            <strong>{{ item.cooperative.name }}</strong>
-                            <small>{{ item.cooperative.status }}</small>
-                        </td>
-
+                        <td><strong>{{ item.cooperative.name }}</strong><small>{{ item.cooperative.status }}</small></td>
+                        <td>{{ item.member_count }}</td>
                         <td>{{ item.farmer_count }}</td>
                         <td>{{ item.farm_count }}</td>
-                        <td>{{ item.crop_count }}</td>
-                        <td>{{ item.harvest_count }}</td>
-
-                        <td>
-                            R {{ "{:,.2f}".format(item.sales_value|float) }}
-                        </td>
-
-                        <td>
-                            R {{ "{:,.2f}".format(item.payments_value|float) }}
-                        </td>
-
-                        <td>
-                            <span class="{% if item.outstanding_balance|float > 0 %}monitor-value-warning{% endif %}">
-                                R {{ "{:,.2f}".format(item.outstanding_balance|float) }}
-                            </span>
-                        </td>
-
-                        <td>
-                            R {{ "{:,.2f}".format(item.expenses_value|float) }}
-                        </td>
-
-                        <td>
-                            <span class="monitor-number-badge">
-                                {{ item.open_tasks }}
-                            </span>
-                        </td>
-
-                        <td>
-                            <span class="monitor-number-badge {% if item.low_stock_items > 0 %}danger{% endif %}">
-                                {{ item.low_stock_items }}
-                            </span>
-                        </td>
+                        {% if is_secretariat %}
+                            <td>{{ item.crop_count }}</td>
+                            <td>R {{ "{:,.2f}".format(item.membership_fee_due|float) }}</td>
+                        {% elif is_treasurer %}
+                            <td>R {{ "{:,.2f}".format(item.payments_value|float) }}</td>
+                            <td>R {{ "{:,.2f}".format(item.contributions_value|float) }}</td>
+                            <td>R {{ "{:,.2f}".format(item.expenses_value|float) }}</td>
+                            <td>R {{ "{:,.2f}".format(item.cash_position|float) }}</td>
+                            <td><span class="dash-badge {% if item.pending_finance > 0 %}pending{% endif %}">{{ item.pending_finance }}</span></td>
+                        {% else %}
+                            <td>{{ item.crop_count }}</td>
+                            <td>{{ item.harvest_count }}</td>
+                            <td>R {{ "{:,.2f}".format(item.sales_value|float) }}</td>
+                            <td>R {{ "{:,.2f}".format(item.payments_value|float) }}</td>
+                            <td>R {{ "{:,.2f}".format(item.contributions_value|float) }}</td>
+                            <td>R {{ "{:,.2f}".format(item.expenses_value|float) }}</td>
+                            <td>R {{ "{:,.2f}".format(item.cash_position|float) }}</td>
+                            <td><span class="dash-badge {% if item.pending_finance > 0 %}pending{% endif %}">{{ item.pending_finance }}</span></td>
+                        {% endif %}
                     </tr>
-
                     {% endfor %}
                 </tbody>
-
             </table>
-
         </div>
+        {% else %}<div class="dash-empty">No active Primary Cooperative data is available.</div>{% endif %}
 
-        {% else %}
-
-        <div class="monitor-empty">
-            No primary cooperative performance data is available yet.
-        </div>
-
+        {% if is_chairperson %}
+        <div class="dash-note" style="margin:14px 20px 20px">Primary Cooperative pending finance is shown for oversight only. A Secondary Chairperson cannot approve a Primary Cooperative Treasurer's transaction.</div>
+        {% elif is_treasurer %}
+        <div class="dash-note" style="margin:14px 20px 20px">Primary Cooperative finance is view-only oversight. The Secondary Treasurer records money only for the Secondary Cooperative.</div>
         {% endif %}
     </section>
+    {% endif %}
 
-
-    <!-- ACTIVITY + OPERATIONAL SNAPSHOT -->
-    <section class="monitor-two-column">
-
-        <div class="monitor-panel">
-
-            <div class="monitor-panel-heading">
-                <div>
-                    <p class="monitor-section-kicker">LIVE OVERSIGHT</p>
-                    <h2>Recent Cooperative Activity</h2>
+    <!-- =====================================================
+         LEADERSHIP OPERATIONS / ALERTS
+    ====================================================== -->
+    {% if is_chairperson or is_vice_chairperson %}
+    <section class="dash-two">
+        <div class="dash-section">
+            <div class="dash-section-head"><div><p class="eyebrow">Operations</p><h2>Cooperative Snapshot</h2></div></div>
+            <div class="dash-section-body">
+                <div class="dash-stat-grid">
+                    <div class="dash-stat"><span>Farmers</span><strong>{{ own_farmer_count }}</strong></div>
+                    <div class="dash-stat"><span>Farms</span><strong>{{ own_farm_count }}</strong></div>
+                    <div class="dash-stat"><span>Crops</span><strong>{{ own_crop_count }}</strong></div>
+                    <div class="dash-stat"><span>Harvests</span><strong>{{ own_harvest_count }}</strong></div>
                 </div>
-
-                {% if is_secondary %}
-                <a href="{{ url_for('audit_logs') }}">
-                    Audit Logs →
-                </a>
-                {% endif %}
             </div>
-
-            {% if recent_cooperative_activity %}
-
-            <div class="monitor-activity-list">
-
-                {% for activity in recent_cooperative_activity %}
-
-                <div class="monitor-activity-item">
-
-                    <div class="monitor-activity-dot"></div>
-
-                    <div class="monitor-activity-content">
-
-                        <div class="monitor-activity-topline">
-
-                            <strong>
-                                {{ activity.action }} {{ activity.entity_type }}
-                            </strong>
-
-                            <span>
-                                {{ activity.created_at.strftime('%d %b %Y %H:%M') if activity.created_at else '' }}
-                            </span>
-
-                        </div>
-
-                        <p>
-                            {% if activity.cooperative %}
-                                {{ activity.cooperative.name }}
-                            {% else %}
-                                Cooperative activity
-                            {% endif %}
-
-                            {% if activity.user %}
-                                · by {{ activity.user.fullname }}
-                            {% endif %}
-                        </p>
-
-                        {% if activity.details %}
-                        <small>{{ activity.details }}</small>
-                        {% endif %}
-
-                    </div>
-
-                </div>
-
-                {% endfor %}
-
-            </div>
-
-            {% else %}
-
-            <div class="monitor-empty">
-                No cooperative activity has been recorded yet.
-            </div>
-
-            {% endif %}
-
         </div>
-
-
-        <div class="monitor-panel">
-
-            <div class="monitor-panel-heading">
-                <div>
-                    <p class="monitor-section-kicker">OPERATIONS</p>
-                    <h2>Operational Snapshot</h2>
-                </div>
-            </div>
-
-            <div class="monitor-snapshot-grid">
-
-                <a href="{{ url_for('customers') }}">
-                    <span>🤝</span>
-                    <div>
-                        <strong>{{ customer_count }}</strong>
-                        <small>Customers</small>
-                    </div>
-                </a>
-
-                <a href="{{ url_for('suppliers') }}">
-                    <span>🚚</span>
-                    <div>
-                        <strong>{{ supplier_count }}</strong>
-                        <small>Suppliers</small>
-                    </div>
-                </a>
-
-                <a href="{{ url_for('inventory') }}">
-                    <span>📋</span>
-                    <div>
-                        <strong>{{ inventory_count }}</strong>
-                        <small>Inventory Items</small>
-                    </div>
-                </a>
-
-                <a href="{{ url_for('equipment') }}">
-                    <span>🚜</span>
-                    <div>
-                        <strong>{{ equipment_count }}</strong>
-                        <small>Equipment</small>
-                    </div>
-                </a>
-
-                <a href="{{ url_for('tasks') }}">
-                    <span>✅</span>
-                    <div>
-                        <strong>{{ open_task_count }}</strong>
-                        <small>Open Tasks</small>
-                    </div>
-                </a>
-
-                <a href="{{ url_for('contributions') }}">
-                    <span>🏦</span>
-                    <div>
-                        <strong>R {{ "{:,.0f}".format(total_contributions_value|float) }}</strong>
-                        <small>Contributions</small>
-                    </div>
-                </a>
-
-            </div>
-
+        <div class="dash-section">
+            <div class="dash-section-head"><div><p class="eyebrow">Attention</p><h2>Current Alerts</h2></div></div>
+            <div class="dash-section-body"><div class="dash-list">
+                <div class="dash-row"><div><strong>Membership fees due</strong><small>Active members with outstanding expected fees</small></div><div class="value">{{ unpaid_membership_count }}</div></div>
+                <div class="dash-row"><div><strong>Overdue tasks</strong><small>Visible tasks past their due date</small></div><div class="value">{{ overdue_task_count }}</div></div>
+                <div class="dash-row"><div><strong>Low stock items</strong><small>Inventory at or below reorder level</small></div><div class="value">{{ low_stock_count }}</div></div>
+                <div class="dash-row"><div><strong>Equipment service due</strong><small>Visible equipment due for service</small></div><div class="value">{{ service_due_count }}</div></div>
+            </div></div>
         </div>
+    </section>
+    {% endif %}
 
+    <!-- =====================================================
+         RECENT COOPERATIVE ACTIVITY
+    ====================================================== -->
+    <section class="dash-section">
+        <div class="dash-section-head"><div><p class="eyebrow">Activity</p><h2>{% if is_secondary %}Recent Network Activity{% else %}Recent Cooperative Activity{% endif %}</h2></div></div>
+        <div class="dash-section-body"><div class="dash-list">
+            {% for activity in recent_cooperative_activity %}
+            <div class="dash-row"><div><strong>{{ activity.action }} {{ activity.entity_type }}</strong><small>{{ activity.cooperative.name if activity.cooperative else 'Cooperative activity' }}{% if activity.user %} · {{ activity.user.fullname }}{% endif %}{% if activity.details %} · {{ activity.details }}{% endif %}</small></div><div class="value">{{ activity.created_at.strftime('%d %b %H:%M') if activity.created_at else '' }}</div></div>
+            {% else %}<div class="dash-empty">No cooperative activity recorded yet.</div>{% endfor %}
+        </div></div>
     </section>
 
-
-    <!-- RECENT RECORDS -->
-    <section class="monitor-three-column">
-
-        <div class="monitor-panel compact">
-
-            <div class="monitor-panel-heading">
-                <h2>Recent Farmers</h2>
-                <a href="{{ url_for('farmers') }}">View all</a>
-            </div>
-
-            {% if recent_farmers %}
-
-                {% for farmer in recent_farmers %}
-
-                <div class="monitor-record-row">
-
-                    <div>
-                        <strong>{{ farmer.fullname }}</strong>
-                        <small>
-                            {{ farmer.cooperative.name if farmer.cooperative else 'Unassigned' }}
-                        </small>
-                    </div>
-
-                    <span>{{ farmer.status }}</span>
-
-                </div>
-
-                {% endfor %}
-
-            {% else %}
-
-                <div class="monitor-empty small">
-                    No farmers yet.
-                </div>
-
-            {% endif %}
-
-        </div>
-
-
-        <div class="monitor-panel compact">
-
-            <div class="monitor-panel-heading">
-                <h2>Recent Sales</h2>
-                <a href="{{ url_for('sales') }}">View all</a>
-            </div>
-
-            {% if recent_sales %}
-
-                {% for sale in recent_sales %}
-
-                <div class="monitor-record-row">
-
-                    <div>
-                        <strong>{{ sale.buyer_name }}</strong>
-                        <small>
-                            {{ sale.cooperative.name if sale.cooperative else 'Unassigned' }}
-                        </small>
-                    </div>
-
-                    <span>
-                        R {{ "{:,.2f}".format(sale.total_amount|float) }}
-                    </span>
-
-                </div>
-
-                {% endfor %}
-
-            {% else %}
-
-                <div class="monitor-empty small">
-                    No sales yet.
-                </div>
-
-            {% endif %}
-
-        </div>
-
-
-        <div class="monitor-panel compact">
-
-            <div class="monitor-panel-heading">
-                <h2>Recent Payments</h2>
-                <a href="{{ url_for('payments') }}">View all</a>
-            </div>
-
-            {% if recent_payments %}
-
-                {% for payment in recent_payments %}
-
-                <div class="monitor-record-row">
-
-                    <div>
-                        <strong>
-                            {{ payment.sale.buyer_name if payment.sale else 'Payment' }}
-                        </strong>
-
-                        <small>
-                            {{ payment.cooperative.name if payment.cooperative else 'Unassigned' }}
-                        </small>
-                    </div>
-
-                    <span>
-                        R {{ "{:,.2f}".format(payment.amount|float) }}
-                    </span>
-
-                </div>
-
-                {% endfor %}
-
-            {% else %}
-
-                <div class="monitor-empty small">
-                    No payments yet.
-                </div>
-
-            {% endif %}
-
-        </div>
-
-    </section>
-
+    {% endif %}
 </div>
-
 {% endblock %}

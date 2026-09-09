@@ -1,525 +1,268 @@
-```html
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+{% extends "base.html" %}
 
-    <title>
-        {% if farmer %}
-            Edit Farmer
-        {% else %}
-            Add Farmer
-        {% endif %}
-        | Malenge Farmers CRM
-    </title>
+{% block title %}
+    {% if farmer %}Edit Farmer{% else %}Add Farmer{% endif %} | Malenge Farmers CRM
+{% endblock %}
 
-    <link rel="stylesheet"
-          href="{{ url_for('static', filename='css/dashboard.css') }}">
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>{% if farmer %}Edit Farmer{% else %}Add Farmer{% endif %}</h1>
+        <p>
+            {% if farmer %}
+                Update the farmer's personal and contact information.
+            {% else %}
+                Register a farmer in the Malenge Farmers CRM.
+            {% endif %}
+        </p>
+    </div>
+    <a href="{{ url_for('farmers_list') }}" class="back-button">← Back to Farmers</a>
+</div>
 
-    <style>
-        .page-content {
-            padding: 30px;
-            max-width: 1000px;
-            margin: auto;
+<div class="form-card">
+    <form method="POST" id="farmer-form" novalidate>
+        <div class="form-grid">
+            <!-- Full Name -->
+            <div class="form-group full-width">
+                <label for="fullname">Full Name *</label>
+                <input
+                    type="text"
+                    id="fullname"
+                    name="fullname"
+                    value="{{ farmer.fullname if farmer else '' }}"
+                    placeholder="Enter farmer's full name"
+                    required
+                    autofocus
+                >
+            </div>
+
+            <!-- Phone Number -->
+            <div class="form-group">
+                <label for="phone">Phone Number *</label>
+                <input
+                    type="tel"
+                    id="phone"
+                    name="phone"
+                    value="{{ farmer.phone if farmer else '' }}"
+                    placeholder="Example: 071 234 5678"
+                    required
+                >
+            </div>
+
+            <!-- Email Address -->
+            <div class="form-group">
+                <label for="email">Email Address</label>
+                <input
+                    type="email"
+                    id="email"
+                    name="email"
+                    value="{{ farmer.email if farmer and farmer.email else '' }}"
+                    placeholder="farmer@example.com"
+                >
+            </div>
+
+            <!-- Location -->
+            <div class="form-group full-width">
+                <label for="location">Area / Location *</label>
+                <input
+                    type="text"
+                    id="location"
+                    name="location"
+                    value="{{ farmer.location if farmer else '' }}"
+                    placeholder="Enter village, area or location"
+                    required
+                >
+            </div>
+
+            <!-- Status -->
+            <div class="form-group">
+                <label for="status">Farmer Status</label>
+                <select id="status" name="status">
+                    <option value="Active" {% if not farmer or farmer.status == "Active" %}selected{% endif %}>
+                        Active
+                    </option>
+                    <option value="Inactive" {% if farmer and farmer.status == "Inactive" %}selected{% endif %}>
+                        Inactive
+                    </option>
+                </select>
+            </div>
+
+            <!-- Help Note -->
+            <div class="form-group full-width">
+                <div class="info-note">
+                    <strong>Note:</strong>
+                    Farm size is recorded under <strong>Farms</strong>, and planted crop information is recorded under <strong>Crops</strong>. This keeps one source of truth for each record.
+                </div>
+            </div>
+        </div>
+
+        <!-- Form Actions -->
+        <div class="form-actions">
+            <a href="{{ url_for('farmers_list') }}" class="cancel-button">Cancel</a>
+            <button type="submit" class="save-button">
+                {% if farmer %}Update Farmer{% else %}Save Farmer{% endif %}
+            </button>
+        </div>
+    </form>
+</div>
+
+<style>
+    .info-note {
+        padding: 14px 16px;
+        border: 1px solid #dfe8e2;
+        border-radius: 10px;
+        background: #f7faf8;
+        color: #53665b;
+        font-size: 13px;
+        line-height: 1.6;
+    }
+
+    .info-note strong {
+        color: #2e7d4f;
+    }
+
+    .form-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+    }
+
+    .full-width {
+        grid-column: 1 / -1;
+    }
+
+    .form-group {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .form-group label {
+        font-weight: 600;
+        font-size: 14px;
+        color: #173b2b;
+    }
+
+    .form-group input,
+    .form-group select {
+        padding: 10px 14px;
+        border: 1px solid #d7e3db;
+        border-radius: 8px;
+        font-size: 14px;
+        transition: border-color 0.2s;
+    }
+
+    .form-group input:focus,
+    .form-group select:focus {
+        outline: none;
+        border-color: #2e7d4f;
+        box-shadow: 0 0 0 3px rgba(46, 125, 79, 0.1);
+    }
+
+    .form-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 12px;
+        margin-top: 30px;
+        padding-top: 20px;
+        border-top: 1px solid #eef3f0;
+    }
+
+    .save-button,
+    .cancel-button {
+        padding: 10px 24px;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 600;
+        text-decoration: none;
+        cursor: pointer;
+        transition: background 0.2s;
+    }
+
+    .save-button {
+        background: #2e7d4f;
+        color: #fff;
+        border: none;
+    }
+
+    .save-button:hover {
+        background: #23693f;
+    }
+
+    .cancel-button {
+        background: #f3f7f4;
+        color: #315441;
+        border: 1px solid #d7e3db;
+    }
+
+    .cancel-button:hover {
+        background: #e8eee9;
+    }
+
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 30px;
+    }
+
+    .page-header h1 {
+        margin: 0 0 6px;
+        font-size: 28px;
+        color: #173b2b;
+    }
+
+    .page-header p {
+        margin: 0;
+        color: #5f6f65;
+    }
+
+    .back-button {
+        padding: 8px 16px;
+        background: #f3f7f4;
+        color: #315441;
+        border: 1px solid #d7e3db;
+        border-radius: 8px;
+        text-decoration: none;
+        font-size: 14px;
+        transition: background 0.2s;
+    }
+
+    .back-button:hover {
+        background: #e8eee9;
+    }
+
+    .form-card {
+        max-width: 800px;
+        padding: 30px;
+        background: #fff;
+        border-radius: 14px;
+        box-shadow: 0 4px 20px rgba(18, 63, 41, 0.06);
+    }
+
+    @media (max-width: 640px) {
+        .form-grid {
+            grid-template-columns: 1fr;
         }
 
         .page-header {
-            margin-bottom: 25px;
-        }
-
-        .page-header h1 {
-            margin: 0;
-            font-size: 28px;
-        }
-
-        .page-header p {
-            color: #777;
-            margin-top: 8px;
-        }
-
-        .back-link {
-            display: inline-block;
-            margin-bottom: 20px;
-            color: #2e7d32;
-            text-decoration: none;
-            font-weight: 600;
+            flex-direction: column;
+            gap: 12px;
         }
 
         .form-card {
-            background: white;
-            padding: 30px;
-            border-radius: 14px;
-            box-shadow: 0 3px 15px rgba(0, 0, 0, 0.06);
-        }
-
-        .form-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 22px;
-        }
-
-        .form-group {
-            display: flex;
-            flex-direction: column;
-        }
-
-        .form-group.full-width {
-            grid-column: 1 / -1;
-        }
-
-        .form-group label {
-            margin-bottom: 8px;
-            font-weight: 600;
-            color: #333;
-        }
-
-        .required {
-            color: #c62828;
-        }
-
-        .form-group input,
-        .form-group select {
-            padding: 13px 14px;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            font-size: 15px;
-            outline: none;
-            background: white;
-        }
-
-        .form-group input:focus,
-        .form-group select:focus {
-            border-color: #2e7d32;
-            box-shadow: 0 0 0 2px rgba(46, 125, 50, 0.1);
-        }
-
-        .help-text {
-            margin-top: 6px;
-            font-size: 12px;
-            color: #888;
+            padding: 20px;
         }
 
         .form-actions {
-            display: flex;
-            justify-content: flex-end;
-            gap: 12px;
-            margin-top: 30px;
-            padding-top: 20px;
-            border-top: 1px solid #eee;
+            flex-direction: column-reverse;
         }
 
-        .cancel-btn,
-        .save-btn {
-            padding: 12px 22px;
-            border-radius: 8px;
-            text-decoration: none;
-            font-weight: 600;
-            cursor: pointer;
-            border: none;
-            font-size: 14px;
+        .form-actions a,
+        .form-actions button {
+            width: 100%;
+            text-align: center;
         }
-
-        .cancel-btn {
-            background: #f1f1f1;
-            color: #555;
-        }
-
-        .save-btn {
-            background: #2e7d32;
-            color: white;
-        }
-
-        .save-btn:hover {
-            background: #256628;
-        }
-
-        .cancel-btn:hover {
-            background: #e5e5e5;
-        }
-
-        .flash-messages {
-            margin-bottom: 20px;
-        }
-
-        .flash {
-            padding: 12px 16px;
-            border-radius: 8px;
-            margin-bottom: 10px;
-        }
-
-        .flash-success {
-            background: #e8f5e9;
-            color: #2e7d32;
-        }
-
-        .flash-error {
-            background: #ffebee;
-            color: #c62828;
-        }
-
-        @media (max-width: 700px) {
-
-            .page-content {
-                padding: 20px 15px;
-            }
-
-            .form-card {
-                padding: 20px;
-            }
-
-            .form-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .form-group.full-width {
-                grid-column: auto;
-            }
-
-            .form-actions {
-                flex-direction: column;
-            }
-
-            .cancel-btn,
-            .save-btn {
-                width: 100%;
-                text-align: center;
-            }
-        }
-    </style>
-</head>
-
-<body>
-
-<div class="dashboard-container">
-
-    <!-- SIDEBAR -->
-    <aside class="sidebar">
-
-        <div class="sidebar-header">
-            <h2>Malenge Farmers</h2>
-            <p>CRM System</p>
-        </div>
-
-        <nav class="sidebar-nav">
-
-            <a href="{{ url_for('dashboard') }}">
-                Dashboard
-            </a>
-
-            <a href="{{ url_for('farmers') }}" class="active">
-                Farmers
-            </a>
-
-            <a href="#">
-                Farms
-            </a>
-
-            <a href="#">
-                Crops
-            </a>
-
-            <a href="#">
-                Harvests
-            </a>
-
-            <a href="#">
-                Sales
-            </a>
-
-            <a href="#">
-                Payments
-            </a>
-
-            <a href="#">
-                Reports
-            </a>
-
-            <a href="#">
-                Settings
-            </a>
-
-            <a href="{{ url_for('logout') }}">
-                Logout
-            </a>
-
-        </nav>
-
-    </aside>
-
-
-    <!-- MAIN CONTENT -->
-    <main class="main-content">
-
-        <!-- TOP BAR -->
-        <header class="topbar">
-
-            <div>
-                <h3>
-                    {% if farmer %}
-                        Edit Farmer
-                    {% else %}
-                        Add Farmer
-                    {% endif %}
-                </h3>
-            </div>
-
-            <div class="topbar-user">
-                <span>
-                    {{ session.get('fullname', 'User') }}
-                </span>
-            </div>
-
-        </header>
-
-
-        <!-- PAGE CONTENT -->
-        <section class="page-content">
-
-            <a href="{{ url_for('farmers') }}" class="back-link">
-                ← Back to Farmers
-            </a>
-
-
-            <div class="page-header">
-
-                {% if farmer %}
-
-                    <h1>Edit Farmer</h1>
-
-                    <p>
-                        Update the information for {{ farmer.fullname }}.
-                    </p>
-
-                {% else %}
-
-                    <h1>Add New Farmer</h1>
-
-                    <p>
-                        Register a new farmer in the Malenge Farmers CRM.
-                    </p>
-
-                {% endif %}
-
-            </div>
-
-
-            <!-- FLASH MESSAGES -->
-            {% with messages = get_flashed_messages(with_categories=true) %}
-
-                {% if messages %}
-
-                    <div class="flash-messages">
-
-                        {% for category, message in messages %}
-
-                            <div class="flash flash-{{ category }}">
-                                {{ message }}
-                            </div>
-
-                        {% endfor %}
-
-                    </div>
-
-                {% endif %}
-
-            {% endwith %}
-
-
-            <!-- FORM -->
-            <div class="form-card">
-
-                <form
-                    method="POST"
-                    action="{% if farmer %}{{ url_for('edit_farmer', farmer_id=farmer.id) }}{% else %}{{ url_for('add_farmer') }}{% endif %}"
-                >
-
-                    <div class="form-grid">
-
-
-                        <!-- FULL NAME -->
-                        <div class="form-group full-width">
-
-                            <label for="fullname">
-                                Full Name <span class="required">*</span>
-                            </label>
-
-                            <input
-                                type="text"
-                                id="fullname"
-                                name="fullname"
-                                placeholder="Enter farmer's full name"
-                                value="{{ farmer.fullname if farmer else '' }}"
-                                required
-                            >
-
-                        </div>
-
-
-                        <!-- PHONE -->
-                        <div class="form-group">
-
-                            <label for="phone">
-                                Phone Number <span class="required">*</span>
-                            </label>
-
-                            <input
-                                type="tel"
-                                id="phone"
-                                name="phone"
-                                placeholder="e.g. 071 234 5678"
-                                value="{{ farmer.phone if farmer else '' }}"
-                                required
-                            >
-
-                        </div>
-
-
-                        <!-- EMAIL -->
-                        <div class="form-group">
-
-                            <label for="email">
-                                Email Address
-                            </label>
-
-                            <input
-                                type="email"
-                                id="email"
-                                name="email"
-                                placeholder="farmer@example.com"
-                                value="{{ farmer.email if farmer and farmer.email else '' }}"
-                            >
-
-                        </div>
-
-
-                        <!-- LOCATION -->
-                        <div class="form-group full-width">
-
-                            <label for="location">
-                                Farm Location <span class="required">*</span>
-                            </label>
-
-                            <input
-                                type="text"
-                                id="location"
-                                name="location"
-                                placeholder="Enter village, area or farm location"
-                                value="{{ farmer.location if farmer else '' }}"
-                                required
-                            >
-
-                        </div>
-
-
-                        <!-- FARM SIZE -->
-                        <div class="form-group">
-
-                            <label for="farm_size">
-                                Farm Size (hectares)
-                            </label>
-
-                            <input
-                                type="number"
-                                id="farm_size"
-                                name="farm_size"
-                                placeholder="e.g. 2.5"
-                                step="0.01"
-                                min="0"
-                                value="{{ farmer.farm_size if farmer and farmer.farm_size is not none else '' }}"
-                            >
-
-                            <span class="help-text">
-                                Enter the approximate farm size in hectares.
-                            </span>
-
-                        </div>
-
-
-                        <!-- PRIMARY CROP -->
-                        <div class="form-group">
-
-                            <label for="primary_crop">
-                                Primary Crop
-                            </label>
-
-                            <input
-                                type="text"
-                                id="primary_crop"
-                                name="primary_crop"
-                                placeholder="e.g. Maize, Tomatoes, Potatoes"
-                                value="{{ farmer.primary_crop if farmer and farmer.primary_crop else '' }}"
-                            >
-
-                        </div>
-
-
-                        <!-- STATUS -->
-                        <div class="form-group">
-
-                            <label for="status">
-                                Farmer Status
-                            </label>
-
-                            <select id="status" name="status">
-
-                                <option value="Active"
-                                    {% if farmer and farmer.status == "Active" %}
-                                        selected
-                                    {% elif not farmer %}
-                                        selected
-                                    {% endif %}>
-                                    Active
-                                </option>
-
-                                <option value="Inactive"
-                                    {% if farmer and farmer.status == "Inactive" %}
-                                        selected
-                                    {% endif %}>
-                                    Inactive
-                                </option>
-
-                            </select>
-
-                        </div>
-
-
-                    </div>
-
-
-                    <!-- FORM ACTIONS -->
-                    <div class="form-actions">
-
-                        <a
-                            href="{{ url_for('farmers') }}"
-                            class="cancel-btn">
-                            Cancel
-                        </a>
-
-                        <button
-                            type="submit"
-                            class="save-btn">
-
-                            {% if farmer %}
-                                Update Farmer
-                            {% else %}
-                                Save Farmer
-                            {% endif %}
-
-                        </button>
-
-                    </div>
-
-                </form>
-
-            </div>
-
-        </section>
-
-    </main>
-
-</div>
-
-</body>
-</html>
-```
+    }
+</style>
+{% endblock %}

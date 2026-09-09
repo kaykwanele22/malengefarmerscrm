@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+
+{% block title %}{% if user %}Edit CRM User{% else %}Add CRM User{% endif %} | Malenge Farmers CRM{% endblock %}
+
+{% block extra_css %}
+<style>
+.admin-form-page{max-width:980px}
+.admin-form-head{margin-bottom:24px;display:flex;justify-content:space-between;gap:20px;align-items:flex-start}
+.admin-form-head h1{margin:4px 0 8px;color:#123f29;font-size:32px}
+.admin-form-head p{margin:0;color:#68766d;font-size:14px}
+.admin-eyebrow{color:#26834f;font-size:11px;font-weight:800;letter-spacing:1.4px}
+.back-button{min-height:42px;padding:0 15px;display:inline-flex;align-items:center;justify-content:center;border:1px solid #d7e3db;border-radius:9px;background:#fff;color:#315441;text-decoration:none;font-size:12px;font-weight:800}
+.admin-form-card{padding:26px;background:#fff;border:1px solid #e1e9e3;border-radius:16px;box-shadow:0 8px 24px rgba(18,63,41,0.04)}
+.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+.form-field{display:flex;flex-direction:column;gap:7px}
+.form-field.full{grid-column:1/-1}
+.form-field label{color:#42564a;font-size:11px;font-weight:800}
+.form-field input,.form-field select{width:100%;height:46px;padding:0 12px;border:1px solid #cad6ce;border-radius:9px;background:#fff;color:#27382e;font:inherit;font-size:13px;box-sizing:border-box}
+.form-help{color:#849087;font-size:10px;line-height:1.5}
+.form-note{grid-column:1/-1;padding:14px 16px;border:1px solid #dbe8df;border-radius:10px;background:#f4f9f5;color:#496053;font-size:12px;line-height:1.6}
+.form-actions{grid-column:1/-1;padding-top:18px;display:flex;justify-content:flex-end;gap:10px;border-top:1px solid #edf2ee}
+.cancel-button,.save-button{min-height:43px;padding:0 17px;display:inline-flex;align-items:center;justify-content:center;border-radius:9px;text-decoration:none;font-size:12px;font-weight:800}
+.cancel-button{border:1px solid #d7e3db;background:#fff;color:#315441}
+.save-button{border:0;background:#23794a;color:#fff;cursor:pointer}
+@media(max-width:700px){.form-grid{grid-template-columns:1fr}.admin-form-head{flex-direction:column}}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="admin-form-page">
+    <div class="admin-form-head">
+        <div>
+            <span class="admin-eyebrow">SYSTEM ADMINISTRATION</span>
+            <h1>{% if user %}Edit CRM User{% else %}Add CRM User{% endif %}</h1>
+            <p>{% if user %}Update this login-holder's identity and contact information.{% else %}Create the login, temporary password and initial access assignment in one step.{% endif %}</p>
+        </div>
+        <a href="{{ url_for('users_list') }}" class="back-button">← Users & Access</a>
+    </div>
+
+    <form method="POST" class="admin-form-card">
+        <div class="form-grid">
+            <div class="form-field">
+                <label for="fullname">Full Name *</label>
+                <input id="fullname" name="fullname" required maxlength="100" value="{{ user.fullname if user else '' }}">
+            </div>
+
+            <div class="form-field">
+                <label for="phone">Phone *</label>
+                <input id="phone" name="phone" required maxlength="30" value="{{ user.phone if user else '' }}">
+            </div>
+
+            <div class="form-field">
+                <label for="email">Email *</label>
+                <input id="email" name="email" type="email" required maxlength="120" value="{{ user.email if user else '' }}">
+            </div>
+
+            <div class="form-field">
+                <label for="farm_location">Area / Location *</label>
+                <input id="farm_location" name="farm_location" required maxlength="150" value="{{ user.farm_location if user else '' }}">
+            </div>
+
+            {% if not user %}
+            <div class="form-field">
+                <label for="password">Temporary Password *</label>
+                <input id="password" name="password" type="password" required minlength="8">
+                <span class="form-help">At least 8 characters.</span>
+            </div>
+
+            <div class="form-field">
+                <label for="confirm_password">Confirm Password *</label>
+                <input id="confirm_password" name="confirm_password" type="password" required minlength="8">
+            </div>
+
+            <div class="form-field">
+                <label for="role">Role *</label>
+                <select id="role" name="role" class="role-select" required>
+                    <option value="" selected disabled>Select role...</option>
+                    {% for role in valid_roles %}
+                    <option value="{{ role }}">{{ role }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-field">
+                <label for="cooperative_id">Cooperative</label>
+                <select id="cooperative_id" name="cooperative_id" class="cooperative-select">
+                    <option value="">Select cooperative...</option>
+                    {% for cooperative in cooperatives %}
+                    <option value="{{ cooperative.id }}" data-cooperative-type="{{ cooperative.cooperative_type }}">
+                        {{ cooperative.name }} — {{ cooperative.cooperative_type }}
+                    </option>
+                    {% endfor %}
+                </select>
+                <span class="form-help">Admin is system-level and does not belong to a cooperative.</span>
+            </div>
+
+            <div class="form-field">
+                <label for="status">Access Status *</label>
+                <select id="status" name="status" required>
+                    <option value="Active" selected>Active</option>
+                    <option value="Inactive">Inactive</option>
+                </select>
+            </div>
+
+            <div class="form-note">
+                This page creates a <strong>CRM login</strong>. It does not register a cooperative member.
+                Cooperative membership remains the Secretary's responsibility.
+            </div>
+            {% else %}
+            <div class="form-note">
+                Role, cooperative assignment and Active/Inactive access are managed from the
+                <strong>Users & Access</strong> page. Password changes use <strong>Reset Password</strong>.
+            </div>
+            {% endif %}
+
+            <div class="form-actions">
+                <a href="{{ url_for('users_list') }}" class="cancel-button">Cancel</a>
+                <button type="submit" class="save-button">{% if user %}Save User Details{% else %}Create CRM User{% endif %}</button>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% if not user %}
+{% block extra_js %}
+<script>
+(function(){
+    const roleSelect = document.querySelector(".role-select");
+    const cooperativeSelect = document.querySelector(".cooperative-select");
+    if (!roleSelect || !cooperativeSelect) return;
+
+    function updateCooperatives(){
+        const role = roleSelect.value;
+        let requiredType = null;
+        if (role.startsWith("Secondary")) requiredType = "Secondary";
+        if (role.startsWith("Primary")) requiredType = "Primary";
+
+        if (role === "Admin"){
+            cooperativeSelect.value = "";
+            cooperativeSelect.disabled = true;
+            return;
+        }
+
+        cooperativeSelect.disabled = false;
+        Array.from(cooperativeSelect.options).forEach(function(option){
+            if (!option.value){
+                option.hidden = false;
+                option.disabled = false;
+                return;
+            }
+            const matches = !requiredType || option.dataset.cooperativeType === requiredType;
+            option.hidden = !matches;
+            option.disabled = !matches;
+            if (!matches && option.selected) cooperativeSelect.value = "";
+        });
+    }
+
+    roleSelect.addEventListener("change", updateCooperatives);
+    updateCooperatives();
+})();
+</script>
+{% endblock %}
+{% endif %}

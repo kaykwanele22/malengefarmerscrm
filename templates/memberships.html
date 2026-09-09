@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+
+{% block title %}Members | Malenge Farmers CRM{% endblock %}
+
+{% block extra_css %}
+<style>
+    .module-page{display:flex;flex-direction:column;gap:20px}
+    .page-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap}
+    .page-head h1{margin:0;color:#173b2b;font-size:30px}
+    .page-head p{margin:7px 0 0;color:#6b7280;font-size:13px}
+    .primary-action,.secondary-action,.edit-action{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:0 15px;border-radius:9px;text-decoration:none;font-size:12px;font-weight:700}
+    .primary-action{background:#2e7d4f;color:#fff}
+    .secondary-action,.edit-action{background:#f3f7f4;border:1px solid #dbe6df;color:#315441}
+    .search-card,.table-card,.info-card{background:#fff;border:1px solid #e2eae4;border-radius:14px}
+    .info-card{padding:14px 16px;background:#f7faf8;color:#53665b;font-size:12px;line-height:1.55}
+    .search-card{padding:15px}
+    .search-form{display:flex;gap:10px}
+    .search-form input{flex:1;min-width:0;height:42px;padding:0 13px;border:1px solid #d6e1d9;border-radius:9px;font:inherit}
+    .search-form button{padding:0 17px;border:0;border-radius:9px;background:#2e7d4f;color:#fff;font-weight:700;cursor:pointer}
+    .table-wrap{overflow-x:auto}
+    table{width:100%;border-collapse:collapse;min-width:920px}
+    th{padding:13px 15px;background:#f6f9f7;border-bottom:1px solid #e5ece7;color:#718078;font-size:10px;text-align:left;text-transform:uppercase}
+    td{padding:15px;border-bottom:1px solid #edf2ee;color:#35483c;font-size:12px;vertical-align:top}
+    tr:last-child td{border-bottom:0}
+    .name{display:block;color:#1d422d;font-size:13px}
+    .meta{display:block;margin-top:4px;color:#89938d;font-size:10px}
+    .badge{display:inline-flex;padding:5px 9px;border-radius:999px;background:#eef6f0;color:#2e7d4f;font-size:10px;font-weight:800}
+    .fee-good{color:#2e7d4f;font-weight:700}
+    .fee-due{color:#a45a23;font-weight:700}
+    .actions{display:flex;gap:7px;align-items:center}
+    .actions form{margin:0}
+    .delete-btn{min-height:40px;padding:0 12px;border:1px solid #efd3d3;border-radius:9px;background:#fff7f7;color:#a43b3b;font-size:11px;font-weight:700;cursor:pointer}
+    .empty{padding:42px 20px;text-align:center;color:#7d8981}
+    @media(max-width:700px){.search-form{flex-direction:column}.page-head{flex-direction:column}}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="module-page">
+    <div class="page-head">
+        <div>
+            <h1>Members</h1>
+            <p>Cooperative membership register and membership fee status.</p>
+        </div>
+
+        {% if can_manage_memberships %}
+        <a href="{{ url_for('add_membership') }}" class="primary-action">+ Register Member</a>
+        {% endif %}
+    </div>
+
+    <div class="info-card">
+        Membership administration belongs to the Secretary / Vice Secretary.
+        Confirmed membership-fee money is recorded by the Treasurer and confirmed by the Chairperson.
+    </div>
+
+    <section class="search-card">
+        <form method="GET" action="{{ url_for('memberships_list') }}" class="search-form">
+            <input type="search" name="search" value="{{ search or '' }}" placeholder="Search member number, name, type or status">
+            <button type="submit">Search</button>
+            {% if search %}
+            <a href="{{ url_for('memberships_list') }}" class="secondary-action">Clear</a>
+            {% endif %}
+        </form>
+    </section>
+
+    <section class="table-card">
+        {% if memberships %}
+        <div class="table-wrap">
+            <table>
+                <thead>
+                <tr>
+                    <th>Member No.</th>
+                    <th>Member</th>
+                    <th>Cooperative</th>
+                    <th>Join Date</th>
+                    <th>Membership Fee</th>
+                    <th>Status</th>
+                    {% if can_manage_memberships %}<th>Actions</th>{% endif %}
+                </tr>
+                </thead>
+                <tbody>
+                {% for membership in memberships %}
+                {% set expected = membership.fee_amount|default(0)|float %}
+                {% set paid = membership.fee_paid|default(0)|float %}
+                {% set owing = expected - paid if expected > paid else 0 %}
+                <tr>
+                    <td>
+                        <strong>{{ membership.member_number }}</strong>
+                        <span class="meta">{{ membership.membership_type or 'Primary' }}</span>
+                    </td>
+                    <td>
+                        <strong class="name">{{ membership.farmer.fullname }}</strong>
+                        <span class="meta">{{ membership.farmer.phone }}</span>
+                    </td>
+                    <td>{{ membership.cooperative.name if membership.cooperative else 'Unassigned' }}</td>
+                    <td>{{ membership.join_date.strftime('%d %b %Y') if membership.join_date else '—' }}</td>
+                    <td>
+                        <span class="meta">Expected: R {{ "{:,.2f}".format(expected) }}</span>
+                        <span class="fee-good">Paid: R {{ "{:,.2f}".format(paid) }}</span>
+                        {% if owing > 0 %}
+                        <span class="meta fee-due">Owing: R {{ "{:,.2f}".format(owing) }}</span>
+                        {% else %}
+                        <span class="meta fee-good">Fully paid</span>
+                        {% endif %}
+                    </td>
+                    <td><span class="badge">{{ membership.status or 'Active' }}</span></td>
+
+                    {% if can_manage_memberships %}
+                    <td>
+                        <div class="actions">
+                            <a href="{{ url_for('edit_membership', membership_id=membership.id) }}" class="edit-action">Edit</a>
+                            <form method="POST" action="{{ url_for('delete_membership', membership_id=membership.id) }}" onsubmit="return confirm('Delete this membership record?');">
+                                <button type="submit" class="delete-btn">Delete</button>
+                            </form>
+                        </div>
+                    </td>
+                    {% endif %}
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty">No membership records found.</div>
+        {% endif %}
+    </section>
+</div>
+{% endblock %}

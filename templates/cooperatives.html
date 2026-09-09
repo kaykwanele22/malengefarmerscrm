@@ -8,9 +8,11 @@
     <div>
         <span class="eyebrow">COOPERATIVE MANAGEMENT</span>
         <h1>Cooperatives</h1>
-        <p>Manage the Malenge cooperative structure and hierarchy.</p>
+        <p>{% if can_edit_cooperatives %}Manage the Malenge cooperative structure and hierarchy.{% else %}View the Malenge cooperative structure and hierarchy.{% endif %}</p>
     </div>
+    {% if can_edit_cooperatives %}
     <a href="{{ url_for('add_cooperative') }}" class="primary-btn">+ Add Cooperative</a>
+    {% endif %}
 </div>
 
 <!-- COUNTS -->
@@ -29,11 +31,11 @@
 
 <!-- SEARCH -->
 <div class="content-card">
-    <form method="GET" action="{{ url_for('cooperatives') }}" class="search-bar">
+    <form method="GET" action="{{ url_for('cooperatives_list') }}" class="search-bar">
         <input type="text" name="search" value="{{ search or '' }}" placeholder="Search cooperative name, code, location or registration number">
         <button type="submit" class="primary-btn">Search</button>
         {% if search %}
-        <a href="{{ url_for('cooperatives') }}" class="secondary-btn">Clear</a>
+        <a href="{{ url_for('cooperatives_list') }}" class="secondary-btn">Clear</a>
         {% endif %}
     </form>
 </div>
@@ -56,9 +58,11 @@
             {% if cooperative.location %}<p><strong>Location:</strong> {{ cooperative.location }}</p>{% endif %}
             <p><strong>Linked Primary Cooperatives:</strong> {{ cooperative.primary_cooperatives|length }}</p>
         </div>
+        {% if can_edit_cooperatives %}
         <div class="record-actions">
             <a href="{{ url_for('edit_cooperative', cooperative_id=cooperative.id) }}" class="secondary-btn">Edit Cooperative</a>
         </div>
+        {% endif %}
     </div>
 
     <!-- PRIMARY COOPERATIVES -->
@@ -79,9 +83,11 @@
                 {% if primary.location %}<p><strong>Location:</strong> {{ primary.location }}</p>{% endif %}
                 <p><strong>Secondary:</strong> {{ cooperative.name }}</p>
             </div>
+            {% if can_edit_cooperatives %}
             <div class="record-actions">
                 <a href="{{ url_for('edit_cooperative', cooperative_id=primary.id) }}" class="secondary-btn">Edit Cooperative</a>
             </div>
+            {% endif %}
         </div>
         {% endfor %}
     </div>
@@ -90,7 +96,9 @@
     <div class="content-card empty-state">
         <h3>No Primary Cooperatives Linked</h3>
         <p>Add the two Primary Cooperatives and connect them to this Secondary Cooperative.</p>
+        {% if can_edit_cooperatives %}
         <a href="{{ url_for('add_cooperative') }}" class="primary-btn">+ Add Primary Cooperative</a>
+        {% endif %}
     </div>
     {% endif %}
     {% endfor %}
@@ -100,7 +108,9 @@
     <div class="content-card empty-state">
         <h3>No Secondary Cooperative Yet</h3>
         <p>Create the Secondary Cooperative before creating the two Primary Cooperatives.</p>
+        {% if can_edit_cooperatives %}
         <a href="{{ url_for('add_cooperative') }}" class="primary-btn">+ Create Secondary Cooperative</a>
+        {% endif %}
     </div>
     {% endif %}
 

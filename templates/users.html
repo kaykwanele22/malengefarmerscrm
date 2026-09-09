@@ -1,0 +1,303 @@
+{% extends "base.html" %}
+
+{% block title %}Users & Access | Malenge Farmers CRM{% endblock %}
+
+{% block extra_css %}
+<style>
+.users-page-header{display:flex;align-items:flex-start;justify-content:space-between;gap:30px;margin-bottom:30px}
+.users-page-header h1{margin:4px 0 8px;color:#123f29;font-size:34px;line-height:1.1}
+.users-page-header p{margin:0;color:#66756b;font-size:15px}
+.users-eyebrow{color:#26834f;font-size:12px;font-weight:800;letter-spacing:1.5px}
+.add-user-button{min-height:48px;padding:0 20px;display:inline-flex;align-items:center;justify-content:center;gap:8px;color:#fff;background:#123f29;border-radius:10px;text-decoration:none;font-size:13px;font-weight:800;white-space:nowrap}
+.add-user-button:hover{background:#0c3020}
+.users-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px;margin-bottom:28px}
+.users-stat-card{padding:24px;background:#fff;border:1px solid #e2e9e4;border-radius:16px;box-shadow:0 8px 24px rgba(18,63,41,0.04)}
+.users-stat-card span{display:block;margin-bottom:7px;color:#68766d;font-size:13px}
+.users-stat-card strong{color:#123f29;font-size:27px}
+.users-search-card{margin-bottom:28px;padding:20px;background:#fff;border:1px solid #e2e9e4;border-radius:16px;box-shadow:0 8px 24px rgba(18,63,41,0.04)}
+.users-search-form{display:flex;gap:14px}
+.users-search-form input{flex:1;height:50px;padding:0 16px;border:1px solid #ccd8d0;border-radius:10px;outline:none;font-size:14px}
+.users-search-form input:focus{border-color:#2e8755;box-shadow:0 0 0 3px rgba(46,135,85,0.09)}
+.users-search-button,.users-reset-button{min-height:50px;padding:0 24px;display:inline-flex;align-items:center;justify-content:center;border-radius:10px;font-size:14px;font-weight:750;text-decoration:none}
+.users-search-button{color:#fff;background:#123f29;border:none;cursor:pointer}
+.users-reset-button{color:#315441;background:#f3f8f5;border:1px solid #d7e3db}
+.access-notice{margin-bottom:25px;padding:18px 20px;display:flex;align-items:flex-start;gap:12px;background:#f0fdf4;border:1px solid #c8ecd4;border-radius:13px;color:#315441}
+.access-notice.warning{background:#fffaf0;border-color:#eadfbf}
+.access-notice-icon{font-size:18px}
+.access-notice strong{display:block;margin-bottom:3px;color:#166534}
+.access-notice.warning strong{color:#7b6120}
+.access-notice p{margin:0;font-size:13px;line-height:1.6}
+.users-list{display:flex;flex-direction:column;gap:18px}
+.user-access-card{overflow:hidden;background:#fff;border:1px solid #e0e8e2;border-radius:16px;box-shadow:0 8px 24px rgba(18,63,41,0.04)}
+.user-access-card.pending{border-left:4px solid #e6a23c}
+.user-access-card.inactive{border-left:4px solid #d15b5b}
+.user-access-card.active{border-left:4px solid #2e8755}
+.user-card-header{padding:22px 24px;display:flex;align-items:center;justify-content:space-between;gap:25px;border-bottom:1px solid #eef2ef}
+.user-identity{display:flex;align-items:center;gap:14px;min-width:0}
+.user-avatar{width:48px;height:48px;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;background:#1d7244;border-radius:50%;font-size:15px;font-weight:800}
+.user-name{margin:0 0 3px;color:#142d20;font-size:17px}
+.user-email{margin:0;color:#77837b;font-size:13px;overflow-wrap:anywhere}
+.user-badges{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.access-badge{display:inline-flex;align-items:center;min-height:29px;padding:0 11px;border-radius:999px;font-size:11px;font-weight:750}
+.access-badge.active{color:#16713b;background:#d9f8e3}
+.access-badge.inactive{color:#b32626;background:#fde1e1}
+.access-badge.pending{color:#966314;background:#fff1cf}
+.access-badge.role{color:#315441;background:#edf4ef}
+.user-details{padding:18px 24px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:20px;background:#fbfdfb;border-bottom:1px solid #eef2ef}
+.user-detail label{display:block;margin-bottom:4px;color:#829087;font-size:10px;font-weight:800;letter-spacing:0.8px;text-transform:uppercase}
+.user-detail span{color:#25382c;font-size:13px;font-weight:600}
+.user-tools{padding:14px 24px;display:flex;gap:10px;flex-wrap:wrap;border-bottom:1px solid #eef2ef}
+.user-tool{min-height:38px;padding:0 13px;display:inline-flex;align-items:center;justify-content:center;border:1px solid #d7e3db;border-radius:8px;background:#f6f9f7;color:#315441;text-decoration:none;font-size:11px;font-weight:800}
+.user-tool.password{background:#fffaf0;border-color:#eadfbf;color:#725c26}
+.access-form-wrapper{padding:22px 24px 24px}
+.access-form-title{margin-bottom:15px;color:#173e29;font-size:13px;font-weight:800}
+.access-form{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1.2fr) minmax(0,0.8fr) auto;gap:14px;align-items:end}
+.access-field label{display:block;margin-bottom:7px;color:#52635a;font-size:11px;font-weight:750}
+.access-field select{width:100%;height:46px;padding:0 12px;color:#27382e;background:#fff;border:1px solid #cad6ce;border-radius:9px;outline:none;font-size:12px}
+.save-access-button{min-height:46px;padding:0 19px;color:#fff;background:#2b8250;border:none;border-radius:9px;cursor:pointer;font-size:12px;font-weight:800;white-space:nowrap}
+.self-access-message{padding:14px 16px;color:#66756c;background:#f8faf8;border:1px solid #e4ebe6;border-radius:9px;font-size:12px;line-height:1.55}
+.self-access-message strong{color:#274b36}
+.users-empty{padding:55px 30px;background:#fff;border:1px solid #e1e9e3;border-radius:16px;text-align:center}
+.users-empty-icon{margin-bottom:10px;font-size:32px}
+.users-empty h3{margin-bottom:7px;color:#153c28}
+.users-empty p{margin:0;color:#758078;font-size:13px}
+
+@media(max-width:1100px){
+.users-stats{grid-template-columns:repeat(2,1fr)}
+.user-details{grid-template-columns:repeat(2,1fr)}
+.access-form{grid-template-columns:repeat(2,1fr)}
+.save-access-button{width:100%}
+}
+@media(max-width:700px){
+.users-page-header{flex-direction:column}
+.users-stats{grid-template-columns:1fr}
+.users-search-form{flex-direction:column}
+.user-card-header{align-items:flex-start;flex-direction:column}
+.user-badges{justify-content:flex-start}
+.user-details{grid-template-columns:1fr}
+.access-form{grid-template-columns:1fr}
+}
+</style>
+{% endblock %}
+
+{% block content %}
+{% set stats = namespace(active=0, inactive=0, pending=0, assigned=0) %}
+{% for user in users %}
+{% set access = access_map.get(user.id) %}
+{% if access %}
+{% if access.status == "Active" %}{% set stats.active = stats.active + 1 %}
+{% elif access.status == "Inactive" %}{% set stats.inactive = stats.inactive + 1 %}
+{% else %}{% set stats.pending = stats.pending + 1 %}{% endif %}
+{% if access.cooperative %}{% set stats.assigned = stats.assigned + 1 %}{% endif %}
+{% endif %}
+{% endfor %}
+
+<div class="users-page-header">
+    <div>
+        <span class="users-eyebrow">SYSTEM ADMINISTRATION</span>
+        <h1>Users & Access</h1>
+        <p>Admin creates CRM logins, assigns executive access and maintains account security.</p>
+    </div>
+    <a href="{{ url_for('add_user') }}" class="add-user-button">＋ Add CRM User</a>
+</div>
+
+<div class="users-stats">
+    <div class="users-stat-card"><span>Total Users</span><strong>{{ users|length }}</strong></div>
+    <div class="users-stat-card"><span>Active Access</span><strong>{{ stats.active }}</strong></div>
+    <div class="users-stat-card"><span>Inactive / Pending</span><strong>{{ stats.inactive + stats.pending }}</strong></div>
+    <div class="users-stat-card"><span>Cooperative Assigned</span><strong>{{ stats.assigned }}</strong></div>
+</div>
+
+<div class="users-search-card">
+    <form method="GET" action="{{ url_for('users_list') }}" class="users-search-form">
+        <input type="text" name="search" value="{{ search or '' }}" placeholder="Search by name, email or phone...">
+        <button type="submit" class="users-search-button">Search</button>
+        {% if search %}<a href="{{ url_for('users_list') }}" class="users-reset-button">Clear</a>{% endif %}
+    </form>
+</div>
+
+<div class="access-notice">
+    <div class="access-notice-icon">🔐</div>
+    <div>
+        <strong>Admin-only CRM account control</strong>
+        <p>
+            Admin creates CRM users, assigns roles and cooperatives, activates/deactivates access,
+            edits login-holder details and resets passwords. Secretaries manage cooperative members;
+            CRM account administration stays with Admin.
+        </p>
+    </div>
+</div>
+
+<div class="access-notice warning">
+    <div class="access-notice-icon">🛡️</div>
+    <div>
+        <strong>Accounts are deactivated, not deleted</strong>
+        <p>
+            Keep user records for audit history. Use Inactive when access must be removed.
+            Public self-registration is closed once the CRM has been initialized.
+        </p>
+    </div>
+</div>
+
+{% if users %}
+<div class="users-list">
+    {% for user in users %}
+    {% set access = access_map.get(user.id) %}
+    {% if access %}
+        {% if access.status == "Active" %}{% set card_status = "active" %}
+        {% elif access.status == "Inactive" %}{% set card_status = "inactive" %}
+        {% else %}{% set card_status = "pending" %}{% endif %}
+    {% else %}
+        {% set card_status = "pending" %}
+    {% endif %}
+
+    <article class="user-access-card {{ card_status }}">
+        <div class="user-card-header">
+            <div class="user-identity">
+                <div class="user-avatar">
+                    {% set name_parts = user.fullname.split() %}
+                    {% if name_parts|length >= 2 %}
+                    {{ name_parts[0][0]|upper }}{{ name_parts[-1][0]|upper }}
+                    {% else %}
+                    {{ user.fullname[0:2]|upper }}
+                    {% endif %}
+                </div>
+                <div>
+                    <h3 class="user-name">{{ user.fullname }}</h3>
+                    <p class="user-email">{{ user.email }}</p>
+                </div>
+            </div>
+            <div class="user-badges">
+                {% if access %}
+                <span class="access-badge {{ card_status }}">{{ access.status }}</span>
+                <span class="access-badge role">{{ access.role }}</span>
+                {% else %}
+                <span class="access-badge pending">No Access Record</span>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="user-details">
+            <div class="user-detail"><label>Phone</label><span>{{ user.phone or "—" }}</span></div>
+            <div class="user-detail"><label>Area / Location</label><span>{{ user.farm_location or "—" }}</span></div>
+            <div class="user-detail"><label>Cooperative</label><span>{% if access and access.cooperative %}{{ access.cooperative.name }}{% else %}System / Unassigned{% endif %}</span></div>
+            <div class="user-detail"><label>Account Created</label><span>{% if user.created_at %}{{ user.created_at.strftime("%Y-%m-%d") }}{% else %}—{% endif %}</span></div>
+        </div>
+
+        <div class="user-tools">
+            <a href="{{ url_for('edit_user', user_id=user.id) }}" class="user-tool">Edit Details</a>
+            <a href="{{ url_for('reset_user_password', user_id=user.id) }}" class="user-tool password">Reset Password</a>
+        </div>
+
+        <div class="access-form-wrapper">
+            <div class="access-form-title">Role, Cooperative & Access Status</div>
+
+            {% if current_access and user.id == current_access.user_id %}
+            <div class="self-access-message">
+                <strong>This is the Admin account currently signed in.</strong>
+                Its role/status cannot be changed from its own session, protecting the CRM from accidental Admin lockout.
+                You can still edit its details or reset its password.
+            </div>
+            {% else %}
+            <form method="POST" action="{{ url_for('update_user_access', user_id=user.id) }}" class="access-form" data-access-form>
+                <div class="access-field">
+                    <label>Executive / System Role</label>
+                    <select name="role" class="role-select" required>
+                        {% if not access or access.role == "Unassigned" %}
+                        <option value="" selected disabled>Select role...</option>
+                        {% endif %}
+                        {% for role in valid_roles %}
+                        <option value="{{ role }}" {% if access and access.role == role %}selected{% endif %}>{{ role }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="access-field">
+                    <label>Cooperative</label>
+                    <select name="cooperative_id" class="cooperative-select">
+                        <option value="">Select cooperative...</option>
+                        {% for cooperative in cooperatives %}
+                        <option value="{{ cooperative.id }}"
+                                data-cooperative-type="{{ cooperative.cooperative_type }}"
+                                {% if access and access.cooperative_id == cooperative.id %}selected{% endif %}>
+                            {{ cooperative.name }} — {{ cooperative.cooperative_type }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="access-field">
+                    <label>Access Status</label>
+                    <select name="status" required>
+                        <option value="Active" {% if access and access.status == "Active" %}selected{% endif %}>Active</option>
+                        <option value="Inactive" {% if access and access.status == "Inactive" %}selected{% endif %}>Inactive</option>
+                    </select>
+                </div>
+
+                <button type="submit" class="save-access-button">Save Access</button>
+            </form>
+            {% endif %}
+        </div>
+    </article>
+    {% endfor %}
+</div>
+{% else %}
+<div class="users-empty">
+    <div class="users-empty-icon">👥</div>
+    <h3>No users found</h3>
+    <p>No CRM users match your current search.</p>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function applyCooperativeRules(roleSelect, cooperativeSelect) {
+    if (!roleSelect || !cooperativeSelect) return;
+
+    const role = roleSelect.value;
+    let requiredType = null;
+
+    if (role.startsWith("Secondary")) requiredType = "Secondary";
+    if (role.startsWith("Primary")) requiredType = "Primary";
+
+    if (role === "Admin") {
+        cooperativeSelect.value = "";
+        cooperativeSelect.disabled = true;
+        return;
+    }
+
+    cooperativeSelect.disabled = false;
+
+    Array.from(cooperativeSelect.options).forEach(function(option) {
+        if (!option.value) {
+            option.hidden = false;
+            option.disabled = false;
+            return;
+        }
+
+        const optionType = option.dataset.cooperativeType;
+
+        if (requiredType && optionType !== requiredType) {
+            option.hidden = true;
+            option.disabled = true;
+            if (option.selected) cooperativeSelect.value = "";
+        } else {
+            option.hidden = false;
+            option.disabled = false;
+        }
+    });
+}
+
+document.querySelectorAll("[data-access-form]").forEach(function(form) {
+    const roleSelect = form.querySelector(".role-select");
+    const cooperativeSelect = form.querySelector(".cooperative-select");
+
+    roleSelect.addEventListener("change", function() {
+        applyCooperativeRules(roleSelect, cooperativeSelect);
+    });
+
+    applyCooperativeRules(roleSelect, cooperativeSelect);
+});
+</script>
+{% endblock %}

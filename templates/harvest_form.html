@@ -1,89 +1,160 @@
 {% extends "base.html" %}
-{% block title %}{% if harvest %}Edit Harvest{% else %}Add Harvest{% endif %} | Malenge Farmers CRM{% endblock %}
-{% block content %}
 
+{% block title %}{% if harvest %}Edit Harvest{% else %}Add Harvest{% endif %} | Malenge Farmers CRM{% endblock %}
+
+{% block extra_css %}
+<style>
+.harvest-lifecycle-note{margin-bottom:22px;padding:15px 17px;background:#f2f8f4;border:1px solid #d7e7dc;border-radius:10px;color:#365744;font-size:13px;line-height:1.55}
+.harvest-lifecycle-note strong{color:#17472d}
+.date-guidance{margin-top:7px;color:#68766d;font-size:12px;line-height:1.45}
+.final-harvest-box{grid-column:1 / -1;padding:15px 17px;display:flex;align-items:flex-start;gap:11px;background:#fbfdfb;border:1px solid #dfe8e2;border-radius:10px}
+.final-harvest-box input{margin-top:3px}
+.final-harvest-box label{margin:0;color:#284735;font-size:13px;line-height:1.5;cursor:pointer}
+.final-harvest-box small{display:block;margin-top:3px;color:#728078}
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- PAGE HEADER -->
 <div class="page-header">
     <div>
         <h1>{% if harvest %}Edit Harvest{% else %}Add Harvest{% endif %}</h1>
         <p>Record harvested produce from a registered crop.</p>
     </div>
-    <a href="{{ url_for('harvests') }}" class="back-button">← Back to Harvests</a>
+    <a href="{{ url_for('harvests_list') }}" class="back-button">← Back to Harvests</a>
 </div>
 
+<!-- HARVEST FORM -->
 <div class="form-card">
-<form method="POST">
-<div class="form-grid">
-
-    <div class="form-group">
-        <label for="crop_id">Crop *</label>
-        <select id="crop_id" name="crop_id" required>
-            <option value="">Select crop</option>
-            {% for crop in crops %}
-            <option value="{{ crop.id }}" {% if harvest and harvest.crop_id == crop.id %}selected{% endif %}>
-                {{ crop.name }} - {{ crop.farm.name }} - {{ crop.farm.farmer.fullname }}
-            </option>
-            {% endfor %}
-        </select>
+    <!-- LIFECYCLE NOTE -->
+    <div class="harvest-lifecycle-note">
+        <strong>Automatic lifecycle update:</strong>
+        saving a harvest marks the crop as <strong>Partially Harvested</strong>.
+        Tick "Final harvest" when harvesting for that crop is complete and the crop will be marked <strong>Harvested</strong>.
     </div>
 
-    <div class="form-group">
-        <label for="harvest_date">Harvest Date *</label>
-        <input type="date" id="harvest_date" name="harvest_date"
-               value="{{ harvest.harvest_date.strftime('%Y-%m-%d') if harvest and harvest.harvest_date else '' }}" required>
-    </div>
+    <form method="POST">
+        <div class="form-grid">
+            <!-- CROP -->
+            <div class="form-group">
+                <label for="crop_id">Crop *</label>
+                <select id="crop_id" name="crop_id" required>
+                    <option value="">Select crop</option>
+                    {% for crop in crops %}
+                    <option value="{{ crop.id }}"
+                        data-planting-date="{{ crop.planting_date.strftime('%Y-%m-%d') if crop.planting_date else '' }}"
+                        data-expected-harvest-date="{{ crop.expected_harvest_date.strftime('%Y-%m-%d') if crop.expected_harvest_date else '' }}"
+                        data-status="{{ crop.status or '' }}"
+                        {% if harvest and harvest.crop_id == crop.id %}selected{% endif %}>
+                        {{ crop.name }} - {{ crop.farm.name }} - {{ crop.farm.farmer.fullname }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
 
-    <div class="form-group">
-        <label for="quantity">Quantity *</label>
-        <input type="number" step="0.01" min="0" id="quantity" name="quantity"
-               value="{{ harvest.quantity if harvest else '' }}" required>
-    </div>
+            <!-- HARVEST DATE -->
+            <div class="form-group">
+                <label for="harvest_date">Harvest Date *</label>
+                <input type="date" id="harvest_date" name="harvest_date" value="{{ harvest.harvest_date.strftime('%Y-%m-%d') if harvest and harvest.harvest_date else '' }}" required>
+                <div id="harvest_date_guidance" class="date-guidance"></div>
+            </div>
 
-    <div class="form-group">
-        <label for="unit">Unit</label>
-        <select id="unit" name="unit">
-            {% for option in ["kg", "tonnes", "bags", "crates"] %}
-            <option value="{{ option }}" {% if harvest and harvest.unit == option %}selected{% elif not harvest and option == "kg" %}selected{% endif %}>{{ option }}</option>
-            {% endfor %}
-        </select>
-    </div>
+            <!-- QUANTITY -->
+            <div class="form-group">
+                <label for="quantity">Quantity *</label>
+                <input type="number" step="0.01" min="0.01" id="quantity" name="quantity" value="{{ harvest.quantity if harvest else '' }}" required>
+            </div>
 
-    <div class="form-group">
-        <label for="quality_grade">Quality Grade</label>
-        <select id="quality_grade" name="quality_grade">
-            <option value="">Select grade</option>
-            {% for option in ["Grade A", "Grade B", "Grade C", "Mixed"] %}
-            <option value="{{ option }}" {% if harvest and harvest.quality_grade == option %}selected{% endif %}>{{ option }}</option>
-            {% endfor %}
-        </select>
-    </div>
+            <!-- UNIT -->
+            <div class="form-group">
+                <label for="unit">Unit</label>
+                <select id="unit" name="unit">
+                    {% for option in ["kg", "tonnes", "bags", "crates"] %}
+                    <option value="{{ option }}" {% if harvest and harvest.unit == option %}selected{% elif not harvest and option == "kg" %}selected{% endif %}>{{ option }}</option>
+                    {% endfor %}
+                </select>
+            </div>
 
-    <div class="form-group">
-        <label for="storage_location">Storage Location</label>
-        <input type="text" id="storage_location" name="storage_location"
-               value="{{ harvest.storage_location if harvest and harvest.storage_location else '' }}">
-    </div>
+            <!-- QUALITY GRADE -->
+            <div class="form-group">
+                <label for="quality_grade">Quality Grade</label>
+                <select id="quality_grade" name="quality_grade">
+                    <option value="">Select grade</option>
+                    {% for option in ["Grade A", "Grade B", "Grade C", "Mixed"] %}
+                    <option value="{{ option }}" {% if harvest and harvest.quality_grade == option %}selected{% endif %}>{{ option }}</option>
+                    {% endfor %}
+                </select>
+            </div>
 
-    <div class="form-group">
-        <label for="status">Status</label>
-        <select id="status" name="status">
-            {% for option in ["Available", "Reserved", "Sold", "Spoiled"] %}
-            <option value="{{ option }}" {% if harvest and harvest.status == option %}selected{% elif not harvest and option == "Available" %}selected{% endif %}>{{ option }}</option>
-            {% endfor %}
-        </select>
-    </div>
+            <!-- STORAGE LOCATION -->
+            <div class="form-group">
+                <label for="storage_location">Storage Location</label>
+                <input type="text" id="storage_location" name="storage_location" value="{{ harvest.storage_location if harvest and harvest.storage_location else '' }}">
+            </div>
 
-    <div class="form-group full-width">
-        <label for="notes">Notes</label>
-        <textarea id="notes" name="notes" rows="5">{{ harvest.notes if harvest and harvest.notes else '' }}</textarea>
-    </div>
+            <!-- STATUS -->
+            <div class="form-group">
+                <label for="status">Harvest Status</label>
+                <select id="status" name="status">
+                    {% for option in ["Available", "Reserved", "Sold", "Spoiled"] %}
+                    <option value="{{ option }}" {% if harvest and harvest.status == option %}selected{% elif not harvest and option == "Available" %}selected{% endif %}>{{ option }}</option>
+                    {% endfor %}
+                </select>
+            </div>
 
+            <!-- FINAL HARVEST -->
+            <div class="final-harvest-box">
+                <input type="checkbox" id="final_harvest" name="final_harvest" value="1" {% if harvest and harvest.crop and harvest.crop.status == "Harvested" %}checked{% endif %}>
+                <label for="final_harvest">
+                    <strong>Final harvest for this crop</strong>
+                    <small>Tick this only when no further harvest is expected from the crop. The crop status will become Harvested.</small>
+                </label>
+            </div>
+
+            <!-- NOTES -->
+            <div class="form-group full-width">
+                <label for="notes">Notes</label>
+                <textarea id="notes" name="notes" rows="5">{{ harvest.notes if harvest and harvest.notes else '' }}</textarea>
+            </div>
+        </div>
+
+        <!-- ACTIONS -->
+        <div class="form-actions">
+            <a href="{{ url_for('harvests_list') }}" class="cancel-button">Cancel</a>
+            <button type="submit" class="save-button">{% if harvest %}Update Harvest{% else %}Save Harvest{% endif %}</button>
+        </div>
+    </form>
 </div>
+{% endblock %}
 
-<div class="form-actions">
-    <a href="{{ url_for('harvests') }}" class="cancel-button">Cancel</a>
-    <button type="submit" class="save-button">{% if harvest %}Update Harvest{% else %}Save Harvest{% endif %}</button>
-</div>
-</form>
-</div>
+{% block extra_js %}
+<script>
+    (function() {
+        const cropSelect = document.getElementById("crop_id");
+        const harvestDate = document.getElementById("harvest_date");
+        const guidance = document.getElementById("harvest_date_guidance");
+        if (!cropSelect || !harvestDate || !guidance) return;
 
+        function updateCropDateGuidance() {
+            const option = cropSelect.options[cropSelect.selectedIndex];
+            if (!option || !option.value) {
+                harvestDate.min = "";
+                guidance.textContent = "";
+                return;
+            }
+            const plantingDate = option.dataset.plantingDate || "";
+            const expectedDate = option.dataset.expectedHarvestDate || "";
+            const cropStatus = option.dataset.status || "";
+            harvestDate.min = plantingDate;
+            const messages = [];
+            if (plantingDate) messages.push("Planting date: " + plantingDate + ".");
+            if (expectedDate) messages.push("Expected harvest: " + expectedDate + ".");
+            if (cropStatus) messages.push("Current crop status: " + cropStatus + ".");
+            guidance.textContent = messages.join(" ");
+        }
+
+        cropSelect.addEventListener("change", updateCropDateGuidance);
+        updateCropDateGuidance();
+    })();
+</script>
 {% endblock %}

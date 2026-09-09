@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block title %}Record Contribution | Malenge Farmers CRM{% endblock %}
+
+{% block extra_css %}
+<style>
+    .form-page{display:flex;flex-direction:column;gap:20px;max-width:980px}
+    .form-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap}
+    .form-head h1{margin:0;color:#173b2b;font-size:29px}
+    .form-head p{margin:7px 0 0;color:#6b7280;font-size:13px}
+    .back-btn,.cancel-btn{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:0 14px;border:1px solid #dce7df;border-radius:9px;color:#315441;background:#fff;text-decoration:none;font-size:12px;font-weight:700}
+    .form-note{padding:14px 16px;border:1px solid #eadfbf;border-radius:11px;background:#fffaf0;color:#705d2a;font-size:12px;line-height:1.55}
+    .form-card{padding:22px;background:#fff;border:1px solid #e1e9e3;border-radius:14px}
+    .form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+    .group{display:flex;flex-direction:column;gap:7px}.group.full{grid-column:1/-1}
+    label{color:#31493b;font-size:12px;font-weight:700}
+    input,select,textarea{width:100%;padding:11px 12px;border:1px solid #d7e1da;border-radius:9px;background:#fff;color:#263d30;font:inherit;font-size:13px;box-sizing:border-box}
+    textarea{min-height:110px;resize:vertical}
+    .actions{grid-column:1/-1;display:flex;justify-content:flex-end;gap:10px;padding-top:18px;border-top:1px solid #edf2ee}
+    .save-btn{min-height:42px;padding:0 17px;border:0;border-radius:9px;background:#2e7d4f;color:#fff;font-size:12px;font-weight:800;cursor:pointer}
+    @media(max-width:700px){.form-grid{grid-template-columns:1fr}}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="form-page">
+    <div class="form-head">
+        <div>
+            <h1>Record Contribution</h1>
+            <p>Treasurer financial entry.</p>
+        </div>
+        <a href="{{ url_for('contributions_list') }}" class="back-btn">← Back to Contributions</a>
+    </div>
+
+    <div class="form-note">
+        Saving this record does not confirm the money. It will be saved as
+        <strong>Pending Confirmation</strong> until your cooperative Chairperson approves it.
+        Use category <strong>Membership Fee</strong> when recording a member's membership-fee payment.
+    </div>
+
+    <form method="POST" class="form-card">
+        <div class="form-grid">
+            <div class="group full">
+                <label for="farmer_id">Member / Farmer *</label>
+                <select id="farmer_id" name="farmer_id" required>
+                    <option value="">Select person</option>
+                    {% for farmer in farmers %}
+                    <option value="{{ farmer.id }}">{{ farmer.fullname }} — {{ farmer.phone }}{% if farmer.cooperative %} — {{ farmer.cooperative.name }}{% endif %}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="group">
+                <label for="amount">Amount (R) *</label>
+                <input id="amount" name="amount" type="number" min="0.01" step="0.01" required>
+            </div>
+
+            <div class="group">
+                <label for="contribution_date">Contribution Date *</label>
+                <input id="contribution_date" name="contribution_date" type="date" required>
+            </div>
+
+            <div class="group">
+                <label for="category">Category</label>
+                <input id="category" name="category" type="text" maxlength="100" placeholder="e.g. Membership Fee, General Contribution">
+            </div>
+
+            <div class="group">
+                <label for="method">Payment Method</label>
+                <select id="method" name="method">
+                    <option value="">Select method</option>
+                    <option>Cash</option>
+                    <option>Bank Transfer</option>
+                    <option>Card</option>
+                    <option>Mobile Payment</option>
+                    <option>Other</option>
+                </select>
+            </div>
+
+            <div class="group">
+                <label for="reference">Reference</label>
+                <input id="reference" name="reference" type="text" maxlength="120">
+            </div>
+
+            <div class="group full">
+                <label for="notes">Notes</label>
+                <textarea id="notes" name="notes"></textarea>
+            </div>
+
+            <div class="actions">
+                <a href="{{ url_for('contributions_list') }}" class="cancel-btn">Cancel</a>
+                <button type="submit" class="save-btn">Submit for Confirmation</button>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}

@@ -11,13 +11,21 @@
 <div class="page-header">
     <div>
         <h1>Crops</h1>
-        <p>Manage crops planted on registered farms.</p>
+        <p>
+            {% if can_manage_agriculture %}
+                Manage crops planted on registered farms.
+            {% else %}
+                View crop records within your cooperative scope.
+            {% endif %}
+        </p>
     </div>
+    {% if can_manage_agriculture %}
     <a href="{{ url_for('add_crop') }}" class="primary-button">+ Add Crop</a>
+    {% endif %}
 </div>
 
 <!-- SEARCH FORM -->
-<form method="GET" action="{{ url_for('crops') }}" class="search-form">
+<form method="GET" action="{{ url_for('crops_list') }}" class="search-form">
     <input type="text" name="search" placeholder="Search crops, farms, varieties or status..." value="{{ search }}">
     <button type="submit">Search</button>
 </form>
@@ -35,7 +43,7 @@
                 <th>Harvest Date</th>
                 <th>Area</th>
                 <th>Status</th>
-                <th>Actions</th>
+                {% if can_manage_agriculture %}<th>Actions</th>{% endif %}
             </tr>
         </thead>
         <tbody>
@@ -49,19 +57,23 @@
                 <td>{{ crop.expected_harvest_date or "-" }}</td>
                 <td>{% if crop.area_planted %}{{ crop.area_planted }} ha{% else %}-{% endif %}</td>
                 <td><span class="crop-status">{{ crop.status }}</span></td>
+                {% if can_manage_agriculture %}
                 <td class="actions-cell">
                     <a href="{{ url_for('edit_crop', crop_id=crop.id) }}" class="edit-button">Edit</a>
                     <form method="POST" action="{{ url_for('delete_crop', crop_id=crop.id) }}" class="delete-form">
                         <button type="submit" class="delete-button" onclick="return confirm('Delete this crop?');">Delete</button>
                     </form>
                 </td>
+                {% endif %}
             </tr>
             {% else %}
             <tr>
-                <td colspan="9" class="empty-message">
+                <td colspan="{{ 9 if can_manage_agriculture else 8 }}" class="empty-message">
                     No crops have been registered yet.
+                    {% if can_manage_agriculture %}
                     <br>
                     <a href="{{ url_for('add_crop') }}">Add your first crop</a>
+                    {% endif %}
                 </td>
             </tr>
             {% endfor %}

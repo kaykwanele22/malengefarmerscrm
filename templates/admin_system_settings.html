@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}System Settings | Malenge Farmers CRM{% endblock %}
+{% block extra_css %}
+<style>
+.admin-page{display:flex;flex-direction:column;gap:22px}
+.admin-page-header{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;flex-wrap:wrap}
+.admin-page-header h1{margin:4px 0 8px;color:#123f29;font-size:32px;line-height:1.15}
+.admin-page-header p{margin:0;color:#68766d;font-size:14px;line-height:1.55}
+.admin-eyebrow{color:#26834f;font-size:11px;font-weight:800;letter-spacing:1.4px}
+.admin-card{background:#fff;border:1px solid #e1e9e3;border-radius:16px;box-shadow:0 8px 24px rgba(18,63,41,.04)}
+.admin-card-pad{padding:22px}
+.admin-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+.admin-stat{padding:20px;background:#fff;border:1px solid #e1e9e3;border-radius:14px}
+.admin-stat span{display:block;margin-bottom:7px;color:#738077;font-size:11px}
+.admin-stat strong{color:#123f29;font-size:25px}
+.admin-section-title{margin:0 0 15px;color:#173e29;font-size:20px}
+.admin-note{padding:14px 16px;background:#f4f9f5;border:1px solid #d9e7dd;border-radius:11px;color:#4a6154;font-size:12px;line-height:1.6}
+.admin-warning{padding:14px 16px;background:#fff8ea;border:1px solid #ead8ad;border-radius:11px;color:#725b21;font-size:12px;line-height:1.6}
+.admin-danger{padding:14px 16px;background:#fff3f3;border:1px solid #efcaca;border-radius:11px;color:#8c3434;font-size:12px;line-height:1.6}
+.admin-table-wrap{overflow-x:auto}
+.admin-table{width:100%;border-collapse:collapse;min-width:820px}
+.admin-table th{padding:12px 14px;background:#f6f9f7;border-bottom:1px solid #e4ebe6;color:#748179;font-size:10px;text-align:left;text-transform:uppercase;letter-spacing:.5px}
+.admin-table td{padding:14px;border-bottom:1px solid #edf2ee;color:#35483c;font-size:12px;vertical-align:top}
+.admin-table tr:last-child td{border-bottom:0}
+.status-pill{display:inline-flex;align-items:center;min-height:26px;padding:0 9px;border-radius:999px;background:#eaf6ee;color:#247347;font-size:10px;font-weight:800}
+.status-pill.warning{background:#fff1cc;color:#8c631c}
+.status-pill.problem{background:#fde2e2;color:#a03434}
+.admin-button,.admin-button-secondary,.admin-button-danger{min-height:42px;padding:0 15px;display:inline-flex;align-items:center;justify-content:center;border-radius:9px;text-decoration:none;font-size:12px;font-weight:800;cursor:pointer}
+.admin-button{border:0;background:#23794a;color:#fff}
+.admin-button-secondary{border:1px solid #d7e3db;background:#f6f9f7;color:#315441}
+.admin-button-danger{border:1px solid #efcaca;background:#fff5f5;color:#9b3434}
+.admin-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.admin-action-card{padding:20px;background:#fff;border:1px solid #e1e9e3;border-radius:14px;text-decoration:none;color:#173b2b;box-shadow:0 8px 24px rgba(18,63,41,.04)}
+.admin-action-card span{font-size:24px}
+.admin-action-card strong{display:block;margin:12px 0 5px;font-size:14px}
+.admin-action-card small{color:#748179;font-size:11px;line-height:1.5}
+.admin-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+.admin-field{display:flex;flex-direction:column;gap:7px}
+.admin-field.full{grid-column:1/-1}
+.admin-field label{color:#42564a;font-size:11px;font-weight:800}
+.admin-field input,.admin-field select,.admin-field textarea{width:100%;padding:11px 12px;border:1px solid #cad6ce;border-radius:9px;background:#fff;color:#27382e;font:inherit;font-size:13px;box-sizing:border-box}
+.admin-field textarea{min-height:110px;resize:vertical}
+.admin-form-actions{grid-column:1/-1;padding-top:18px;display:flex;justify-content:flex-end;gap:10px;border-top:1px solid #edf2ee}
+@media(max-width:1050px){.admin-stats{grid-template-columns:repeat(2,1fr)}.admin-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:700px){.admin-stats,.admin-grid,.admin-form-grid{grid-template-columns:1fr}}
+</style>
+{% endblock %}
+{% block content %}
+<div class="admin-page">
+    <div class="admin-page-header">
+        <div>
+            <span class="admin-eyebrow">SYSTEM ADMINISTRATION</span>
+            <h1>System Settings</h1>
+            <p>Manage safe, non-secret CRM-wide settings. Passwords, API keys and database credentials are not stored here.</p>
+        </div>
+    </div>
+
+    <form method="POST" class="admin-card admin-card-pad">
+        <div class="admin-form-grid">
+            <div class="admin-field">
+                <label for="brand_name">Brand Name *</label>
+                <input id="brand_name" name="brand_name" required maxlength="80" value="{{ settings_data.brand_name }}">
+            </div>
+
+            <div class="admin-field">
+                <label for="product_name">Product Name *</label>
+                <input id="product_name" name="product_name" required maxlength="100" value="{{ settings_data.product_name }}">
+            </div>
+
+            <div class="admin-field">
+                <label for="organization_name">Organization Name *</label>
+                <input id="organization_name" name="organization_name" required maxlength="120" value="{{ settings_data.organization_name }}">
+            </div>
+
+            <div class="admin-field">
+                <label for="developer_name">Developer / System Provider *</label>
+                <input id="developer_name" name="developer_name" required maxlength="120" value="{{ settings_data.developer_name }}">
+            </div>
+
+            <div class="admin-field">
+                <label for="support_email">Support Email</label>
+                <input id="support_email" name="support_email" type="email" maxlength="150" value="{{ settings_data.support_email }}">
+            </div>
+
+            <div class="admin-field">
+                <label for="default_location">Default Location</label>
+                <input id="default_location" name="default_location" maxlength="150" value="{{ settings_data.default_location }}">
+            </div>
+
+            <div class="admin-field">
+                <label for="session_timeout_minutes">Session Timeout (minutes) *</label>
+                <input id="session_timeout_minutes" name="session_timeout_minutes" type="number" min="15" max="1440" required value="{{ settings_data.session_timeout_minutes }}">
+            </div>
+
+            <div class="admin-field full">
+                <label for="maintenance_notice">Maintenance Notice</label>
+                <textarea id="maintenance_notice" name="maintenance_notice" maxlength="500">{{ settings_data.maintenance_notice }}</textarea>
+            </div>
+
+            <div class="admin-warning full">
+                These settings are stored in the Flask <strong>instance</strong> directory as JSON.
+                Secrets such as SECRET_KEY and DATABASE_URL must remain environment variables.
+            </div>
+
+            <div class="admin-form-actions">
+                <button type="submit" class="admin-button">Save System Settings</button>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}

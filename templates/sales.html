@@ -1,48 +1,77 @@
 {% extends "base.html" %}
 {% block title %}Sales | Malenge Farmers CRM{% endblock %}
 {% block content %}
-
+<!-- PAGE HEADER -->
 <div class="page-header">
-    <div><h1>Sales</h1><p>Manage agricultural sales.</p></div>
+    <div>
+        <h1>Sales</h1>
+        <p>{% if can_manage_business %}Manage agricultural sales and payment progress.{% else %}View agricultural sales and payment progress within your cooperative scope.{% endif %}</p>
+    </div>
+    {% if can_manage_business %}
     <a href="{{ url_for('add_sale') }}" class="primary-button">+ Record Sale</a>
+    {% endif %}
 </div>
 
-<form method="GET" action="{{ url_for('sales') }}" class="search-form">
+<!-- SEARCH -->
+<form method="GET" action="{{ url_for('sales_list') }}" class="search-form">
     <input type="text" name="search" placeholder="Search buyer, crop, farm or status..." value="{{ search }}">
     <button type="submit">Search</button>
 </form>
 
+<!-- SALES TABLE -->
 <div class="table-container">
-<table>
-    <thead>
-    <tr>
-        <th>Buyer</th><th>Crop</th><th>Farm</th><th>Quantity</th>
-        <th>Price / Unit</th><th>Total</th><th>Sale Date</th><th>Status</th><th>Actions</th>
-    </tr>
-    </thead>
-    <tbody>
-    {% for sale in sales %}
-    <tr>
-        <td><strong>{{ sale.buyer_name }}</strong><br><small>{{ sale.buyer_phone or "" }}</small></td>
-        <td>{{ sale.harvest.crop.name }}</td>
-        <td>{{ sale.harvest.crop.farm.name }}</td>
-        <td>{{ sale.quantity }} {{ sale.unit }}</td>
-        <td>R {{ "%.2f"|format(sale.price_per_unit) }}</td>
-        <td>R {{ "%.2f"|format(sale.total_amount) }}</td>
-        <td>{{ sale.sale_date }}</td>
-        <td><span class="status-badge">{{ sale.status }}</span></td>
-        <td class="actions-cell">
-            <a href="{{ url_for('edit_sale', sale_id=sale.id) }}" class="edit-button">Edit</a>
-            <form method="POST" action="{{ url_for('delete_sale', sale_id=sale.id) }}" class="delete-form">
-                <button type="submit" class="delete-button" onclick="return confirm('Delete this sale?');">Delete</button>
-            </form>
-        </td>
-    </tr>
-    {% else %}
-    <tr><td colspan="9" class="empty-message">No sales recorded yet.<br><a href="{{ url_for('add_sale') }}">Record your first sale</a></td></tr>
-    {% endfor %}
-    </tbody>
-</table>
+    <table>
+        <thead>
+            <tr>
+                <th>Buyer</th>
+                <th>Crop</th>
+                <th>Farm</th>
+                <th>Quantity</th>
+                <th>Price / Unit</th>
+                <th>Total</th>
+                <th>Paid</th>
+                <th>Outstanding</th>
+                <th>Sale Date</th>
+                <th>Sale Status</th>
+                <th>Payment Status</th>
+                {% if can_manage_business %}<th>Actions</th>{% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for sale in sales %}
+            <tr>
+                <td>
+                    <strong>{{ sale.buyer_name }}</strong><br>
+                    <small>{{ sale.buyer_phone or "" }}</small>
+                </td>
+                <td>{{ sale.harvest.crop.name }}</td>
+                <td>{{ sale.harvest.crop.farm.name }}</td>
+                <td>{{ sale.quantity }} {{ sale.unit }}</td>
+                <td>R {{ "%.2f"|format(sale.price_per_unit) }}</td>
+                <td>R {{ "%.2f"|format(sale.total_amount) }}</td>
+                <td>R {{ "%.2f"|format(sale_paid_amount(sale)) }}</td>
+                <td>R {{ "%.2f"|format(sale_outstanding_amount(sale)) }}</td>
+                <td>{{ sale.sale_date }}</td>
+                <td><span class="status-badge">{{ sale.status }}</span></td>
+                <td><span class="status-badge">{{ sale_payment_status(sale) }}</span></td>
+                {% if can_manage_business %}
+                <td class="actions-cell">
+                    <a href="{{ url_for('edit_sale', sale_id=sale.id) }}" class="edit-button">Edit</a>
+                    <form method="POST" action="{{ url_for('delete_sale', sale_id=sale.id) }}" class="delete-form">
+                        <button type="submit" class="delete-button" onclick="return confirm('Delete this sale?');">Delete</button>
+                    </form>
+                </td>
+                {% endif %}
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="{{ 12 if can_manage_business else 11 }}" class="empty-message">
+                    No sales recorded yet.{% if can_manage_business %}<br>
+                    <a href="{{ url_for('add_sale') }}">Record your first sale</a>{% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
 </div>
-
 {% endblock %}

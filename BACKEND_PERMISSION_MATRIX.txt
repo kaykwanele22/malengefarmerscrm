@@ -1,0 +1,45 @@
+Malenge Farmers CRM — Backend Permission Audit
+
+SYSTEM ADMIN
+- Users & Access: manage
+- Cooperative Structure: manage
+- Audit Logs: view
+- Security / Backup / Health / Exports / Role Permissions / System Settings: manage/view
+- Cooperative operational routes: blocked
+
+PRIMARY SECRETARY / VICE SECRETARY
+- Farmers: view + create/edit/delete within own cooperative
+- Memberships: view + create/edit/delete within own cooperative
+- Farms/Crops/Harvests: blocked
+- Sales/Payments/Contributions/Expenses: blocked
+- Reports: view own cooperative
+
+PRIMARY CHAIRPERSON / VICE CHAIRPERSON
+- Farmers/Members: view
+- Farms/Crops/Harvests: view + create/edit/delete within own cooperative
+- Sales/Payments: view
+- Contributions/Expenses: view
+- Chairperson only: approve/reject pending contributions and expenses
+- Vice Chairperson: oversight only, no approval
+- Reports: view own cooperative
+
+PRIMARY TREASURER
+- Members: view
+- Sales/Payments: view + record/edit within own cooperative
+- Contributions/Expenses: view + record/edit within own cooperative
+- Cannot approve own financial entries
+- Farmers/Farms/Crops/Harvests direct routes: blocked
+- Reports: view own cooperative
+
+SECONDARY EXECUTIVES
+- Can see permitted oversight data across child Primary Cooperatives
+- Cannot mutate Primary Cooperative operational/financial records
+- Secondary Treasurer records only Secondary Cooperative financial/business records
+- Secondary Chairperson approves only Secondary Cooperative pending finance
+- Secondary Secretary/Vice Secretary manage only their assigned Secondary Cooperative records
+
+FINANCIAL RECORD SAFETY
+- Confirmed contributions/expenses cannot be deleted
+- Received payments cannot be deleted; they must be reversed
+- Cross-cooperative mutation is blocked with own-cooperative checks
+- Operational create/update/delete activity is audit logged

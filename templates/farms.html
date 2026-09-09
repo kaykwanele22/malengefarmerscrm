@@ -7,67 +7,508 @@
 {% endblock %}
 
 {% block content %}
-<!-- PAGE HEADER -->
+<!-- Page Header -->
 <div class="page-header">
     <div>
         <h1>Farms</h1>
-        <p>Manage registered farms.</p>
-    </div>
-    <a href="{{ url_for('add_farm') }}" class="primary-button">+ Add Farm</a>
-</div>
-
-<!-- SEARCH FORM -->
-<form method="GET" action="{{ url_for('farms') }}" class="search-form">
-    <input type="text" name="search" placeholder="Search by farm, farmer, crop or location..." value="{{ search }}">
-    <button type="submit">Search</button>
-</form>
-
-<!-- FARMS TABLE -->
-<div class="table-container">
-    <table>
-        <thead>
-            <tr>
-                <th>Farm Name</th>
-                <th>Farmer</th>
-                <th>Location</th>
-                <th>Size</th>
-                <th>Farming Type</th>
-                <th>Main Crop</th>
-                <th>Status</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for farm in farms %}
-            <tr>
-                <td class="farm-name">{{ farm.name }}</td>
-                <td>{{ farm.farmer.fullname }}</td>
-                <td>{{ farm.location }}</td>
-                <td>{% if farm.size %}{{ farm.size }} ha{% else %}-{% endif %}</td>
-                <td>{{ farm.farming_type or "-" }}</td>
-                <td>{{ farm.main_crop or "-" }}</td>
-                <td>
-                    <span class="status-badge {% if farm.status == 'Active' %}status-active{% else %}status-inactive{% endif %}">
-                        {{ farm.status }}
-                    </span>
-                </td>
-                <td class="actions-cell">
-                    <a href="{{ url_for('edit_farm', farm_id=farm.id) }}" class="edit-button">Edit</a>
-                    <form method="POST" action="{{ url_for('delete_farm', farm_id=farm.id) }}" class="delete-form">
-                        <button type="submit" class="delete-button" onclick="return confirm('Are you sure you want to delete this farm?');">Delete</button>
-                    </form>
-                </td>
-            </tr>
+        <p>
+            {% if can_manage_agriculture %}
+                Manage registered farms and their ownership details.
             {% else %}
-            <tr>
-                <td colspan="8" class="empty-message">
-                    No farms have been registered yet.
-                    <br>
-                    <a href="{{ url_for('add_farm') }}">Add your first farm</a>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+                View registered farms within your cooperative scope.
+            {% endif %}
+        </p>
+    </div>
+    {% if can_manage_agriculture %}
+    <a href="{{ url_for('add_farm') }}" class="primary-button">+ Add Farm</a>
+    {% endif %}
 </div>
+
+<!-- Search Form -->
+<div class="search-section">
+    <form method="GET" action="{{ url_for('farms_list') }}" class="search-form">
+        <div class="search-wrapper">
+            <input
+                type="text"
+                name="search"
+                placeholder="Search by farm, farmer, location or farming type..."
+                value="{{ search or '' }}"
+                aria-label="Search farms"
+            >
+            <button type="submit" class="search-button">Search</button>
+            {% if search %}
+            <a href="{{ url_for('farms_list') }}" class="clear-button">Clear</a>
+            {% endif %}
+        </div>
+    </form>
+</div>
+
+<!-- Farms Table -->
+<div class="table-container">
+    <div class="table-responsive">
+        <table>
+            <thead>
+                <tr>
+                    <th>Farm Name</th>
+                    <th>Cooperative</th>
+                    <th>Farmer</th>
+                    <th>Location</th>
+                    <th class="text-center">Size</th>
+                    <th>Farming Type</th>
+                    <th class="text-center">Crop Records</th>
+                    <th>Status</th>
+                    {% if can_manage_agriculture %}<th class="text-center">Actions</th>{% endif %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for farm in farms %}
+                <tr>
+                    <td class="farm-name">
+                        <strong>{{ farm.name }}</strong>
+                    </td>
+                    <td>
+                        {% if farm.cooperative %}
+                            {{ farm.cooperative.name }}
+                        {% else %}
+                            <span class="badge badge-unassigned">Unassigned</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ farm.farmer.fullname }}</td>
+                    <td>{{ farm.location }}</td>
+                    <td class="text-center">
+                        {% if farm.size is not none %}
+                            {{ farm.size }} ha
+                        {% else %}
+                            <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ farm.farming_type or "—" }}</td>
+                    <td class="text-center">
+                        <span class="count-badge">{{ farm.crops|length }}</span>
+                    </td>
+                    <td>
+                        <span class="badge badge-{{ farm.status|lower }}">
+                            {{ farm.status }}
+                        </span>
+                    </td>
+                    {% if can_manage_agriculture %}
+                    <td>
+                        <div class="action-buttons">
+                            <a href="{{ url_for('edit_farm', farm_id=farm.id) }}" class="edit-button">
+                                Edit
+                            </a>
+                            <form
+                                method="POST"
+                                action="{{ url_for('delete_farm', farm_id=farm.id) }}"
+                                class="inline-form"
+                                onsubmit="return confirm('Are you sure you want to delete this farm? This action cannot be undone.');"
+                            >
+                                <button type="submit" class="delete-button">Delete</button>
+                            </form>
+                        </div>
+                    </td>
+                    {% endif %}
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="{{ 9 if can_manage_agriculture else 8 }}" class="empty-message">
+                        <div class="empty-state">
+                            <div class="empty-icon">🏡</div>
+                            <h3>No farms found</h3>
+                            <p>
+                                {% if search %}
+                                    No farms match "{{ search }}".
+                                {% else %}
+                                    No farms have been registered yet.
+                                {% endif %}
+                            </p>
+                            {% if can_manage_agriculture %}
+                            <a href="{{ url_for('add_farm') }}" class="primary-button">Add Your First Farm</a>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Table Footer -->
+    {% if farms %}
+    <div class="table-footer">
+        <span>Showing {{ farms|length }} farm{{ 's' if farms|length != 1 else '' }}</span>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+    /* Page Header */
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 24px;
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+
+    .page-header h1 {
+        margin: 0 0 6px;
+        font-size: 28px;
+        color: #173b2b;
+    }
+
+    .page-header p {
+        margin: 0;
+        color: #5f6f65;
+    }
+
+    /* Search Section */
+    .search-section {
+        margin-bottom: 24px;
+    }
+
+    .search-wrapper {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+
+    .search-wrapper input {
+        flex: 1;
+        min-width: 200px;
+        padding: 10px 14px;
+        border: 1px solid #d7e3db;
+        border-radius: 8px;
+        font-size: 14px;
+        transition: border-color 0.2s, box-shadow 0.2s;
+        background: #fff;
+    }
+
+    .search-wrapper input:focus {
+        outline: none;
+        border-color: #2e7d4f;
+        box-shadow: 0 0 0 3px rgba(46, 125, 79, 0.1);
+    }
+
+    .search-button,
+    .clear-button {
+        padding: 10px 20px;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 600;
+        text-decoration: none;
+        cursor: pointer;
+        transition: background 0.2s;
+        border: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .search-button {
+        background: #2e7d4f;
+        color: #fff;
+    }
+
+    .search-button:hover {
+        background: #23693f;
+    }
+
+    .clear-button {
+        background: #f3f7f4;
+        color: #315441;
+        border: 1px solid #d7e3db;
+    }
+
+    .clear-button:hover {
+        background: #e8eee9;
+    }
+
+    /* Table Container */
+    .table-container {
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 2px 12px rgba(18, 63, 41, 0.06);
+        overflow: hidden;
+    }
+
+    .table-responsive {
+        overflow-x: auto;
+    }
+
+    /* Table Styles */
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+    }
+
+    thead {
+        background: #f7faf8;
+        border-bottom: 2px solid #dfe8e2;
+    }
+
+    thead th {
+        padding: 12px 16px;
+        text-align: left;
+        font-weight: 600;
+        color: #173b2b;
+        white-space: nowrap;
+    }
+
+    thead th.text-center {
+        text-align: center;
+    }
+
+    tbody tr {
+        border-bottom: 1px solid #eef3f0;
+        transition: background 0.15s;
+    }
+
+    tbody tr:hover {
+        background: #f7faf8;
+    }
+
+    tbody td {
+        padding: 12px 16px;
+        vertical-align: middle;
+        color: #1f2937;
+    }
+
+    tbody td.text-center {
+        text-align: center;
+    }
+
+    .farm-name strong {
+        color: #173b2b;
+    }
+
+    .text-muted {
+        color: #8a9a91;
+    }
+
+    /* Badges */
+    .badge {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: capitalize;
+    }
+
+    .badge-active {
+        background: #dff0e6;
+        color: #1a6d3e;
+    }
+
+    .badge-inactive {
+        background: #f0ece6;
+        color: #7a6b5a;
+    }
+
+    .badge-unassigned {
+        background: #e8edf0;
+        color: #4a5c6b;
+        font-size: 11px;
+    }
+
+    .count-badge {
+        display: inline-block;
+        padding: 2px 10px;
+        border-radius: 12px;
+        background: #e8f0fe;
+        color: #1a5c8a;
+        font-size: 12px;
+        font-weight: 600;
+        min-width: 20px;
+        text-align: center;
+    }
+
+    /* Action Buttons */
+    .action-buttons {
+        display: flex;
+        gap: 6px;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+
+    .inline-form {
+        display: inline;
+    }
+
+    .edit-button,
+    .delete-button {
+        padding: 5px 14px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 600;
+        text-decoration: none;
+        cursor: pointer;
+        transition: background 0.2s;
+        border: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .edit-button {
+        background: #e8f0fe;
+        color: #1a5c8a;
+    }
+
+    .edit-button:hover {
+        background: #d4e4fc;
+    }
+
+    .delete-button {
+        background: #fde8e8;
+        color: #a02d2d;
+    }
+
+    .delete-button:hover {
+        background: #fcd4d4;
+    }
+
+    /* Table Footer */
+    .table-footer {
+        padding: 12px 16px;
+        background: #f7faf8;
+        border-top: 1px solid #eef3f0;
+        font-size: 13px;
+        color: #5f6f65;
+    }
+
+    /* Empty State */
+    .empty-message {
+        padding: 40px 20px !important;
+        text-align: center !important;
+    }
+
+    .empty-state {
+        padding: 20px;
+    }
+
+    .empty-icon {
+        font-size: 48px;
+        margin-bottom: 12px;
+        opacity: 0.6;
+    }
+
+    .empty-state h3 {
+        margin: 0 0 8px;
+        color: #173b2b;
+        font-size: 20px;
+    }
+
+    .empty-state p {
+        margin: 0 0 16px;
+        color: #5f6f65;
+    }
+
+    .empty-state .primary-button {
+        display: inline-block;
+        padding: 10px 20px;
+        background: #2e7d4f;
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 600;
+        text-decoration: none;
+        transition: background 0.2s;
+    }
+
+    .empty-state .primary-button:hover {
+        background: #23693f;
+    }
+
+    /* Primary Button */
+    .primary-button {
+        display: inline-flex;
+        align-items: center;
+        padding: 10px 20px;
+        background: #2e7d4f;
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 600;
+        text-decoration: none;
+        cursor: pointer;
+        transition: background 0.2s;
+        white-space: nowrap;
+    }
+
+    .primary-button:hover {
+        background: #23693f;
+    }
+
+    /* Responsive Design */
+    @media (max-width: 768px) {
+        .page-header {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .page-header .primary-button {
+            align-self: flex-start;
+        }
+
+        .search-wrapper {
+            flex-direction: column;
+        }
+
+        .search-wrapper input {
+            width: 100%;
+            min-width: unset;
+        }
+
+        .search-wrapper .search-button,
+        .search-wrapper .clear-button {
+            width: 100%;
+            justify-content: center;
+        }
+
+        .action-buttons {
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .action-buttons .edit-button,
+        .action-buttons .delete-button {
+            width: 100%;
+        }
+
+        table {
+            font-size: 13px;
+        }
+
+        thead th,
+        tbody td {
+            padding: 8px 10px;
+        }
+    }
+
+    @media (max-width: 480px) {
+        .page-header h1 {
+            font-size: 22px;
+        }
+
+        .page-header .primary-button {
+            width: 100%;
+            justify-content: center;
+        }
+
+        .empty-icon {
+            font-size: 36px;
+        }
+
+        .empty-state h3 {
+            font-size: 18px;
+        }
+    }
+</style>
 {% endblock %}

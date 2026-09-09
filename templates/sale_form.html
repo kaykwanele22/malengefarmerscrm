@@ -7,7 +7,7 @@
         <h1>{% if sale %}Edit Sale{% else %}Record Sale{% endif %}</h1>
         <p>Record the sale of harvested produce.</p>
     </div>
-    <a href="{{ url_for('sales') }}" class="back-button">← Back to Sales</a>
+    <a href="{{ url_for('sales_list') }}" class="back-button">← Back to Sales</a>
 </div>
 
 <div class="form-card">
@@ -77,7 +77,7 @@
 </div>
 
 <div class="form-actions">
-    <a href="{{ url_for('sales') }}" class="cancel-button">Cancel</a>
+    <a href="{{ url_for('sales_list') }}" class="cancel-button">Cancel</a>
     <button type="submit" class="save-button">{% if sale %}Update Sale{% else %}Save Sale{% endif %}</button>
 </div>
 </form>

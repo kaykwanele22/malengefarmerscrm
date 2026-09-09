@@ -3,11 +3,13 @@
 {% block content %}
 
 <div class="page-header">
-    <div><h1>Harvests</h1><p>Manage crop harvest records.</p></div>
+    <div><h1>Harvests</h1><p>{% if can_manage_agriculture %}Manage crop harvest records.{% else %}View harvest records within your cooperative scope.{% endif %}</p></div>
+    {% if can_manage_agriculture %}
     <a href="{{ url_for('add_harvest') }}" class="primary-button">+ Add Harvest</a>
+    {% endif %}
 </div>
 
-<form method="GET" action="{{ url_for('harvests') }}" class="search-form">
+<form method="GET" action="{{ url_for('harvests_list') }}" class="search-form">
     <input type="text" name="search" placeholder="Search crop, farm, farmer, storage or status..." value="{{ search }}">
     <button type="submit">Search</button>
 </form>
@@ -17,7 +19,7 @@
     <thead>
     <tr>
         <th>Crop</th><th>Farm</th><th>Farmer</th><th>Date</th>
-        <th>Quantity</th><th>Grade</th><th>Storage</th><th>Status</th><th>Actions</th>
+        <th>Quantity</th><th>Grade</th><th>Storage</th><th>Status</th>{% if can_manage_agriculture %}<th>Actions</th>{% endif %}
     </tr>
     </thead>
     <tbody>
@@ -31,15 +33,17 @@
         <td>{{ harvest.quality_grade or "-" }}</td>
         <td>{{ harvest.storage_location or "-" }}</td>
         <td><span class="status-badge">{{ harvest.status }}</span></td>
+        {% if can_manage_agriculture %}
         <td class="actions-cell">
             <a href="{{ url_for('edit_harvest', harvest_id=harvest.id) }}" class="edit-button">Edit</a>
             <form method="POST" action="{{ url_for('delete_harvest', harvest_id=harvest.id) }}" class="delete-form">
                 <button type="submit" class="delete-button" onclick="return confirm('Delete this harvest?');">Delete</button>
             </form>
         </td>
+        {% endif %}
     </tr>
     {% else %}
-    <tr><td colspan="9" class="empty-message">No harvests recorded yet.<br><a href="{{ url_for('add_harvest') }}">Add your first harvest</a></td></tr>
+    <tr><td colspan="{{ 9 if can_manage_agriculture else 8 }}" class="empty-message">No harvests recorded yet.{% if can_manage_agriculture %}<br><a href="{{ url_for('add_harvest') }}">Add your first harvest</a>{% endif %}</td></tr>
     {% endfor %}
     </tbody>
 </table>

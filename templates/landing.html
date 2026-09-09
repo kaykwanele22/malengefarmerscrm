@@ -3,424 +3,321 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-    <title>Malenge Farmers | Smart Farming Management</title>
-
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <meta name="description" content="Malenge Farmers CRM - Cooperative management and agricultural record system.">
+    <title>Malenge Farmers CRM | Cooperative Management System</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/landing.css') }}">
 </head>
-
 <body>
-
-    <!-- NAVIGATION -->
- <nav class="navbar">
-    <div class="nav-container">
-
-        <a href="/" class="logo">
-            🌱 Malenge Farmers
-        </a>
-
-        <button class="menu-toggle" id="menuToggle">
-            ☰
-        </button>
-
-        <div class="nav-links" id="navLinks">
-            <a href="/">Home</a>
-            <a href="#about">About</a>
-            <a href="#services">Services</a>
-            <a href="#contact">Contact</a>
-
-            <a href="/login" class="login-btn">Login</a>
-            <a href="/register" class="get-started-btn">Get Started</a>
-        </div>
-
-    </div>
-</nav>
-
-
-    <!-- HERO -->
-    <section class="hero" id="home">
-
-        <div class="hero-content">
-
-            <div class="badge">
-                🌾 Smart Farming Management Platform
-            </div>
-
-            <h1>
-                Empowering Farmers.
-                <span>Growing Communities.</span>
-            </h1>
-
-            <p>
-                Manage farmers, farms, production and sales from one
-                simple and powerful platform.
-            </p>
-
-            <div class="hero-actions">
-
-                <a href="/login" class="button large-button">
-                    Get Started →
+    <!-- HEADER -->
+    <header class="site-header">
+        <nav class="navbar">
+            <div class="nav-container">
+                <a href="/" class="brand">
+                    <div class="brand-mark">🌱</div>
+                    <div class="brand-copy">
+                        <strong>Malenge Farmers</strong>
+                        <span>Cooperative Management System</span>
+                    </div>
                 </a>
-
-                <a href="#features" class="outline-button">
-                    Explore Features
-                </a>
-
+                <button class="mobile-menu-button" id="mobileMenuButton" type="button" aria-label="Open navigation">☰</button>
+                <div class="nav-links" id="navLinks">
+                    <a href="#home">Home</a>
+                    <a href="#platform">Platform</a>
+                    <a href="#structure">Cooperatives</a>
+                    <a href="#about">About</a>
+                    <a href="{{ url_for('login') }}" class="nav-login">Login to CRM</a>
+                </div>
             </div>
+        </nav>
+    </header>
 
-        </div>
-
-
-        <!-- DASHBOARD PREVIEW -->
-        <div class="dashboard-preview">
-
-            <div class="preview-top">
-                <span>Farm Overview</span>
-                <span class="live">● Live</span>
-            </div>
-
-            <div class="production">
-
-                <small>Total Production</small>
-
-                <h2>12,480 kg</h2>
-
-                <span class="positive">
-                    ↑ 18.4% this month
-                </span>
-
-            </div>
-
-
-            <div class="progress-section">
-
-                <div class="progress-label">
-                    <span>Monthly Target</span>
-                    <strong>78%</strong>
+    <main>
+        <!-- HERO -->
+        <section class="hero" id="home">
+            <div class="hero-container">
+                <div class="hero-copy">
+                    <div class="eyebrow">MALENGE FARMERS CRM</div>
+                    <h1>One connected system for <span>Malenge's agricultural records.</span></h1>
+                    <p class="hero-description">Manage cooperative information, farmers, farms, farming activities, meetings and financial records from one secure platform.</p>
+                    <div class="hero-buttons">
+                        <a href="{{ url_for('login') }}" class="button button-primary">Login to CRM <span>→</span></a>
+                        <a href="#platform" class="button button-secondary">Explore the system</a>
+                    </div>
+                    <div class="hero-access-note">
+                        <span class="access-icon">🔐</span>
+                        <span>Secure access for authorized cooperative executives and staff</span>
+                    </div>
                 </div>
 
-                <div class="progress">
-                    <div class="progress-fill"></div>
+                <!-- PRODUCT VISUAL -->
+                <div class="product-visual">
+                    <div class="browser-window">
+                        <div class="browser-top">
+                            <div class="browser-dots"><span></span><span></span><span></span></div>
+                            <div class="browser-address">Malenge Farmers CRM</div>
+                        </div>
+                        <div class="crm-preview">
+                            <!-- PREVIEW SIDEBAR -->
+                            <aside class="preview-sidebar">
+                                <div class="preview-brand">
+                                    <div class="preview-brand-icon">🌱</div>
+                                    <div><strong>Malenge</strong><span>Farmers CRM</span></div>
+                                </div>
+                                <div class="preview-nav">
+                                    <div class="preview-nav-item active"><span>▦</span>Dashboard</div>
+                                    <div class="preview-nav-item"><span>🏢</span>Cooperatives</div>
+                                    <div class="preview-nav-item"><span>👥</span>Farmers</div>
+                                    <div class="preview-nav-item"><span>🚜</span>Farms</div>
+                                    <div class="preview-nav-item"><span>🌾</span>Farming</div>
+                                    <div class="preview-nav-item"><span>📝</span>Meetings</div>
+                                    <div class="preview-nav-item"><span>💰</span>Finance</div>
+                                </div>
+                            </aside>
+                            <!-- PREVIEW CONTENT -->
+                            <div class="preview-main">
+                                <div class="preview-heading">
+                                    <div>
+                                        <span>MALENGE FARMERS</span>
+                                        <h3>Central Management</h3>
+                                    </div>
+                                    <div class="preview-user">KN</div>
+                                </div>
+                                <div class="preview-banner">
+                                    <div>
+                                        <span>COOPERATIVE RECORD SYSTEM</span>
+                                        <h4>Everything organized in one place.</h4>
+                                    </div>
+                                    <div class="preview-banner-icon">🌿</div>
+                                </div>
+                                <div class="preview-modules">
+                                    <div class="preview-module"><div class="module-icon">🏢</div><strong>Cooperatives</strong><span>Structure & governance</span></div>
+                                    <div class="preview-module"><div class="module-icon">👨‍🌾</div><strong>Farmers</strong><span>Farmer records</span></div>
+                                    <div class="preview-module"><div class="module-icon">🚜</div><strong>Farms</strong><span>Land & production</span></div>
+                                    <div class="preview-module"><div class="module-icon">📝</div><strong>Meetings</strong><span>Minutes & resolutions</span></div>
+                                    <div class="preview-module"><div class="module-icon">💰</div><strong>Finance</strong><span>Financial records</span></div>
+                                    <div class="preview-module"><div class="module-icon">📊</div><strong>Reports</strong><span>Management insights</span></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-
             </div>
+        </section>
 
+        <!-- ORGANIZATION STRIP -->
+        <section class="organization-strip">
+            <div class="organization-container">
+                <div class="organization-item"><strong>1</strong><span>Secondary Cooperative</span></div>
+                <div class="organization-divider"></div>
+                <div class="organization-item"><strong>2</strong><span>Primary Cooperatives</span></div>
+                <div class="organization-divider"></div>
+                <div class="organization-item"><strong>15</strong><span>Executive Positions</span></div>
+                <div class="organization-divider"></div>
+                <div class="organization-item"><strong>1</strong><span>Central Record System</span></div>
+            </div>
+        </section>
 
-            <div class="preview-stats">
-
-                <div>
-                    <small>Farmers</small>
-                    <strong>248</strong>
+        <!-- PLATFORM -->
+        <section class="section platform-section" id="platform">
+            <div class="section-container">
+                <div class="section-heading">
+                    <span class="section-label">ONE CONNECTED PLATFORM</span>
+                    <h2>Everything Malenge manages, <span>connected in one place.</span></h2>
+                    <p>The CRM brings cooperative administration and agricultural information together so records are easier to maintain, access and understand.</p>
                 </div>
-
-                <div>
-                    <small>Farms</small>
-                    <strong>156</strong>
+                <div class="platform-grid">
+                    <article class="platform-card">
+                        <div class="platform-icon">🏢</div>
+                        <h3>Cooperative Management</h3>
+                        <p>Maintain the relationship between Malenge Secondary Cooperative and its two Primary Cooperatives.</p>
+                        <span class="card-link">Structure & governance →</span>
+                    </article>
+                    <article class="platform-card">
+                        <div class="platform-icon">👥</div>
+                        <h3>Members & Farmers</h3>
+                        <p>Keep member and farmer records organized with contact information, cooperative relationships and farming details.</p>
+                        <span class="card-link">Centralized records →</span>
+                    </article>
+                    <article class="platform-card">
+                        <div class="platform-icon">🌾</div>
+                        <h3>Farms & Farming</h3>
+                        <p>Record farms, crops, hectares, planting dates, harvest information and farming activities.</p>
+                        <span class="card-link">Agricultural records →</span>
+                    </article>
+                    <article class="platform-card">
+                        <div class="platform-icon">📝</div>
+                        <h3>Meetings & Governance</h3>
+                        <p>Organize agendas, minutes, resolutions and important cooperative decisions.</p>
+                        <span class="card-link">Governance records →</span>
+                    </article>
+                    <article class="platform-card">
+                        <div class="platform-icon">💰</div>
+                        <h3>Financial Records</h3>
+                        <p>Record cooperative contributions, expenses, payments and supporting financial information.</p>
+                        <span class="card-link">Basic finance →</span>
+                    </article>
+                    <article class="platform-card">
+                        <div class="platform-icon">📊</div>
+                        <h3>Reports & Documents</h3>
+                        <p>Bring important information together for cooperative reporting, oversight and decision-making.</p>
+                        <span class="card-link">Better visibility →</span>
+                    </article>
                 </div>
+            </div>
+        </section>
 
-                <div>
-                    <small>Revenue</small>
-                    <strong>R84K</strong>
+        <!-- CONNECTED RECORDS -->
+        <section class="section connected-section">
+            <div class="section-container connected-container">
+                <div class="connected-copy">
+                    <span class="section-label">FROM FARM TO COOPERATIVE</span>
+                    <h2>Records should work together, not live in separate places.</h2>
+                    <p>Farming information is connected to the people, farms and cooperatives responsible for it. This gives Malenge a clearer view of what is happening across its operations.</p>
+                    <div class="connected-list">
+                        <div class="connected-item"><span>✓</span><div><strong>Register once</strong><p>Keep farmers and cooperative information in one system.</p></div></div>
+                        <div class="connected-item"><span>✓</span><div><strong>Record activity</strong><p>Capture farms, crops, harvests and meetings.</p></div></div>
+                        <div class="connected-item"><span>✓</span><div><strong>Maintain history</strong><p>Build an organized record of cooperative activity.</p></div></div>
+                        <div class="connected-item"><span>✓</span><div><strong>Report clearly</strong><p>Use recorded information for oversight and decisions.</p></div></div>
+                    </div>
                 </div>
-
+                <div class="connected-visual">
+                    <div class="connection-card connection-main">
+                        <div class="connection-icon">🌱</div>
+                        <strong>Malenge Farmers CRM</strong>
+                        <span>Central Record System</span>
+                    </div>
+                    <div class="connection-line"></div>
+                    <div class="connection-grid">
+                        <div class="connection-card">👥<strong>People</strong></div>
+                        <div class="connection-card">🚜<strong>Farms</strong></div>
+                        <div class="connection-card">🌾<strong>Farming</strong></div>
+                        <div class="connection-card">📝<strong>Meetings</strong></div>
+                        <div class="connection-card">💰<strong>Finance</strong></div>
+                        <div class="connection-card">📊<strong>Reports</strong></div>
+                    </div>
+                </div>
             </div>
+        </section>
 
-        </div>
-
-    </section>
-
-
-    <!-- STATISTICS -->
-    <section class="statistics">
-
-        <div class="stat">
-            <strong>250+</strong>
-            <span>Farmers</span>
-        </div>
-
-        <div class="stat">
-            <strong>150+</strong>
-            <span>Farms Managed</span>
-        </div>
-
-        <div class="stat">
-            <strong>12K+</strong>
-            <span>KG Production</span>
-        </div>
-
-        <div class="stat">
-            <strong>50+</strong>
-            <span>Communities</span>
-        </div>
-
-    </section>
-
-
-    <!-- FEATURES -->
-    <section class="section" id="features">
-
-        <div class="section-heading">
-
-            <span class="section-label">
-                PLATFORM FEATURES
-            </span>
-
-            <h2>
-                Everything you need to
-                <span>manage your farm.</span>
-            </h2>
-
-            <p>
-                Keep your agricultural operations organized,
-                measurable and easy to manage.
-            </p>
-
-        </div>
-
-
-        <div class="features-grid">
-
-            <div class="feature-card">
-
-                <div class="feature-icon">👨‍🌾</div>
-
-                <h3>Farmer Management</h3>
-
-                <p>
-                    Create farmer profiles and keep important
-                    information organized in one place.
-                </p>
-
+        <!-- COOPERATIVE STRUCTURE -->
+        <section class="section structure-section" id="structure">
+            <div class="section-container">
+                <div class="section-heading">
+                    <span class="section-label">MALENGE COOPERATIVE STRUCTURE</span>
+                    <h2>Built around the way <span>Malenge actually operates.</span></h2>
+                    <p>The system reflects the organizational relationship between the Secondary Cooperative and the two Primary Cooperatives.</p>
+                </div>
+                <div class="cooperative-tree">
+                    <div class="secondary-card">
+                        <div class="cooperative-tag">SECONDARY COOPERATIVE</div>
+                        <div class="cooperative-card-icon">🏢</div>
+                        <h3>Malenge Secondary Cooperative</h3>
+                        <p>Central coordination and cooperative oversight.</p>
+                    </div>
+                    <div class="tree-connector">
+                        <span class="tree-vertical"></span>
+                        <span class="tree-horizontal"></span>
+                    </div>
+                    <div class="primary-cooperatives">
+                        <div class="primary-card">
+                            <div class="cooperative-tag">PRIMARY COOPERATIVE</div>
+                            <div class="cooperative-card-icon">🌱</div>
+                            <h3>Siyaphumla Primary AgriCo-op</h3>
+                            <p>Primary agricultural cooperative within the Malenge structure.</p>
+                        </div>
+                        <div class="primary-card">
+                            <div class="cooperative-tag">PRIMARY COOPERATIVE</div>
+                            <div class="cooperative-card-icon">🌾</div>
+                            <h3>Vimba Primary AgriCo-op</h3>
+                            <p>Primary agricultural cooperative within the Malenge structure.</p>
+                        </div>
+                    </div>
+                </div>
             </div>
+        </section>
 
-
-            <div class="feature-card">
-
-                <div class="feature-icon">🌱</div>
-
-                <h3>Farm Management</h3>
-
-                <p>
-                    Manage farms, locations, sizes, crops and
-                    farming activities.
-                </p>
-
+        <!-- ABOUT -->
+        <section class="section about-section" id="about">
+            <div class="section-container about-container">
+                <div class="about-copy">
+                    <span class="section-label">ABOUT MALENGE FARMERS</span>
+                    <h2>Better records support better cooperative management.</h2>
+                    <p>Malenge Farmers CRM was created to centralize important cooperative and agricultural information.</p>
+                    <p>Instead of relying only on notebooks, paper files and disconnected spreadsheets, authorized executives and staff can manage important records from one secure system.</p>
+                    <a href="{{ url_for('login') }}" class="text-link">Access Malenge Farmers CRM →</a>
+                </div>
+                <div class="about-principles">
+                    <div class="principle">
+                        <div class="principle-number">01</div>
+                        <div><h3>Organized</h3><p>Important records are stored in a consistent structure.</p></div>
+                    </div>
+                    <div class="principle">
+                        <div class="principle-number">02</div>
+                        <div><h3>Connected</h3><p>Cooperative and farming information works together.</p></div>
+                    </div>
+                    <div class="principle">
+                        <div class="principle-number">03</div>
+                        <div><h3>Accountable</h3><p>Authorized users can maintain traceable cooperative records.</p></div>
+                    </div>
+                    <div class="principle">
+                        <div class="principle-number">04</div>
+                        <div><h3>Practical</h3><p>Designed around real Malenge management needs.</p></div>
+                    </div>
+                </div>
             </div>
+        </section>
 
-
-            <div class="feature-card">
-
-                <div class="feature-icon">📊</div>
-
-                <h3>Production Tracking</h3>
-
-                <p>
-                    Record harvests, quantities and production
-                    performance over time.
-                </p>
-
+        <!-- CTA -->
+        <section class="cta-section">
+            <div class="cta-container">
+                <div class="cta-copy">
+                    <span>MALENGE FARMERS CRM</span>
+                    <h2>One place for Malenge's records.</h2>
+                    <p>Authorized executives and staff can securely access the cooperative management system.</p>
+                </div>
+                <a href="{{ url_for('login') }}" class="cta-button">Login to CRM <span>→</span></a>
             </div>
-
-
-            <div class="feature-card">
-
-                <div class="feature-icon">💰</div>
-
-                <h3>Sales & Payments</h3>
-
-                <p>
-                    Track sales, customers, prices, payments
-                    and farm revenue.
-                </p>
-
-            </div>
-
-
-            <div class="feature-card">
-
-                <div class="feature-icon">📈</div>
-
-                <h3>Reports & Analytics</h3>
-
-                <p>
-                    Turn farming data into useful reports
-                    and business insights.
-                </p>
-
-            </div>
-
-
-            <div class="feature-card">
-
-                <div class="feature-icon">🔐</div>
-
-                <h3>Secure Access</h3>
-
-                <p>
-                    Protect your farming information with
-                    secure user accounts and access control.
-                </p>
-
-            </div>
-
-        </div>
-
-    </section>
-
-
-    <!-- ABOUT -->
-    <section class="about" id="about">
-
-        <div class="about-text">
-
-            <span class="section-label">
-                ABOUT MALENGE FARMERS
-            </span>
-
-            <h2>
-                Technology that works
-                <span>for farmers.</span>
-            </h2>
-
-            <p>
-                Malenge Farmers is designed to make agricultural
-                management simpler, more organized and more
-                data-driven.
-            </p>
-
-            <p>
-                Instead of depending on notebooks, spreadsheets
-                and scattered records, farmers and agricultural
-                organizations can manage their information from
-                one centralized platform.
-            </p>
-
-            <a href="/login" class="button">
-                Start Managing Your Farm →
-            </a>
-
-        </div>
-
-
-        <div class="about-list">
-
-            <div class="about-item">
-                <strong>01</strong>
-                <span>Organize farmer information</span>
-            </div>
-
-            <div class="about-item">
-                <strong>02</strong>
-                <span>Manage farms and crops</span>
-            </div>
-
-            <div class="about-item">
-                <strong>03</strong>
-                <span>Track production</span>
-            </div>
-
-            <div class="about-item">
-                <strong>04</strong>
-                <span>Monitor sales and revenue</span>
-            </div>
-
-        </div>
-
-    </section>
-
-
-    <!-- HOW IT WORKS -->
-    <section class="section" id="how-it-works">
-
-        <div class="section-heading">
-
-            <span class="section-label">
-                HOW IT WORKS
-            </span>
-
-            <h2>
-                From the farm
-                <span>to your dashboard.</span>
-            </h2>
-
-        </div>
-
-
-        <div class="steps">
-
-            <div class="step">
-                <div class="step-number">1</div>
-                <h3>Register Farmers</h3>
-                <p>Add farmers and their information.</p>
-            </div>
-
-            <div class="step">
-                <div class="step-number">2</div>
-                <h3>Add Farms</h3>
-                <p>Connect farms, crops and locations.</p>
-            </div>
-
-            <div class="step">
-                <div class="step-number">3</div>
-                <h3>Record Production</h3>
-                <p>Track harvests and production.</p>
-            </div>
-
-            <div class="step">
-                <div class="step-number">4</div>
-                <h3>Track Sales</h3>
-                <p>Record sales and payments.</p>
-            </div>
-
-            <div class="step">
-                <div class="step-number">5</div>
-                <h3>View Reports</h3>
-                <p>Understand your farming performance.</p>
-            </div>
-
-        </div>
-
-    </section>
-
-
-    <!-- FINAL CTA -->
-    <section class="cta">
-
-        <div>
-
-            <h2>Ready to grow smarter?</h2>
-
-            <p>
-                Start building a better way to manage your
-                farming operation.
-            </p>
-
-        </div>
-
-        <a href="/login" class="cta-button">
-            Get Started →
-        </a>
-
-    </section>
-
+        </section>
+    </main>
 
     <!-- FOOTER -->
-    <footer>
-
-        <div class="footer-brand">
-            🌱 Malenge Farmers
+    <footer class="footer">
+        <div class="footer-container">
+            <div class="footer-main">
+                <div class="footer-brand">
+                    <div class="footer-mark">🌱</div>
+                    <div>
+                        <strong>Malenge Farmers</strong>
+                        <span>Cooperative Management & Agricultural Record System</span>
+                    </div>
+                </div>
+                <div class="developer-credit">
+                    <span>Developed by</span>
+                    <strong>KayCode Labs</strong>
+                    <small>Software. Systems. Automation.</small>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <span>© 2026 Malenge Farmers. All rights reserved.</span>
+                <a href="{{ url_for('login') }}">CRM Login</a>
+            </div>
         </div>
-
-        <p>
-            Empowering farmers. Growing communities.
-        </p>
-
-        <div class="footer-bottom">
-            © 2026 Malenge Farmers. All rights reserved.
-        </div>
-
     </footer>
-<s<script src="{{ url_for('static', filename='js/app.js') }}"></script>
 
+    <!-- MOBILE NAVIGATION SCRIPT -->
+    <script>
+        const mobileMenuButton = document.getElementById("mobileMenuButton");
+        const navLinks = document.getElementById("navLinks");
+
+        mobileMenuButton.addEventListener("click", function() {
+            navLinks.classList.toggle("open");
+        });
+
+        navLinks.querySelectorAll("a").forEach(function(link) {
+            link.addEventListener("click", function() {
+                navLinks.classList.remove("open");
+            });
+        });
+    </script>
 </body>
 </html>

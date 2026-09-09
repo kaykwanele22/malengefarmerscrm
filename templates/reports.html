@@ -97,7 +97,7 @@
             <h2>Recent Sales</h2>
             <p>Latest sales recorded in the CRM.</p>
         </div>
-        <a href="{{ url_for('sales') }}" class="view-all-link">View All Sales</a>
+        {% if can_view_business %}<a href="{{ url_for('sales_list') }}" class="view-all-link">View All Sales</a>{% endif %}
     </div>
     <div class="table-container">
         <table>
@@ -140,7 +140,7 @@
             <h2>Recent Payments</h2>
             <p>Latest payments received from buyers.</p>
         </div>
-        <a href="{{ url_for('payments') }}" class="view-all-link">View All Payments</a>
+        {% if can_view_business %}<a href="{{ url_for('payments_list') }}" class="view-all-link">View All Payments</a>{% endif %}
     </div>
     <div class="table-container">
         <table>

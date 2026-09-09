@@ -4,6 +4,11 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/crops.css') }}">
+<style>
+.lifecycle-note{margin-top:8px;color:#66756c;font-size:12px;line-height:1.5}
+.lifecycle-box{margin-bottom:22px;padding:15px 17px;background:#f2f8f4;border:1px solid #d7e7dc;border-radius:10px;color:#365744;font-size:13px;line-height:1.55}
+.lifecycle-box strong{color:#17472d}
+</style>
 {% endblock %}
 
 {% block content %}
@@ -13,11 +18,18 @@
         <h1>{% if crop %}Edit Crop{% else %}Add Crop{% endif %}</h1>
         <p>Record crop information for a registered farm.</p>
     </div>
-    <a href="{{ url_for('crops') }}" class="back-button">← Back to Crops</a>
+    <a href="{{ url_for('crops_list') }}" class="back-button">← Back to Crops</a>
 </div>
 
 <!-- CROP FORM -->
 <div class="crop-form-card">
+    <!-- LIFECYCLE NOTE -->
+    <div class="lifecycle-box">
+        <strong>Crop lifecycle:</strong>
+        Planted → Growing → Ready for Harvest → Partially Harvested → Harvested.
+        Recording a harvest updates the crop automatically. Use <strong>Failed</strong> when the crop is lost or cannot be harvested.
+    </div>
+
     <form method="POST">
         <div class="form-grid">
             <!-- CROP NAME -->
@@ -48,7 +60,7 @@
             <!-- AREA PLANTED -->
             <div class="form-group">
                 <label for="area_planted">Area Planted (hectares)</label>
-                <input type="number" id="area_planted" name="area_planted" step="0.01" min="0" value="{{ crop.area_planted if crop and crop.area_planted is not none else '' }}" placeholder="Example: 2.5">
+                <input type="number" id="area_planted" name="area_planted" step="0.01" min="0.01" value="{{ crop.area_planted if crop and crop.area_planted is not none else '' }}" placeholder="Example: 2.5">
             </div>
 
             <!-- PLANTING DATE -->
@@ -61,6 +73,7 @@
             <div class="form-group">
                 <label for="expected_harvest_date">Expected Harvest Date</label>
                 <input type="date" id="expected_harvest_date" name="expected_harvest_date" value="{{ crop.expected_harvest_date.strftime('%Y-%m-%d') if crop and crop.expected_harvest_date else '' }}">
+                <div class="lifecycle-note">This is an estimate. It cannot be earlier than the planting date.</div>
             </div>
 
             <!-- STATUS -->
@@ -70,9 +83,11 @@
                     <option value="Planted" {% if not crop or crop.status == "Planted" %}selected{% endif %}>Planted</option>
                     <option value="Growing" {% if crop and crop.status == "Growing" %}selected{% endif %}>Growing</option>
                     <option value="Ready for Harvest" {% if crop and crop.status == "Ready for Harvest" %}selected{% endif %}>Ready for Harvest</option>
+                    <option value="Partially Harvested" {% if crop and crop.status == "Partially Harvested" %}selected{% endif %}>Partially Harvested</option>
                     <option value="Harvested" {% if crop and crop.status == "Harvested" %}selected{% endif %}>Harvested</option>
                     <option value="Failed" {% if crop and crop.status == "Failed" %}selected{% endif %}>Failed</option>
                 </select>
+                <div class="lifecycle-note">Partially Harvested and Harvested require at least one harvest record.</div>
             </div>
 
             <!-- NOTES -->
@@ -82,11 +97,27 @@
             </div>
         </div>
 
-        <!-- FORM ACTIONS -->
+        <!-- ACTIONS -->
         <div class="form-actions">
-            <a href="{{ url_for('crops') }}" class="cancel-button">Cancel</a>
+            <a href="{{ url_for('crops_list') }}" class="cancel-button">Cancel</a>
             <button type="submit" class="save-button">{% if crop %}Update Crop{% else %}Save Crop{% endif %}</button>
         </div>
     </form>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    (function() {
+        const plantingDate = document.getElementById("planting_date");
+        const expectedHarvestDate = document.getElementById("expected_harvest_date");
+        if (!plantingDate || !expectedHarvestDate) return;
+
+        function syncExpectedHarvestMinimum() {
+            expectedHarvestDate.min = plantingDate.value || "";
+        }
+        plantingDate.addEventListener("change", syncExpectedHarvestMinimum);
+        syncExpectedHarvestMinimum();
+    })();
+</script>
 {% endblock %}
