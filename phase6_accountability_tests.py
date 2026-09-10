@@ -141,7 +141,11 @@ class Phase6AccountabilityTests(unittest.TestCase):
             },
             content_type="multipart/form-data",
         )
-        self.assertEqual(response.status_code, 400)
+        # Browser form validation uses POST/Redirect/GET, so rejected POSTs return 303.
+        self.assertEqual(response.status_code, 303)
+        with self.crm.app.app_context():
+            self.assertEqual(self.crm.MeetingDocument.query.filter_by(meeting_id=meeting_id).count(), 1)
+        self.assertEqual(len(list(self.crm.ACCOUNTABILITY_UPLOAD_DIR.glob("*"))), 1)
 
     def test_full_resolution_to_verified_closure_workflow(self):
         meeting_id = self.create_confirmed_meeting()
@@ -239,7 +243,10 @@ class Phase6AccountabilityTests(unittest.TestCase):
             },
             content_type="multipart/form-data",
         )
-        self.assertEqual(response.status_code, 400)
+        # Rejected browser uploads are redirected back with form feedback (PRG pattern).
+        self.assertEqual(response.status_code, 303)
+        with self.crm.app.app_context():
+            self.assertEqual(self.crm.MeetingDocument.query.filter_by(meeting_id=meeting_id).count(), 0)
         self.assertEqual(list(self.crm.ACCOUNTABILITY_UPLOAD_DIR.glob("*")), [])
 
 
