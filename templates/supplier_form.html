@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}{% if supplier %}Edit Supplier{% else %}Add Supplier{% endif %} | Malenge Farmers CRM{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{{ url_for('static', filename='css/extended_modules.css') }}">{% endblock %}
+{% block content %}
+<div class="ext-page"><div class="ext-head"><div><span class="ext-eyebrow">Business Records</span><h1>{% if supplier %}Edit Supplier{% else %}Add Supplier{% endif %}</h1><p>Maintain supplier contact and category details.</p></div><a class="ext-btn" href="{{ url_for('suppliers_list') }}">← Suppliers</a></div>
+<section class="ext-card"><form method="POST" class="ext-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="ext-grid">
+<div class="ext-field"><label>Name *</label><input name="name" maxlength="150" required value="{{ supplier.name if supplier else '' }}"></div><div class="ext-field"><label>Contact Person</label><input name="contact_person" maxlength="150" value="{{ supplier.contact_person if supplier else '' }}"></div>
+<div class="ext-field"><label>Phone</label><input name="phone" maxlength="50" value="{{ supplier.phone if supplier else '' }}"></div><div class="ext-field"><label>Email</label><input name="email" type="email" maxlength="150" value="{{ supplier.email if supplier else '' }}"></div>
+<div class="ext-field"><label>Supplier Type</label><input name="supplier_type" maxlength="100" placeholder="Seed, fertilizer, transport..." value="{{ supplier.supplier_type if supplier else '' }}"></div><div class="ext-field"><label>Status</label><select name="status"><option value="Active" {% if not supplier or supplier.status=='Active' %}selected{% endif %}>Active</option><option value="Inactive" {% if supplier and supplier.status=='Inactive' %}selected{% endif %}>Inactive</option></select></div>
+<div class="ext-field full"><label>Address</label><input name="address" maxlength="250" value="{{ supplier.address if supplier else '' }}"></div><div class="ext-field full"><label>Notes</label><textarea name="notes">{{ supplier.notes if supplier else '' }}</textarea></div>
+<div class="ext-form-actions"><a class="ext-btn" href="{{ url_for('suppliers_list') }}">Cancel</a><button class="ext-btn primary" type="submit">Save Supplier</button></div></div></form></section></div>
+{% endblock %}

@@ -134,6 +134,7 @@
                 </div>
 
                 <form method="POST" action="{{ url_for('settings') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <div class="form-grid">
 
                         <div class="form-field">
@@ -220,6 +221,55 @@
                 </div>
             </section>
 
+            <!-- TWO-FACTOR AUTHENTICATION -->
+            <section class="settings-card">
+                <div class="settings-card-header">
+                    <h2>Google Authenticator</h2>
+                    <p>Two-factor authentication protects this CRM account after the password is entered.</p>
+                </div>
+
+                <div class="settings-card-body">
+                    <div class="access-list">
+                        <div class="access-row">
+                            <span>2FA Status</span>
+                            <strong>
+                                {% if not two_factor_policy_enabled() %}
+                                    <span class="access-badge" style="background:#fff1cf;color:#966314">Temporarily disabled by Admin</span>
+                                {% elif user.two_factor_enabled %}
+                                    <span class="access-badge">Enabled</span>
+                                {% else %}
+                                    <span class="access-badge" style="background:#fff1cf;color:#966314">Setup required</span>
+                                {% endif %}
+                            </strong>
+                        </div>
+                        <div class="access-row">
+                            <span>Recovery Codes Remaining</span>
+                            <strong>{{ recovery_code_count(user) if user.two_factor_enabled else '—' }}</strong>
+                        </div>
+                        <div class="access-row">
+                            <span>Enabled On</span>
+                            <strong>{{ format_sast(user.two_factor_confirmed_at, '%d %b %Y %H:%M') ~ ' SAST' if user.two_factor_confirmed_at else 'Not enabled yet' }}</strong>
+                        </div>
+                    </div>
+
+                    <div class="security-note" style="margin-top:16px">
+                        {% if not two_factor_policy_enabled() %}
+                        Google Authenticator enforcement is temporarily paused by the System Admin for testing. Your existing enrollment is preserved and will be used again when 2FA is reactivated.
+                        {% else %}
+                        Google Authenticator uses a rotating 6-digit code. Recovery codes should be kept somewhere safe and separate from this computer.
+                        {% endif %}
+                    </div>
+
+                    <div class="security-actions" style="margin-top:14px">
+                        {% if user.two_factor_enabled %}
+                            <a href="{{ url_for('two_factor_recovery_codes') }}" class="primary-button" style="text-decoration:none;display:inline-flex;align-items:center">Regenerate Recovery Codes</a>
+                        {% else %}
+                            <a href="{{ url_for('two_factor_setup') }}" class="primary-button" style="text-decoration:none;display:inline-flex;align-items:center">Set Up Google Authenticator</a>
+                        {% endif %}
+                    </div>
+                </div>
+            </section>
+
             <!-- PASSWORD -->
             <section class="settings-card">
                 <div class="settings-card-header">
@@ -231,6 +281,7 @@
                     <form method="POST"
                           action="{{ url_for('change_password') }}"
                           class="security-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
                         <div class="form-field">
                             <label for="current_password">Current Password *</label>

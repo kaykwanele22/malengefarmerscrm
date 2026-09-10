@@ -1,0 +1,29 @@
+MALENGE FARMERS CRM - PHASE 5 VALIDATION
+Date: 10 September 2026
+
+Runtime regression suites:
+- Full regression: 26 passed
+- Permission regression: 24 passed
+- Mobile regression: 4 passed
+- Security regression: 14 passed
+- Executive regression: 8 passed
+- Membership regression: 10 passed
+TOTAL: 86 passed
+
+Static project checks:
+- Python files checked: 21; syntax errors: 0
+- Jinja templates checked: 57; syntax errors: 0
+- Flask routes: 110; duplicate paths: 0
+- Static url_for references checked: 267; broken references: 0
+- CSS files checked: 8; unbalanced brace errors: 0
+- Alembic heads: 1
+- Current migration head: e4c2d8f7a105
+
+Migration checks performed:
+- Empty SQLite database upgraded through the full migration chain to e4c2d8f7a105.
+- A Phase 4 db.create_all()-style schema was detected, stamped at b7e1f4a9c203,
+  and upgraded successfully to e4c2d8f7a105.
+
+Primary Phase 5 workflow tested:
+Secretary registration -> auto member number -> lifecycle history -> Treasurer fee entry
+-> Pending Confirmation -> Chairperson approval -> fee balance update -> history/export/reporting.

@@ -115,6 +115,27 @@
                     <span>Dashboard</span>
                 </a>
 
+                {% if can_view_governance and not is_admin %}
+                <p class="nav-title">ACCOUNTABILITY</p>
+
+                <a href="{{ url_for('accountability_register') }}"
+                   class="nav-item {% if request.endpoint in [
+                       'accountability_register','resolution_detail','accountability_task_detail',
+                       'add_resolution','edit_resolution','update_accountability_task','upload_task_evidence',
+                       'verify_accountability_task'
+                   ] %}active{% endif %}">
+                    <span>✅</span><span>Accountability Register</span>
+                </a>
+
+                <a href="{{ url_for('meetings_list') }}"
+                   class="nav-item {% if request.endpoint in [
+                       'meetings_list','add_meeting','edit_meeting','meeting_detail','upload_meeting_document',
+                       'confirm_meeting','download_meeting_document'
+                   ] %}active{% endif %}">
+                    <span>📎</span><span>Meetings &amp; Evidence</span>
+                </a>
+                {% endif %}
+
 
                 <!-- =================================================
                      ADMIN MENU
@@ -136,6 +157,14 @@
                        'cooperatives_list','add_cooperative','edit_cooperative'
                    ] %}active{% endif %}">
                     <span>🏢</span><span>Cooperative Structure</span>
+                </a>
+
+                <a href="{{ url_for('executives_list') }}"
+                   class="nav-item {% if request.endpoint in [
+                       'executives_list','assign_executive','replace_executive',
+                       'deactivate_executive','executive_history'
+                   ] %}active{% endif %}">
+                    <span>👥</span><span>Executives</span>
                 </a>
 
                 <a href="{{ url_for('audit_logs') }}"

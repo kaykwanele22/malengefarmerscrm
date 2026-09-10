@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Assign Executive | Malenge Farmers CRM{% endblock %}
+{% block extra_css %}
+<style>
+.exec-form-page{max-width:900px;margin:0 auto}.exec-form-head{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;margin-bottom:24px}.exec-form-head h1{margin:4px 0 8px;color:#123f29;font-size:32px}.exec-form-head p{margin:0;color:#68766d;font-size:14px;line-height:1.6}.eyebrow{color:#26834f;font-size:11px;font-weight:800;letter-spacing:1.4px}.back{min-height:42px;padding:0 15px;display:inline-flex;align-items:center;border:1px solid #d7e3db;border-radius:9px;background:#fff;color:#315441;text-decoration:none;font-size:12px;font-weight:800}.exec-form-card{padding:26px;background:#fff;border:1px solid #e1e9e3;border-radius:16px;box-shadow:0 8px 24px rgba(18,63,41,.04)}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.field{display:flex;flex-direction:column;gap:7px}.field.full{grid-column:1/-1}.field label{color:#42564a;font-size:11px;font-weight:800}.field input,.field select,.field textarea{width:100%;padding:0 12px;border:1px solid #cad6ce;border-radius:9px;background:#fff;color:#27382e;font:inherit;font-size:13px;box-sizing:border-box}.field input,.field select{height:46px}.field textarea{min-height:100px;padding-top:12px;resize:vertical}.help{color:#849087;font-size:10px;line-height:1.5}.note{grid-column:1/-1;padding:14px 16px;border:1px solid #dbe8df;border-radius:10px;background:#f4f9f5;color:#496053;font-size:12px;line-height:1.6}.actions{grid-column:1/-1;padding-top:18px;display:flex;justify-content:flex-end;gap:10px;border-top:1px solid #edf2ee}.cancel,.save{min-height:43px;padding:0 17px;display:inline-flex;align-items:center;justify-content:center;border-radius:9px;text-decoration:none;font-size:12px;font-weight:800}.cancel{border:1px solid #d7e3db;background:#fff;color:#315441}.save{border:0;background:#23794a;color:#fff;cursor:pointer}@media(max-width:700px){.grid{grid-template-columns:1fr}.exec-form-head{flex-direction:column}}
+</style>
+{% endblock %}
+{% block content %}
+<div class="exec-form-page">
+    <header class="exec-form-head">
+        <div><span class="eyebrow">EXECUTIVE MANAGEMENT</span><h1>Assign Executive</h1><p>Assign an existing CRM login to one vacant executive position. The appointment becomes the user's active cooperative permission.</p></div>
+        <a class="back" href="{{ url_for('executives_list') }}">← Executives</a>
+    </header>
+    <form method="POST" class="exec-form-card">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="grid">
+            <div class="field full"><label for="user_id">CRM User *</label><select id="user_id" name="user_id" required><option value="" selected disabled>Select user...</option>{% for user in users %}{% set access = user.access_record %}<option value="{{ user.id }}">{{ user.fullname }} — {{ user.email }}{% if access %} · {{ access.role }} / {{ access.status }}{% endif %}</option>{% endfor %}</select><span class="help">System Admin cannot also hold a cooperative executive position. A user can have only one active executive appointment.</span></div>
+            <div class="field"><label for="cooperative_id">Cooperative *</label><select id="cooperative_id" name="cooperative_id" required><option value="" disabled {% if not selected_cooperative_id %}selected{% endif %}>Select cooperative...</option>{% for cooperative in cooperatives %}<option value="{{ cooperative.id }}" data-type="{{ cooperative.cooperative_type }}" {% if selected_cooperative_id == cooperative.id %}selected{% endif %}>{{ cooperative.name }} — {{ cooperative.cooperative_type }}</option>{% endfor %}</select></div>
+            <div class="field"><label for="role">Executive Position *</label><select id="role" name="role" required><option value="" disabled {% if not selected_role %}selected{% endif %}>Select position...</option>{% for type in ['Secondary','Primary'] %}{% for position in executive_positions %}{% set role = type ~ ' ' ~ position %}<option value="{{ role }}" data-type="{{ type }}" {% if selected_role == role %}selected{% endif %}>{{ role }}</option>{% endfor %}{% endfor %}</select></div>
+            <div class="field"><label for="start_date">Appointment Start Date *</label><input id="start_date" name="start_date" type="date" required value="{{ today.isoformat() }}"></div>
+            <div class="field full"><label for="notes">Appointment Notes</label><textarea id="notes" name="notes" maxlength="2000" placeholder="Optional: meeting/resolution reference, appointment notes, or context..."></textarea></div>
+            <div class="note"><strong>Governance rule:</strong> a cooperative can have only one active holder of each executive position. Replacements preserve the outgoing executive's appointment history rather than overwriting it.</div>
+            <div class="actions"><a class="cancel" href="{{ url_for('executives_list') }}">Cancel</a><button class="save" type="submit">Assign Executive</button></div>
+        </div>
+    </form>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+(function(){
+ const coop=document.getElementById('cooperative_id'); const role=document.getElementById('role');
+ function sync(){const selected=coop.options[coop.selectedIndex]; const type=selected ? selected.dataset.type : '';
+  Array.from(role.options).forEach(function(o){if(!o.value)return; const ok=!type||o.dataset.type===type; o.hidden=!ok;o.disabled=!ok;if(!ok&&o.selected)role.value='';});}
+ coop.addEventListener('change',sync);sync();
+})();
+</script>
+{% endblock %}

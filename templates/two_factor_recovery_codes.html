@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}2FA Recovery Codes | Malenge Farmers CRM{% endblock %}
+{% block extra_css %}
+<style>
+.recovery-page{max-width:760px;display:flex;flex-direction:column;gap:20px}.recovery-card{background:#fff;border:1px solid #dfe8e2;border-radius:16px;padding:24px}.recovery-card h1{margin:0 0 8px;color:#123f29}.recovery-card p{color:#68776e;line-height:1.55}.recovery-form{display:grid;gap:15px;margin-top:20px}.recovery-field label{display:block;margin-bottom:7px;font-size:11px;font-weight:800;color:#43574b}.recovery-field input{width:100%;height:46px;padding:0 12px;border:1px solid #cad6ce;border-radius:9px}.recovery-button{min-height:44px;border:0;border-radius:9px;background:#23794a;color:#fff;font-weight:800;cursor:pointer}.codes{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:18px}.code{padding:12px;background:#f5f9f6;border:1px solid #dbe6de;border-radius:9px;text-align:center;font-family:Consolas,monospace;font-weight:800}.warning{padding:14px;background:#fff6e7;border:1px solid #ead2a3;border-radius:10px;color:#70561f;font-size:12px;line-height:1.55}.back{display:inline-flex;margin-top:18px;color:#236d46;font-weight:800;text-decoration:none}@media(max-width:650px){.codes{grid-template-columns:1fr}}
+</style>
+{% endblock %}
+{% block content %}
+<div class="recovery-page">
+<section class="recovery-card">
+    {% if generated %}
+        <h1>New recovery codes</h1>
+        <div class="warning"><strong>Save these now.</strong> Generating these codes invalidated all previous recovery codes. These exact values will not be shown again.</div>
+        <div class="codes">{% for code in recovery_codes %}<div class="code">{{ code }}</div>{% endfor %}</div>
+        <a class="back" href="{{ url_for('settings') }}">← Back to Account Settings</a>
+    {% else %}
+        <h1>Regenerate recovery codes</h1>
+        <p>For security, confirm your current password and a current Google Authenticator code. All existing recovery codes will be invalidated.</p>
+        <form class="recovery-form" method="POST" action="{{ url_for('two_factor_recovery_codes') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="recovery-field"><label for="current_password">Current password</label><input id="current_password" name="current_password" type="password" autocomplete="current-password" required></div>
+            <div class="recovery-field"><label for="code">Google Authenticator code</label><input id="code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="8" required></div>
+            <button class="recovery-button" type="submit">Generate New Recovery Codes</button>
+        </form>
+        <a class="back" href="{{ url_for('settings') }}">← Cancel</a>
+    {% endif %}
+</section>
+</div>
+{% endblock %}

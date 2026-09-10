@@ -5,64 +5,52 @@
 {% block extra_css %}
 <style>
     .form-page{display:flex;flex-direction:column;gap:20px;max-width:980px}
-    .form-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap}
-    .form-head h1{margin:0;color:#173b2b;font-size:29px}
-    .form-head p{margin:7px 0 0;color:#6b7280;font-size:13px}
+    .form-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap}.form-head h1{margin:0;color:#173b2b;font-size:29px}.form-head p{margin:7px 0 0;color:#6b7280;font-size:13px}
     .back-btn,.cancel-btn{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:0 14px;border:1px solid #dce7df;border-radius:9px;color:#315441;background:#fff;text-decoration:none;font-size:12px;font-weight:700}
-    .form-note{padding:14px 16px;border:1px solid #dbe8df;border-radius:11px;background:#f3f8f4;color:#456052;font-size:12px;line-height:1.55}
-    .form-card{padding:22px;background:#fff;border:1px solid #e1e9e3;border-radius:14px}
-    .form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
-    .group{display:flex;flex-direction:column;gap:7px}
-    .group.full{grid-column:1/-1}
-    label{color:#31493b;font-size:12px;font-weight:700}
-    input,select,textarea{width:100%;padding:11px 12px;border:1px solid #d7e1da;border-radius:9px;background:#fff;color:#263d30;font:inherit;font-size:13px;box-sizing:border-box}
-    textarea{min-height:110px;resize:vertical}
-    .help{color:#89938d;font-size:10px;line-height:1.45}
-    .locked-value{padding:11px 12px;border:1px solid #e1e8e3;border-radius:9px;background:#f7f9f8;color:#315441;font-size:13px;font-weight:700}
-    .actions{grid-column:1/-1;display:flex;justify-content:flex-end;gap:10px;padding-top:18px;border-top:1px solid #edf2ee}
-    .save-btn{min-height:42px;padding:0 17px;border:0;border-radius:9px;background:#2e7d4f;color:#fff;font-size:12px;font-weight:800;cursor:pointer}
-    @media(max-width:700px){.form-grid{grid-template-columns:1fr}}
+    .form-note{padding:14px 16px;border:1px solid #dbe8df;border-radius:11px;background:#f3f8f4;color:#456052;font-size:12px;line-height:1.6}
+    .form-card{padding:22px;background:#fff;border:1px solid #e1e9e3;border-radius:14px}.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.group{display:flex;flex-direction:column;gap:7px}.group.full{grid-column:1/-1}
+    label{color:#31493b;font-size:12px;font-weight:700}input,select,textarea{width:100%;padding:11px 12px;border:1px solid #d7e1da;border-radius:9px;background:#fff;color:#263d30;font:inherit;font-size:13px;box-sizing:border-box}textarea{min-height:110px;resize:vertical}.help{color:#89938d;font-size:10px;line-height:1.45}
+    .locked-value{padding:11px 12px;border:1px solid #e1e8e3;border-radius:9px;background:#f7f9f8;color:#315441;font-size:13px;font-weight:800}.fee-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.fee-box{padding:12px;border:1px solid #e1e8e3;border-radius:10px;background:#fafcfb}.fee-box span{display:block;color:#89938d;font-size:10px}.fee-box strong{display:block;margin-top:5px;color:#234532;font-size:14px}
+    .reason-box{padding:13px;border:1px solid #efdfb5;border-radius:10px;background:#fffbf0}.actions{grid-column:1/-1;display:flex;justify-content:flex-end;gap:10px;padding-top:18px;border-top:1px solid #edf2ee}.save-btn{min-height:42px;padding:0 17px;border:0;border-radius:9px;background:#2e7d4f;color:#fff;font-size:12px;font-weight:800;cursor:pointer}
+    @media(max-width:700px){.form-grid,.fee-summary{grid-template-columns:1fr}}
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="form-page">
     <div class="form-head">
-        <div>
-            <h1>{% if membership %}Edit Member{% else %}Register Member{% endif %}</h1>
-            <p>Secretary-managed cooperative membership details.</p>
-        </div>
+        <div><h1>{% if membership %}Edit Member{% else %}Register Member{% endif %}</h1><p>Primary Secretary / Vice Secretary membership administration.</p></div>
         <a href="{{ url_for('memberships_list') }}" class="back-btn">← Back to Members</a>
     </div>
 
     <div class="form-note">
-        The Secretary / Vice Secretary maintains the membership record.
-        The amount actually paid is not editable here; the Treasurer records membership-fee money under Contributions,
-        and the Chairperson confirms it.
+        Member numbers are generated from the Primary cooperative code and become permanent once issued. Membership money is not editable here: the Treasurer records the payment and the Chairperson confirms it.
     </div>
 
     <form method="POST" class="form-card">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="form-grid">
             <div class="group full">
                 <label for="farmer_id">Member / Farmer *</label>
                 <select id="farmer_id" name="farmer_id" required>
-                    <option value="">Select person</option>
+                    <option value="">Select person from this Primary cooperative</option>
                     {% for farmer in farmers %}
-                    <option value="{{ farmer.id }}" {% if membership and membership.farmer_id == farmer.id %}selected{% endif %}>
-                        {{ farmer.fullname }} — {{ farmer.phone }}{% if farmer.cooperative %} — {{ farmer.cooperative.name }}{% endif %}
-                    </option>
+                    <option value="{{ farmer.id }}" {% if membership and membership.farmer_id == farmer.id %}selected{% endif %}>{{ farmer.fullname }} — {{ farmer.phone }}</option>
                     {% endfor %}
                 </select>
+                <span class="help">If the person is not listed, add the farmer/person record first.</span>
             </div>
 
             <div class="group">
-                <label for="member_number">Member Number *</label>
-                <input id="member_number" name="member_number" type="text" required maxlength="80" value="{{ membership.member_number if membership else '' }}" placeholder="e.g. SIYA-001">
+                <label>Member Number</label>
+                <div class="locked-value">{{ membership.member_number if membership else generated_member_number }}</div>
+                {% if membership %}<input type="hidden" name="member_number" value="{{ membership.member_number }}">{% endif %}
+                <span class="help">Automatically issued and locked after registration.</span>
             </div>
 
             <div class="group">
-                <label for="membership_type">Membership Type</label>
-                <input id="membership_type" name="membership_type" type="text" maxlength="80" value="{{ membership.membership_type if membership else 'Primary' }}">
+                <label>Membership Type</label>
+                <div class="locked-value">Primary</div>
             </div>
 
             <div class="group">
@@ -74,32 +62,42 @@
                 <label for="status">Status</label>
                 {% set current_status = membership.status if membership else 'Active' %}
                 <select id="status" name="status">
-                    {% for option in ['Active','Inactive','Suspended','Exited'] %}
-                    <option value="{{ option }}" {% if current_status == option %}selected{% endif %}>{{ option }}</option>
-                    {% endfor %}
+                    {% for option in membership_statuses %}<option value="{{ option }}" {% if current_status == option %}selected{% endif %}>{{ option }}</option>{% endfor %}
                 </select>
             </div>
 
             <div class="group">
                 <label for="fee_amount">Membership Fee Expected (R)</label>
                 <input id="fee_amount" name="fee_amount" type="number" min="0" step="0.01" value="{{ membership.fee_amount if membership else '300.00' }}">
-                <span class="help">The Secretary records what the member is expected to pay.</span>
+                <span class="help">Expected fee only; confirmed payments are controlled by Finance.</span>
             </div>
 
-            <div class="group">
-                <label>Confirmed Fee Paid</label>
-                <div class="locked-value">R {{ "{:,.2f}".format((membership.fee_paid if membership else 0)|float) }}</div>
-                <span class="help">Controlled by the Treasurer → Chairperson finance workflow.</span>
+            {% if membership %}
+            <div class="group full">
+                <label>Fee Position</label>
+                <div class="fee-summary">
+                    <div class="fee-box"><span>Expected</span><strong>R {{ "{:,.2f}".format(membership.fee_amount|float) }}</strong></div>
+                    <div class="fee-box"><span>Confirmed Paid</span><strong>R {{ "{:,.2f}".format(membership.fee_paid|float) }}</strong></div>
+                    <div class="fee-box"><span>Pending Confirmation</span><strong>R {{ "{:,.2f}".format(membership.fee_pending) }}</strong></div>
+                    <div class="fee-box"><span>Still to Pay</span><strong>R {{ "{:,.2f}".format(membership.fee_outstanding) }}</strong></div>
+                </div>
             </div>
+
+            <div class="group full reason-box">
+                <label for="status_reason">Status Change Reason</label>
+                <textarea id="status_reason" name="status_reason" placeholder="Required when changing a member to Suspended, Resigned, Deceased or Inactive."></textarea>
+                <span class="help">This explanation is stored permanently in Membership History.</span>
+            </div>
+            {% endif %}
 
             <div class="group full">
-                <label for="notes">Notes</label>
+                <label for="notes">Administrative Notes</label>
                 <textarea id="notes" name="notes">{{ membership.notes if membership and membership.notes else '' }}</textarea>
             </div>
 
             <div class="actions">
                 <a href="{{ url_for('memberships_list') }}" class="cancel-btn">Cancel</a>
-                <button type="submit" class="save-btn">{% if membership %}Save Changes{% else %}Register Member{% endif %}</button>
+                <button type="submit" class="save-btn">{% if membership %}Save Membership{% else %}Register Member{% endif %}</button>
             </div>
         </div>
     </form>

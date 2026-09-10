@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+
+{% block title %}Audit Logs | Malenge Farmers CRM{% endblock %}
+
+{% block extra_css %}
+<style>
+.audit-page{display:flex;flex-direction:column;gap:22px}
+.audit-hero{padding:26px 28px;border-radius:18px;background:linear-gradient(135deg,#123f29,#1e6943);color:#fff;display:flex;align-items:flex-start;justify-content:space-between;gap:22px;box-shadow:0 12px 34px rgba(18,63,41,.14)}
+.audit-hero .eyebrow{margin:0 0 7px;color:#bfe4cd;font-size:10px;font-weight:900;letter-spacing:1.4px;text-transform:uppercase}
+.audit-hero h1{margin:0 0 8px;font-size:30px}.audit-hero p{margin:0;color:#dbece1;font-size:12px;line-height:1.55;max-width:760px}
+.audit-export{min-height:42px;padding:0 15px;display:inline-flex;align-items:center;justify-content:center;border-radius:9px;background:#fff;color:#17482f;text-decoration:none;font-size:11px;font-weight:900;white-space:nowrap}
+.audit-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}.audit-stat{padding:18px;border:1px solid #e1e9e3;border-radius:14px;background:#fff}.audit-stat small{display:block;color:#738078;font-size:10px;font-weight:800;margin-bottom:8px}.audit-stat strong{display:block;color:#153e28;font-size:24px}.audit-stat span{display:block;margin-top:6px;color:#879189;font-size:9px}
+.audit-panel{background:#fff;border:1px solid #e1e9e3;border-radius:16px;overflow:hidden;box-shadow:0 8px 24px rgba(18,63,41,.04)}
+.audit-panel-head{padding:19px 21px;border-bottom:1px solid #edf2ee;display:flex;justify-content:space-between;gap:14px;align-items:center;flex-wrap:wrap}.audit-panel-head h2{margin:0;color:#173e29;font-size:19px}.audit-panel-head p{margin:4px 0 0;color:#7c8980;font-size:10px}
+.audit-filters{padding:16px 20px;border-bottom:1px solid #edf2ee;background:#fbfdfb;display:grid;grid-template-columns:minmax(240px,2fr) 1fr 1fr auto;gap:10px}.audit-filters input,.audit-filters select,.audit-filters button{height:42px;border:1px solid #d5e0d8;border-radius:9px;background:#fff;color:#35483c;font:inherit;font-size:11px;padding:0 11px}.audit-filters button{font-weight:800;cursor:pointer}
+.audit-result{padding:10px 20px;border-bottom:1px solid #edf2ee;color:#77837b;font-size:10px;display:flex;justify-content:space-between;gap:12px}
+.audit-table-wrap{overflow-x:auto}.audit-table{width:100%;border-collapse:collapse;min-width:1280px}.audit-table th{padding:11px 12px;background:#f6f9f7;border-bottom:1px solid #e5ece7;color:#718078;font-size:8px;text-align:left;text-transform:uppercase;letter-spacing:.4px}.audit-table td{padding:13px 12px;border-bottom:1px solid #edf2ee;color:#35483c;font-size:9px;vertical-align:top}.audit-table tr:hover td{background:#fbfdfb}
+.audit-table strong{color:#234433;font-size:10px}.audit-table .muted{display:block;margin-top:3px;color:#849087;font-size:8px;line-height:1.4}.audit-details{max-width:320px;line-height:1.5;overflow-wrap:anywhere}.audit-request{max-width:260px;line-height:1.45;overflow-wrap:anywhere}
+.badge{display:inline-flex;min-height:24px;padding:0 8px;align-items:center;border-radius:999px;font-size:8px;font-weight:900;white-space:nowrap}.green{background:#eaf6ee;color:#247347}.blue{background:#e8f0fb;color:#285d9b}.yellow{background:#fff1cc;color:#8c631c}.red{background:#fde6e6;color:#a23a3a}.grey{background:#eef2ef;color:#66756c}.purple{background:#f0eafa;color:#67459a}
+.audit-empty{display:none;padding:42px 20px;text-align:center;color:#7d8981;font-size:11px}.audit-empty strong{display:block;margin-bottom:5px;color:#294a38;font-size:14px}.audit-note{padding:14px 16px;border:1px solid #d9e7dd;border-radius:11px;background:#f4f9f5;color:#496053;font-size:10px;line-height:1.55}
+@media(max-width:1100px){.audit-stats{grid-template-columns:repeat(2,1fr)}.audit-filters{grid-template-columns:1fr 1fr}}@media(max-width:650px){.audit-hero{flex-direction:column}.audit-export{width:100%}.audit-stats,.audit-filters{grid-template-columns:1fr}.audit-result{flex-direction:column}}
+</style>
+{% endblock %}
+
+{% block content %}
+{% set stats = namespace(security=0, changes=0, finance=0) %}
+{% set security_actions = ['LOGIN_SUCCESS','LOGIN_FAILED','LOGIN_DENIED','LOGIN_RATE_LIMITED','TWO_FACTOR_CHALLENGE','TWO_FACTOR_ENROLLMENT_REQUIRED','TWO_FACTOR_ENABLED','TWO_FACTOR_SUCCESS','TWO_FACTOR_FAILED','TWO_FACTOR_RATE_LIMITED','TWO_FACTOR_RECOVERY_USED','TWO_FACTOR_RECOVERY_REGENERATED','TWO_FACTOR_ADMIN_RESET','TWO_FACTOR_GLOBAL_DISABLED','TWO_FACTOR_GLOBAL_ENABLED','LOGOUT','PASSWORD_CHANGE','ADMIN_PASSWORD_RESET','ACCESS_UPDATE','BOOTSTRAP_ADMIN_CREATE'] %}
+{% set change_actions = ['CREATE','UPDATE','DELETE','ADJUST','MEMBER_REGISTERED','MEMBERSHIP_UPDATED','MEMBERSHIP_STATUS_CHANGED','MEMBERSHIP_DELETED'] %}
+{% set finance_actions = ['FINANCE_RECORDED','FINANCE_RESUBMITTED','FINANCE_CONFIRMED','FINANCE_REJECTED'] %}
+{% for log in logs %}
+    {% if log.action in security_actions %}{% set stats.security = stats.security + 1 %}{% endif %}
+    {% if log.action in change_actions %}{% set stats.changes = stats.changes + 1 %}{% endif %}
+    {% if log.action in finance_actions %}{% set stats.finance = stats.finance + 1 %}{% endif %}
+{% endfor %}
+
+<div class="audit-page">
+    <header class="audit-hero">
+        <div>
+            <p class="eyebrow">System Administration</p>
+            <h1>Audit Logs</h1>
+            <p>Permanent activity history for authentication, access changes, cooperative records, finance and administrative actions. Request metadata is recorded to support troubleshooting and security review.</p>
+        </div>
+        <a class="audit-export" href="{{ url_for('admin_export_dataset', dataset='audit-logs') }}">⬇ Export Audit CSV</a>
+    </header>
+
+    <section class="audit-stats">
+        <article class="audit-stat"><small>Displayed Events</small><strong>{{ logs|length }}</strong><span>Latest 500 records</span></article>
+        <article class="audit-stat"><small>Security Events</small><strong>{{ stats.security }}</strong><span>Authentication and access</span></article>
+        <article class="audit-stat"><small>Record Changes</small><strong>{{ stats.changes }}</strong><span>Create, update, delete, adjust</span></article>
+        <article class="audit-stat"><small>Finance Events</small><strong>{{ stats.finance }}</strong><span>Recorded, approved or rejected</span></article>
+    </section>
+
+    <section class="audit-panel">
+        <div class="audit-panel-head">
+            <div><h2>System Activity</h2><p>Audit entries are read-only from the CRM interface.</p></div>
+        </div>
+
+        <div class="audit-filters">
+            <input type="search" id="auditSearch" placeholder="Search user, action, record, IP, path or details..." autocomplete="off">
+            <select id="actionFilter">
+                <option value="">All actions</option>
+                <option value="LOGIN">Login activity</option>
+                <option value="CREATE">Create</option>
+                <option value="UPDATE">Update</option>
+                <option value="DELETE">Delete</option>
+                <option value="FINANCE">Finance</option>
+                <option value="ACCESS">Access</option>
+                <option value="PASSWORD">Password</option>
+                <option value="BACKUP">Backup</option>
+                <option value="DATA_EXPORT">Export</option>
+            </select>
+            <select id="cooperativeFilter"><option value="">All cooperatives</option></select>
+            <button type="button" id="clearAuditFilters">Clear</button>
+        </div>
+
+        <div class="audit-result"><span id="auditResultCount">Showing {{ logs|length }} audit entries</span><span>Times shown in SAST (UTC+2)</span></div>
+
+        <div class="audit-table-wrap" id="auditTableWrap">
+            <table class="audit-table">
+                <thead><tr><th>Date &amp; Time</th><th>User</th><th>Action</th><th>Record</th><th>Details</th><th>Cooperative</th><th>Request</th><th>Request ID</th></tr></thead>
+                <tbody>
+                {% for log in logs %}
+                    {% set action = log.action or '' %}
+                    <tr class="audit-row"
+                        data-action="{{ action|upper }}"
+                        data-cooperative="{{ log.cooperative.name if log.cooperative else 'System' }}"
+                        data-search="{{ ((log.user.fullname if log.user else 'System') ~ ' ' ~ action ~ ' ' ~ (log.entity_type or '') ~ ' ' ~ (log.entity_id or '') ~ ' ' ~ (log.details or '') ~ ' ' ~ (log.cooperative.name if log.cooperative else 'System') ~ ' ' ~ (log.ip_address or '') ~ ' ' ~ (log.request_method or '') ~ ' ' ~ (log.request_path or '') ~ ' ' ~ (log.request_id or ''))|lower }}">
+                        <td><strong>{{ format_sast(log.created_at, '%d %b %Y') }}</strong><span class="muted">{{ format_sast(log.created_at, '%H:%M:%S') }} SAST</span></td>
+                        <td>{% if log.user %}<strong>{{ log.user.fullname }}</strong><span class="muted">User #{{ log.user_id }}</span>{% else %}<span class="badge grey">System / Unknown</span>{% endif %}</td>
+                        <td>
+                            {% if action in ['LOGIN_SUCCESS','TWO_FACTOR_ENABLED','TWO_FACTOR_SUCCESS','TWO_FACTOR_RECOVERY_USED','TWO_FACTOR_ADMIN_RESET','TWO_FACTOR_GLOBAL_ENABLED','FINANCE_CONFIRMED','BACKUP_CREATE','MEMBER_REGISTERED'] %}<span class="badge green">{{ action|replace('_',' ') }}</span>
+                            {% elif action in ['LOGIN_FAILED','LOGIN_DENIED','LOGIN_RATE_LIMITED','TWO_FACTOR_FAILED','TWO_FACTOR_RATE_LIMITED','DELETE','MEMBERSHIP_DELETED','FINANCE_REJECTED','ADMIN_PASSWORD_RESET','BACKUP_DELETE'] %}<span class="badge red">{{ action|replace('_',' ') }}</span>
+                            {% elif action in ['UPDATE','ACCESS_UPDATE','SYSTEM_SETTINGS_UPDATE','TWO_FACTOR_CHALLENGE','TWO_FACTOR_ENROLLMENT_REQUIRED','MEMBERSHIP_UPDATED','MEMBERSHIP_STATUS_CHANGED'] %}<span class="badge blue">{{ action|replace('_',' ') }}</span>
+                            {% elif action in ['FINANCE_RECORDED','FINANCE_RESUBMITTED','PASSWORD_CHANGE','ADJUST','TWO_FACTOR_RECOVERY_REGENERATED','TWO_FACTOR_GLOBAL_DISABLED'] %}<span class="badge yellow">{{ action|replace('_',' ') }}</span>
+                            {% elif action in ['DATA_EXPORT'] %}<span class="badge purple">{{ action|replace('_',' ') }}</span>
+                            {% elif action in ['CREATE','BOOTSTRAP_ADMIN_CREATE'] %}<span class="badge green">{{ action|replace('_',' ') }}</span>
+                            {% else %}<span class="badge grey">{{ action|replace('_',' ') }}</span>{% endif %}
+                        </td>
+                        <td><strong>{{ log.entity_type or 'System' }}</strong>{% if log.entity_id %}<span class="muted">Record #{{ log.entity_id }}</span>{% endif %}</td>
+                        <td class="audit-details">{{ log.details or 'No additional details recorded.' }}</td>
+                        <td>{% if log.cooperative %}<strong>{{ log.cooperative.name }}</strong>{% else %}<span class="badge grey">System</span>{% endif %}</td>
+                        <td class="audit-request"><strong>{{ log.request_method or '—' }}</strong> {{ log.request_path or '' }}<span class="muted">IP: {{ log.ip_address or 'not recorded' }}{% if log.user_agent %} · {{ log.user_agent|truncate(80, True) }}{% endif %}</span></td>
+                        <td><span class="muted" title="{{ log.request_id or '' }}">{{ (log.request_id or '—')|truncate(18, True, '…') }}</span></td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="audit-empty" id="auditEmpty"><strong>No matching audit entries</strong>Clear or change the filters to view other activity.</div>
+        {% if not logs %}<div class="audit-empty" style="display:block"><strong>No audit activity yet</strong>CRM activity will appear here as actions are recorded.</div>{% endif %}
+    </section>
+
+    <div class="audit-note">🔒 Audit records are intentionally read-only. The CRM provides review and export, but no normal edit or delete action for individual audit entries.</div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+    const search=document.getElementById('auditSearch');
+    const action=document.getElementById('actionFilter');
+    const coop=document.getElementById('cooperativeFilter');
+    const clear=document.getElementById('clearAuditFilters');
+    const count=document.getElementById('auditResultCount');
+    const empty=document.getElementById('auditEmpty');
+    const table=document.getElementById('auditTableWrap');
+    const rows=Array.from(document.querySelectorAll('.audit-row'));
+
+    Array.from(new Set(rows.map(r=>r.dataset.cooperative).filter(Boolean))).sort().forEach(function(name){
+        const option=document.createElement('option'); option.value=name; option.textContent=name; coop.appendChild(option);
+    });
+
+    function apply(){
+        const q=(search.value||'').trim().toLowerCase();
+        const a=(action.value||'').toUpperCase();
+        const c=coop.value||'';
+        let visible=0;
+        rows.forEach(function(row){
+            const show=(!q||(row.dataset.search||'').includes(q))&&(!a||(row.dataset.action||'').includes(a))&&(!c||row.dataset.cooperative===c);
+            row.style.display=show?'':'none'; if(show) visible++;
+        });
+        count.textContent='Showing '+visible+' audit '+(visible===1?'entry':'entries');
+        if(rows.length&&visible===0){table.style.display='none';empty.style.display='block'}else{table.style.display='block';empty.style.display='none'}
+    }
+    search.addEventListener('input',apply); action.addEventListener('change',apply); coop.addEventListener('change',apply);
+    clear.addEventListener('click',function(){search.value='';action.value='';coop.value='';apply();search.focus()});
+    apply();
+});
+</script>
+{% endblock %}

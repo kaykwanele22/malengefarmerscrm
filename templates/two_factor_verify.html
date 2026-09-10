@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Two-Factor Verification | Malenge Farmers CRM</title>
+    <style>
+        *{box-sizing:border-box}body{margin:0;min-height:100vh;padding:24px;display:grid;place-items:center;background:#f2f7f4;color:#173b2b;font-family:Arial,Helvetica,sans-serif}.card{width:min(500px,100%);padding:34px;background:#fff;border:1px solid #dce7df;border-radius:22px;box-shadow:0 24px 60px rgba(18,63,41,.10)}.icon{width:62px;height:62px;margin:0 auto 18px;display:grid;place-items:center;border-radius:18px;background:#e7f5ec;font-size:28px}.eyebrow{text-align:center;color:#278350;font-size:11px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase}h1{margin:8px 0 8px;text-align:center;font-size:28px;color:#123f29}p{margin:0 0 24px;color:#65766c;text-align:center;line-height:1.55;font-size:13px}label{display:block;margin-bottom:7px;color:#40564a;font-size:12px;font-weight:800}.code{width:100%;height:54px;padding:0 14px;border:1px solid #c9d7ce;border-radius:10px;font-size:21px;letter-spacing:4px;text-align:center;outline:none}.code:focus{border-color:#2e8755;box-shadow:0 0 0 3px rgba(46,135,85,.09)}button{width:100%;min-height:48px;margin-top:13px;border:0;border-radius:10px;background:#23794a;color:#fff;font-weight:800;cursor:pointer}.help{margin-top:18px;padding:13px 14px;background:#f6f9f7;border:1px solid #dde7e0;border-radius:10px;color:#5b6c62;font-size:11px;line-height:1.55}.help strong{color:#2f4c3b}.logout{display:block;margin-top:17px;text-align:center;color:#4f695a;font-size:12px;text-decoration:none}
+    </style>
+</head>
+<body>
+<section class="card">
+    <div class="icon">🛡️</div>
+    <div class="eyebrow">Google Authenticator</div>
+    <h1>Verify your sign-in</h1>
+    <p>Enter the 6-digit code from Google Authenticator. You may also enter one unused recovery code.</p>
+    <form method="POST" action="{{ url_for('two_factor_verify') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label for="code">Authenticator or recovery code</label>
+        <input class="code" id="code" name="code" type="text" inputmode="text" autocomplete="one-time-code" maxlength="16" required autofocus>
+        <button type="submit">Verify and Continue</button>
+    </form>
+    <div class="help"><strong>{{ remaining_recovery_codes }}</strong> recovery code{% if remaining_recovery_codes != 1 %}s{% endif %} remain on this account. A recovery code is consumed immediately after successful use.</div>
+    <a class="logout" href="{{ url_for('logout') }}">Cancel and sign out</a>
+</section>
+</body>
+</html>

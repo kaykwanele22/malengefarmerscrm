@@ -1,0 +1,119 @@
+MALENGE FARMERS CRM - PHASE 6 ACCOUNTABILITY CORE
+Date: 10 September 2026
+Migration head: a6b7c8d9e010
+
+IMPORTANT
+---------
+This package intentionally DOES NOT contain:
+- .env (database password / SECRET_KEY)
+- .git history
+- .venv
+- PyCharm .idea settings
+- your SQLite database / PostgreSQL data
+- your existing uploaded evidence
+
+KEEP YOUR CURRENT PRIVATE .env AND DATABASE.
+
+HOW TO UPGRADE YOUR CURRENT PROJECT
+-----------------------------------
+1. Make a backup of your current project/database first.
+2. Keep your private .env file. Do not replace it with .env.example.
+3. Copy/replace the application files from this package into your current Malenge project.
+4. In the PyCharm terminal activate your .venv.
+5. Install/confirm dependencies:
+
+   pip install -r requirements.txt
+
+6. Apply all pending database migrations:
+
+   python upgrade_database.py
+
+7. Verify the migration:
+
+   flask db current
+
+   Expected head:
+   a6b7c8d9e010
+
+8. Run regression suites:
+
+   python run_regression_tests.py
+
+9. Start the CRM:
+
+   python app.py
+
+PHASE 6 ACCOUNTABILITY CORE
+---------------------------
+The CRM now follows:
+
+Meeting Evidence
+-> Chairperson Confirmation
+-> Resolution
+-> Chairperson Certification
+-> Assigned Accountability Task
+-> Progress
+-> Proof
+-> Independent Verification
+-> Closed
+
+NEW EXECUTIVE FUNCTIONS
+-----------------------
+Secretary / Vice Secretary:
+- register meeting indexes
+- upload handwritten/signed PDF or image evidence
+- edit draft meeting metadata
+- capture actionable resolutions only
+- edit draft resolutions before certification
+
+Chairperson:
+- confirm and lock meeting evidence
+- certify resolutions against source evidence
+- verify completed accountability work when not self-verifying
+
+Vice Chairperson:
+- view governance/evidence
+- carry out assigned responsibilities
+- upload proof
+- independently verify other executives' completed work when permitted and not self-verifying
+
+Treasurer:
+- keeps existing finance recording duties
+- can view governance/evidence for the cooperative
+- carries out and proves accountability tasks assigned to the Treasurer office
+
+ALL EXECUTIVES:
+- see the Accountability Command Centre on the dashboard
+- see their cooperative's Accountability Register
+- see Meeting Evidence
+
+KEY ACCOUNTABILITY RULES
+------------------------
+- The responsible executive is the only person who can report progress on their task.
+- The responsible executive cannot verify their own work.
+- Verification requires supporting evidence.
+- Confirmed meeting evidence has no silent replace/delete workflow.
+- Every uploaded evidence file receives a SHA-256 fingerprint.
+- Files live outside /static and downloads pass through role + cooperative checks.
+- Meetings recorded as Quorum Not Met cannot produce certified action resolutions.
+
+EVIDENCE STORAGE / BACKUP WARNING
+---------------------------------
+Phase 6 evidence files are stored in:
+
+   instance/accountability_uploads/
+
+The existing built-in SQLite database backup only backs up the .db file.
+For a COMPLETE Phase 6 backup, also back up instance/accountability_uploads/.
+
+For production hosting (including Render), evidence must live on persistent storage.
+Set ACCOUNTABILITY_UPLOAD_DIR to a persistent disk/mount path; an ephemeral filesystem is not suitable for official records.
+A later Phase 6 build should combine database + evidence into one archive.
+
+POSTGRESQL / RENDER
+-------------------
+Recommended Render Start Command:
+
+   python upgrade_database.py && gunicorn app:app
+
+Do not use db.create_all() as the normal production migration mechanism.

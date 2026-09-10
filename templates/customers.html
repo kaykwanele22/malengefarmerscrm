@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Customers | Malenge Farmers CRM{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{{ url_for('static', filename='css/extended_modules.css') }}">{% endblock %}
+{% block content %}
+<div class="ext-page">
+  <div class="ext-head"><div><span class="ext-eyebrow">Business Records</span><h1>Customers / Buyers</h1><p>Buyers linked to your cooperative visibility scope.</p></div><div class="ext-actions">{% if can_manage_business %}<a class="ext-btn primary" href="{{ url_for('add_customer') }}">+ Add Customer</a>{% endif %}</div></div>
+  <section class="ext-card">
+    <form class="ext-search" method="GET"><input name="search" value="{{ search or '' }}" placeholder="Search customers..."><button class="ext-btn" type="submit">Search</button>{% if search %}<a class="ext-btn" href="{{ url_for('customers_list') }}">Clear</a>{% endif %}</form>
+    <div class="ext-table-wrap"><table class="ext-table"><thead><tr><th>Name</th><th>Contact</th><th>Type</th><th>Status</th><th>Cooperative</th><th>Actions</th></tr></thead><tbody>
+    {% for customer in customers %}<tr><td><strong>{{ customer.name }}</strong><span class="ext-muted">{{ customer.address or 'No address' }}</span></td><td>{{ customer.contact_person or '—' }}<span class="ext-muted">{{ customer.phone or '' }}{% if customer.email %} · {{ customer.email }}{% endif %}</span></td><td>{{ customer.customer_type or '—' }}</td><td><span class="ext-badge{% if customer.status != 'Active' %} muted{% endif %}">{{ customer.status }}</span></td><td>{{ customer.cooperative.name if customer.cooperative else 'Unassigned' }}</td><td>{% if can_manage_business %}<div class="ext-actions"><a class="ext-btn" href="{{ url_for('edit_customer', customer_id=customer.id) }}">Edit</a><form method="POST" action="{{ url_for('delete_customer', customer_id=customer.id) }}" onsubmit="return confirm('Delete this customer?');"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="ext-btn danger" type="submit">Delete</button></form></div>{% else %}<span class="ext-muted">View only</span>{% endif %}</td></tr>{% else %}<tr><td colspan="6" class="ext-empty">No customers found.</td></tr>{% endfor %}
+    </tbody></table></div>
+  </section>
+</div>
+{% endblock %}

@@ -4,4 +4,6 @@ Flask-Migrate==4.0.5
 Werkzeug==2.3.7
 gunicorn==21.2.0
 python-dotenv==1.0.0
-psycopg2-binary==2.9.12
+psycopg[binary]==3.3.5
+qrcode[pil]==8.2
+cryptography==46.0.4

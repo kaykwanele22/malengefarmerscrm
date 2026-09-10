@@ -56,6 +56,7 @@
     </div>
 
     <form method="POST" class="admin-card admin-card-pad">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="admin-form-grid">
             <div class="admin-field">
                 <label for="brand_name">Brand Name *</label>

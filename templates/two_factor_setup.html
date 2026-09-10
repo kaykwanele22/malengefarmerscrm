@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google Authenticator Setup | Malenge Farmers CRM</title>
+    <style>
+        *{box-sizing:border-box}
+        body{margin:0;min-height:100vh;padding:28px;display:grid;place-items:center;background:#f2f7f4;color:#173b2b;font-family:Arial,Helvetica,sans-serif}
+        .card{width:min(760px,100%);background:#fff;border:1px solid #dce7df;border-radius:22px;box-shadow:0 24px 60px rgba(18,63,41,.10);overflow:hidden}
+        .hero{padding:28px 32px;background:linear-gradient(135deg,#0d442e,#176b45);color:#fff}
+        .hero small{display:block;margin-bottom:8px;color:#cae9d8;font-weight:800;letter-spacing:1.2px;text-transform:uppercase}
+        .hero h1{margin:0 0 8px;font-size:30px}.hero p{margin:0;color:#dcefe4;line-height:1.55}
+        .body{padding:30px 32px}.steps{margin:0 0 24px;padding-left:20px;color:#4f6257;line-height:1.7}.steps strong{color:#173b2b}
+        .setup-grid{display:grid;grid-template-columns:250px 1fr;gap:28px;align-items:start}.qr{padding:14px;border:1px solid #dbe6de;border-radius:16px;background:#fff;text-align:center}.qr img{display:block;width:100%;height:auto}.qr small{display:block;margin-top:8px;color:#728078}
+        .secret-box{margin-bottom:18px;padding:13px 14px;border:1px dashed #b8ccbf;border-radius:10px;background:#f7faf8}.secret-box small{display:block;margin-bottom:5px;color:#75837a}.secret{font-family:Consolas,monospace;font-size:15px;font-weight:700;overflow-wrap:anywhere;color:#173e29}
+        label{display:block;margin-bottom:7px;color:#40564a;font-size:12px;font-weight:800}.code-input{width:100%;height:50px;padding:0 14px;border:1px solid #c9d7ce;border-radius:10px;font-size:20px;letter-spacing:5px;text-align:center;outline:none}.code-input:focus{border-color:#2e8755;box-shadow:0 0 0 3px rgba(46,135,85,.09)}
+        .button{width:100%;min-height:48px;margin-top:12px;border:0;border-radius:10px;background:#23794a;color:#fff;font-size:14px;font-weight:800;cursor:pointer}.button:hover{background:#19663b}
+        .notice{margin-top:18px;padding:13px 14px;background:#fff9ec;border:1px solid #eadcb8;border-radius:10px;color:#715c27;font-size:12px;line-height:1.55}
+        .success{padding:6px 0}.success h2{margin:0 0 8px;color:#166534;font-size:24px}.success p{color:#53665b;line-height:1.6}.codes{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin:20px 0}.recovery-code{padding:11px 12px;background:#f4f8f5;border:1px solid #dae6dd;border-radius:9px;text-align:center;font-family:Consolas,monospace;font-weight:800;letter-spacing:.8px}.download-note{padding:14px;background:#fff4df;border:1px solid #efd39c;border-radius:10px;color:#6f5420;line-height:1.55;font-size:12px}.continue{display:inline-flex;align-items:center;justify-content:center;min-height:46px;padding:0 18px;margin-top:18px;border-radius:10px;background:#23794a;color:#fff;text-decoration:none;font-weight:800}
+        @media(max-width:680px){body{padding:14px}.hero,.body{padding:24px 20px}.setup-grid{grid-template-columns:1fr}.qr{max-width:260px;margin:auto}.codes{grid-template-columns:1fr}}
+    </style>
+</head>
+<body>
+<section class="card">
+    <div class="hero">
+        <small>Malenge Farmers CRM Security</small>
+        <h1>Google Authenticator</h1>
+        <p>Two-factor authentication is required for authorized CRM accounts.</p>
+    </div>
+    <div class="body">
+        {% if setup_complete %}
+            <div class="success">
+                <h2>✓ Google Authenticator is now enabled</h2>
+                <p>Your password and a rotating 6-digit code will now be required when you sign in.</p>
+                <div class="download-note"><strong>Save these recovery codes now.</strong> Each code works once if you lose access to Google Authenticator. The CRM stores only protected hashes, so these exact codes cannot be shown again.</div>
+                <div class="codes">
+                    {% for recovery_code in recovery_codes %}<div class="recovery-code">{{ recovery_code }}</div>{% endfor %}
+                </div>
+                <a class="continue" href="{{ url_for('dashboard') }}">Continue to Dashboard</a>
+            </div>
+        {% else %}
+            <ol class="steps">
+                <li>Open <strong>Google Authenticator</strong> on your phone.</li>
+                <li>Tap <strong>+</strong>, then choose <strong>Scan a QR code</strong>.</li>
+                <li>Scan the code below and enter the current 6-digit code to confirm setup.</li>
+            </ol>
+            <div class="setup-grid">
+                <div class="qr">
+                    <img src="{{ qr_data_uri }}" alt="Google Authenticator QR code">
+                    <small>Scan with Google Authenticator</small>
+                </div>
+                <div>
+                    <div class="secret-box">
+                        <small>Can't scan? Enter this setup key manually:</small>
+                        <div class="secret">{{ secret }}</div>
+                    </div>
+                    <form method="POST" action="{{ url_for('two_factor_setup') }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <label for="code">Google Authenticator code</label>
+                        <input class="code-input" id="code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="000000" required autofocus>
+                        <button class="button" type="submit">Verify and Enable 2FA</button>
+                    </form>
+                    <div class="notice">Do not share the QR code or setup key. Anyone who has it could generate your authentication codes.</div>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</section>
+</body>
+</html>

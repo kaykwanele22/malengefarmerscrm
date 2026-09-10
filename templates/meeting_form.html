@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit Meeting" if meeting else "Register Meeting" }} | Malenge Farmers CRM{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{{ url_for('static', filename='css/accountability.css') }}">{% endblock %}
+{% block content %}
+<div class="acc-page">
+  <div class="acc-head"><div><span class="acc-eyebrow">Secretary Office</span><h1>{{ "Edit Meeting Draft" if meeting else "Register Meeting" }}</h1><p>Create only the meeting index. The handwritten or signed pages are uploaded on the next screen.</p></div><a class="acc-btn" href="{{ url_for('meetings_list') }}">← Meetings</a></div>
+  <section class="acc-card"><div class="acc-card-body"><form method="POST" class="acc-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="acc-field"><label>Meeting Type *</label><select name="meeting_type" required><option value="">Choose type</option>{% for v in ['General Meeting','Special General Meeting','Annual General Meeting','Executive Meeting','Secondary Cooperative Meeting','Other'] %}<option value="{{ v }}" {% if meeting and meeting.meeting_type==v %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
+    <div class="acc-field"><label>Meeting Date *</label><input type="date" name="meeting_date" required value="{{ meeting.meeting_date.isoformat() if meeting else '' }}"></div>
+    <div class="acc-field full"><label>Meeting Title *</label><input name="title" maxlength="180" required placeholder="e.g. Siyaphumla General Meeting — September 2026" value="{{ meeting.title if meeting else '' }}"></div>
+    <div class="acc-field"><label>Venue</label><input name="venue" maxlength="200" placeholder="Malenge FPSU" value="{{ meeting.venue if meeting and meeting.venue else '' }}"></div>
+    <div class="acc-field"><label>Quorum</label><select name="quorum_status"><option {% if not meeting or meeting.quorum_status=='Not Recorded' %}selected{% endif %}>Not Recorded</option><option {% if meeting and meeting.quorum_status=='Met' %}selected{% endif %}>Met</option><option {% if meeting and meeting.quorum_status=='Not Met' %}selected{% endif %}>Not Met</option></select></div>
+    <div class="acc-field full"><label>Short Notes</label><textarea name="notes" placeholder="Optional context only — do not retype the minutes here.">{{ meeting.notes if meeting and meeting.notes else '' }}</textarea><span class="acc-help">The signed handwritten/printed record remains the source evidence.</span></div>
+    <div class="acc-form-actions"><a class="acc-btn" href="{{ url_for('meetings_list') }}">Cancel</a><button class="acc-btn primary" type="submit">{{ "Save Draft Changes" if meeting else "Create Meeting Record" }}</button></div>
+  </form></div></section>
+</div>
+{% endblock %}

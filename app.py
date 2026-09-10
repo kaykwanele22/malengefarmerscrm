@@ -1,41 +1,140 @@
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from functools import wraps
+
+import base64
 import csv
+import hashlib
+import hmac
 import html
 import io
 import json
 import os
 import platform
+import re
+import secrets
 import shutil
 import sqlite3
+import struct
 import sys
-from urllib.parse import urlsplit
+import threading
+import time
+import uuid
+from collections import defaultdict, deque
+from urllib.parse import quote, urlsplit
+
+from cryptography.fernet import Fernet, InvalidToken
+from dotenv import load_dotenv
+import qrcode
 
 from flask import (
-    Flask, Response, abort, g, redirect, send_file,
-    render_template, render_template_string, request, session, url_for
+    Flask,
+    Response,
+    abort,
+    g,
+    has_request_context,
+    redirect,
+    send_file,
+    render_template,
+    render_template_string,
+    request,
+    session,
+    url_for,
 )
+
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from sqlalchemy import func, or_, text as sql_text
 from werkzeug.security import check_password_hash, generate_password_hash
+from werkzeug.utils import secure_filename
+
+
+# =========================================================
+# ENVIRONMENT VARIABLES
+# =========================================================
+
+load_dotenv()
+
 
 # =========================================================
 # FLASK APPLICATION
 # =========================================================
-app = Flask(__name__, static_folder="static", static_url_path="/static")
-app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "malenge-farmers-development-key")
-app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL", "sqlite:///malenge_farmers.db")
-app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+
+def env_bool(name, default=False):
+    """Read a boolean environment variable safely."""
+    raw = os.getenv(name)
+    if raw is None:
+        return bool(default)
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+IS_PRODUCTION = (
+    os.getenv("APP_ENV", "").strip().lower() == "production"
+    or os.getenv("FLASK_ENV", "").strip().lower() == "production"
+    or env_bool("RENDER", False)
+)
+
+SECRET_KEY = os.getenv("SECRET_KEY", "").strip()
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+
+if IS_PRODUCTION and not SECRET_KEY:
+    raise RuntimeError("SECRET_KEY must be configured in production.")
+
+if IS_PRODUCTION and not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL must be configured in production; SQLite fallback is disabled.")
+
+app = Flask(
+    __name__,
+    static_folder="static",
+    static_url_path="/static"
+)
+
+app.config.update(
+    SECRET_KEY=SECRET_KEY or "malenge-farmers-development-key",
+    SQLALCHEMY_DATABASE_URI=DATABASE_URL or "sqlite:///malenge_farmers.db",
+    SQLALCHEMY_TRACK_MODIFICATIONS=False,
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=env_bool("SESSION_COOKIE_SECURE", IS_PRODUCTION),
+    MAX_CONTENT_LENGTH=int(os.getenv("MAX_CONTENT_LENGTH", str(16 * 1024 * 1024))),
+    ALLOW_BOOTSTRAP_REGISTRATION=env_bool("ALLOW_BOOTSTRAP_REGISTRATION", not IS_PRODUCTION),
+    TRUST_PROXY_HEADERS=env_bool("TRUST_PROXY_HEADERS", IS_PRODUCTION),
+    TWO_FACTOR_REQUIRED=env_bool("TWO_FACTOR_REQUIRED", True),
+    TWO_FACTOR_ISSUER=os.getenv("TWO_FACTOR_ISSUER", "Malenge Farmers CRM").strip() or "Malenge Farmers CRM",
+    TWO_FACTOR_MAX_ATTEMPTS=max(3, int(os.getenv("TWO_FACTOR_MAX_ATTEMPTS", "5"))),
+)
+
 
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
 
+CRM_TIMEZONE = timezone(timedelta(hours=2))  # South Africa Standard Time (SAST)
+
+# Phase 6 evidence storage. Files are kept outside /static so every download
+# passes through cooperative/role authorization.
+ACCOUNTABILITY_UPLOAD_DIR = Path(
+    os.getenv("ACCOUNTABILITY_UPLOAD_DIR", str(Path(app.instance_path) / "accountability_uploads"))
+).expanduser().resolve()
+ACCOUNTABILITY_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+ACCOUNTABILITY_ALLOWED_EXTENSIONS = {"pdf", "png", "jpg", "jpeg", "webp"}
+
 
 def utc_now():
-    """Return naive UTC using the modern timezone-aware datetime API."""
+    """Return naive UTC for database storage."""
     return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def crm_today():
+    """Return the current South African calendar date for deadlines/workflows."""
+    return datetime.now(CRM_TIMEZONE).date()
+
+
+def format_sast(value, fmt="%d %b %Y %H:%M:%S"):
+    """Format a stored UTC datetime for the South African CRM interface."""
+    if not value:
+        return "—"
+    aware = value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    return aware.astimezone(CRM_TIMEZONE).strftime(fmt)
 
 
 # =========================================================
@@ -51,6 +150,11 @@ class User(db.Model):
     email = db.Column(db.String(120), unique=True, nullable=False)
     farm_location = db.Column(db.String(150), nullable=False)
     password = db.Column(db.String(255), nullable=False)
+    two_factor_enabled = db.Column(db.Boolean, default=False, nullable=False)
+    two_factor_secret = db.Column(db.String(512), nullable=True)
+    two_factor_recovery_codes = db.Column(db.Text, nullable=True)
+    two_factor_confirmed_at = db.Column(db.DateTime, nullable=True)
+    two_factor_last_counter = db.Column(db.BigInteger, nullable=True)
     created_at = db.Column(db.DateTime, default=utc_now)
 
     def __repr__(self):
@@ -360,23 +464,35 @@ class Equipment(db.Model):
 
 
 class Task(db.Model):
-    """Task model for farm tasks and assignments."""
+    """Operational/accountability task with permanent progress and verification links."""
     __tablename__ = "task"
 
     id = db.Column(db.Integer, primary_key=True)
     cooperative_id = db.Column(db.Integer, db.ForeignKey("cooperative.id"), nullable=True)
+    resolution_id = db.Column(db.Integer, db.ForeignKey("resolution.id"), nullable=True, index=True)
     title = db.Column(db.String(180), nullable=False)
     description = db.Column(db.Text, nullable=True)
     farm_id = db.Column(db.Integer, db.ForeignKey("farm.id"), nullable=True)
     assigned_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    assigned_role = db.Column(db.String(50), nullable=True)
+    created_by_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
     due_date = db.Column(db.Date, nullable=True)
     priority = db.Column(db.String(30), default="Normal")
     status = db.Column(db.String(30), default="Open")
+    progress_percentage = db.Column(db.Integer, default=0, nullable=False)
+    started_at = db.Column(db.DateTime, nullable=True)
     completed_at = db.Column(db.DateTime, nullable=True)
+    verified_by_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    verified_at = db.Column(db.DateTime, nullable=True)
+    verification_notes = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=utc_now)
+    updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now)
 
     farm = db.relationship("Farm", backref="tasks")
-    assigned_user = db.relationship("User", backref="tasks")
+    assigned_user = db.relationship("User", foreign_keys=[assigned_user_id], backref="tasks")
+    created_by_user = db.relationship("User", foreign_keys=[created_by_user_id])
+    verified_by_user = db.relationship("User", foreign_keys=[verified_by_user_id])
+    resolution = db.relationship("Resolution", foreign_keys=[resolution_id], backref="tasks")
     cooperative = db.relationship("Cooperative", foreign_keys=[cooperative_id], backref="cooperative_tasks")
 
     def __repr__(self):
@@ -408,35 +524,78 @@ class FarmerInteraction(db.Model):
 
 
 class Membership(db.Model):
-    """Membership model for farmer cooperative memberships."""
+    """Individual membership of a Primary cooperative."""
     __tablename__ = "membership"
 
     id = db.Column(db.Integer, primary_key=True)
-    cooperative_id = db.Column(db.Integer, db.ForeignKey("cooperative.id"), nullable=True)
+    cooperative_id = db.Column(db.Integer, db.ForeignKey("cooperative.id"), nullable=False)
     farmer_id = db.Column(db.Integer, db.ForeignKey("farmer.id"), nullable=False)
     member_number = db.Column(db.String(80), unique=True, nullable=False)
-    membership_type = db.Column(db.String(80), default="Primary")
+    membership_type = db.Column(db.String(80), default="Primary", nullable=False)
     join_date = db.Column(db.Date, nullable=True)
-    fee_amount = db.Column(db.Float, default=0)
-    fee_paid = db.Column(db.Float, default=0)
-    status = db.Column(db.String(30), default="Active")
+    fee_amount = db.Column(db.Float, default=0, nullable=False)
+    fee_paid = db.Column(db.Float, default=0, nullable=False)
+    status = db.Column(db.String(30), default="Active", nullable=False)
     notes = db.Column(db.Text, nullable=True)
-    created_at = db.Column(db.DateTime, default=utc_now)
+    created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
+    updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now, nullable=False)
 
     farmer = db.relationship("Farmer", backref="memberships")
     cooperative = db.relationship("Cooperative", foreign_keys=[cooperative_id], backref="cooperative_memberships")
+
+    @property
+    def fee_pending(self):
+        """Membership-fee money recorded by the Treasurer but not yet confirmed."""
+        return sum(
+            float(contribution.amount or 0)
+            for contribution in self.contributions
+            if contribution.status == "Pending Confirmation"
+            and (contribution.category or "").strip().casefold() in MEMBERSHIP_FEE_CATEGORY_ALIASES
+        )
+
+    @property
+    def fee_confirmed_outstanding(self):
+        """Balance still unconfirmed against the expected fee."""
+        return max(float(self.fee_amount or 0) - float(self.fee_paid or 0), 0.0)
+
+    @property
+    def fee_outstanding(self):
+        """Amount the member still needs to pay after confirmed + pending receipts."""
+        return max(
+            float(self.fee_amount or 0)
+            - float(self.fee_paid or 0)
+            - float(self.fee_pending or 0),
+            0.0,
+        )
+
+    @property
+    def fee_status(self):
+        expected = float(self.fee_amount or 0)
+        confirmed = float(self.fee_paid or 0)
+        pending = float(self.fee_pending or 0)
+
+        if expected <= 1e-9:
+            return "No Fee"
+        if confirmed + 1e-9 >= expected:
+            return "Paid"
+        if pending > 1e-9 and self.fee_outstanding <= 1e-9:
+            return "Awaiting Confirmation"
+        if confirmed > 1e-9 or pending > 1e-9:
+            return "Partially Paid"
+        return "Due"
 
     def __repr__(self):
         return f"<Membership {self.member_number}>"
 
 
 class Contribution(db.Model):
-    """Contribution model for farmer financial contributions."""
+    """Contribution model for farmer/member financial contributions."""
     __tablename__ = "contribution"
 
     id = db.Column(db.Integer, primary_key=True)
     cooperative_id = db.Column(db.Integer, db.ForeignKey("cooperative.id"), nullable=True)
     farmer_id = db.Column(db.Integer, db.ForeignKey("farmer.id"), nullable=False)
+    membership_id = db.Column(db.Integer, db.ForeignKey("membership.id"), nullable=True)
     amount = db.Column(db.Float, nullable=False)
     contribution_date = db.Column(db.Date, nullable=False)
     category = db.Column(db.String(100), nullable=True)
@@ -447,15 +606,51 @@ class Contribution(db.Model):
     created_at = db.Column(db.DateTime, default=utc_now)
 
     farmer = db.relationship("Farmer", backref="contributions")
+    membership = db.relationship("Membership", backref="contributions")
     cooperative = db.relationship("Cooperative", foreign_keys=[cooperative_id], backref="cooperative_contributions")
 
     def __repr__(self):
         return f"<Contribution {self.id}>"
 
 
+class MembershipHistory(db.Model):
+    """Permanent lifecycle history for a cooperative membership."""
+    __tablename__ = "membership_history"
+
+    id = db.Column(db.Integer, primary_key=True)
+    membership_id = db.Column(db.Integer, db.ForeignKey("membership.id", ondelete="CASCADE"), nullable=False, index=True)
+    cooperative_id = db.Column(db.Integer, db.ForeignKey("cooperative.id"), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    event_type = db.Column(db.String(50), nullable=False)
+    from_status = db.Column(db.String(30), nullable=True)
+    to_status = db.Column(db.String(30), nullable=True)
+    description = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=utc_now, nullable=False, index=True)
+
+    membership = db.relationship(
+        "Membership",
+        backref=db.backref("history_entries", cascade="all, delete-orphan", order_by="MembershipHistory.created_at.desc()"),
+    )
+    cooperative = db.relationship("Cooperative", foreign_keys=[cooperative_id])
+    user = db.relationship("User", foreign_keys=[user_id])
+
+    def __repr__(self):
+        return f"<MembershipHistory {self.membership_id} {self.event_type}>"
+
+
 class UserAccess(db.Model):
     """User access model for role-based permissions."""
     __tablename__ = "user_access"
+    __table_args__ = (
+        db.Index(
+            "uq_active_cooperative_executive_position",
+            "cooperative_id",
+            "role",
+            unique=True,
+            sqlite_where=sql_text("status = 'Active' AND cooperative_id IS NOT NULL"),
+            postgresql_where=sql_text("status = 'Active' AND cooperative_id IS NOT NULL"),
+        ),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     cooperative_id = db.Column(db.Integer, db.ForeignKey("cooperative.id"), nullable=True)
@@ -471,8 +666,59 @@ class UserAccess(db.Model):
         return f"<UserAccess {self.user_id} - {self.role}>"
 
 
+class ExecutiveAppointment(db.Model):
+    """Historical executive appointment linked to the current CRM access record."""
+    __tablename__ = "executive_appointment"
+    __table_args__ = (
+        db.Index(
+            "uq_active_executive_appointment_position",
+            "cooperative_id",
+            "role",
+            unique=True,
+            sqlite_where=sql_text("status = 'Active'"),
+            postgresql_where=sql_text("status = 'Active'"),
+        ),
+        db.Index(
+            "uq_active_executive_appointment_user",
+            "user_id",
+            unique=True,
+            sqlite_where=sql_text("status = 'Active'"),
+            postgresql_where=sql_text("status = 'Active'"),
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    cooperative_id = db.Column(db.Integer, db.ForeignKey("cooperative.id"), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    role = db.Column(db.String(30), nullable=False)
+    start_date = db.Column(db.Date, nullable=False, default=lambda: utc_now().date())
+    end_date = db.Column(db.Date, nullable=True)
+    status = db.Column(db.String(20), default="Active", nullable=False)
+    appointed_by_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    ended_by_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    notes = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
+    updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now, nullable=False)
+
+    cooperative = db.relationship(
+        "Cooperative",
+        foreign_keys=[cooperative_id],
+        backref=db.backref("executive_appointments", lazy=True),
+    )
+    user = db.relationship(
+        "User",
+        foreign_keys=[user_id],
+        backref=db.backref("executive_appointments", lazy=True),
+    )
+    appointed_by = db.relationship("User", foreign_keys=[appointed_by_user_id])
+    ended_by = db.relationship("User", foreign_keys=[ended_by_user_id])
+
+    def __repr__(self):
+        return f"<ExecutiveAppointment {self.cooperative_id} {self.role} user={self.user_id}>"
+
+
 class AuditLog(db.Model):
-    """Audit log model for system activity tracking."""
+    """Permanent system activity record with request/security context."""
     __tablename__ = "audit_log"
 
     id = db.Column(db.Integer, primary_key=True)
@@ -482,13 +728,146 @@ class AuditLog(db.Model):
     entity_type = db.Column(db.String(80), nullable=False)
     entity_id = db.Column(db.Integer, nullable=True)
     details = db.Column(db.Text, nullable=True)
-    created_at = db.Column(db.DateTime, default=utc_now)
+    ip_address = db.Column(db.String(64), nullable=True)
+    request_method = db.Column(db.String(12), nullable=True)
+    request_path = db.Column(db.String(255), nullable=True)
+    request_id = db.Column(db.String(64), nullable=True, index=True)
+    user_agent = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(db.DateTime, default=utc_now, index=True)
 
     user = db.relationship("User", backref="audit_logs")
     cooperative = db.relationship("Cooperative", foreign_keys=[cooperative_id], backref="cooperative_audit_logs")
 
     def __repr__(self):
         return f"<AuditLog {self.id} - {self.action}>"
+
+
+class Meeting(db.Model):
+    """Minimal meeting index; handwritten/scanned records remain the source evidence."""
+    __tablename__ = "meeting"
+
+    id = db.Column(db.Integer, primary_key=True)
+    cooperative_id = db.Column(db.Integer, db.ForeignKey("cooperative.id"), nullable=False, index=True)
+    meeting_number = db.Column(db.String(80), nullable=False, unique=True, index=True)
+    meeting_type = db.Column(db.String(80), nullable=False)
+    title = db.Column(db.String(180), nullable=False)
+    meeting_date = db.Column(db.Date, nullable=False, index=True)
+    venue = db.Column(db.String(200), nullable=True)
+    quorum_status = db.Column(db.String(30), default="Not Recorded", nullable=False)
+    status = db.Column(db.String(30), default="Draft", nullable=False, index=True)
+    notes = db.Column(db.Text, nullable=True)
+    created_by_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    confirmed_by_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    confirmed_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
+
+    cooperative = db.relationship("Cooperative", foreign_keys=[cooperative_id], backref="meetings")
+    created_by_user = db.relationship("User", foreign_keys=[created_by_user_id])
+    confirmed_by_user = db.relationship("User", foreign_keys=[confirmed_by_user_id])
+
+    def __repr__(self):
+        return f"<Meeting {self.meeting_number}>"
+
+
+class MeetingDocument(db.Model):
+    """Immutable evidence file uploaded against a meeting."""
+    __tablename__ = "meeting_document"
+
+    id = db.Column(db.Integer, primary_key=True)
+    meeting_id = db.Column(db.Integer, db.ForeignKey("meeting.id", ondelete="CASCADE"), nullable=False, index=True)
+    cooperative_id = db.Column(db.Integer, db.ForeignKey("cooperative.id"), nullable=False, index=True)
+    document_type = db.Column(db.String(60), nullable=False)
+    original_name = db.Column(db.String(255), nullable=False)
+    stored_name = db.Column(db.String(255), nullable=False, unique=True)
+    file_sha256 = db.Column(db.String(64), nullable=False)
+    uploaded_by_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
+
+    meeting = db.relationship("Meeting", backref=db.backref("documents", lazy=True, cascade="all, delete-orphan"))
+    cooperative = db.relationship("Cooperative", foreign_keys=[cooperative_id])
+    uploaded_by_user = db.relationship("User", foreign_keys=[uploaded_by_user_id])
+
+
+class Resolution(db.Model):
+    """Structured accountability outcome extracted from official meeting evidence."""
+    __tablename__ = "resolution"
+
+    id = db.Column(db.Integer, primary_key=True)
+    cooperative_id = db.Column(db.Integer, db.ForeignKey("cooperative.id"), nullable=False, index=True)
+    meeting_id = db.Column(db.Integer, db.ForeignKey("meeting.id"), nullable=False, index=True)
+    resolution_number = db.Column(db.String(80), nullable=False, unique=True, index=True)
+    title = db.Column(db.String(180), nullable=False)
+    resolution_text = db.Column(db.Text, nullable=False)
+    responsible_role = db.Column(db.String(50), nullable=False)
+    responsible_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    due_date = db.Column(db.Date, nullable=True, index=True)
+    priority = db.Column(db.String(30), default="Normal", nullable=False)
+    status = db.Column(db.String(30), default="Draft", nullable=False, index=True)
+    created_by_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    certified_by_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    certified_at = db.Column(db.DateTime, nullable=True)
+    closed_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
+    updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now, nullable=False)
+
+    cooperative = db.relationship("Cooperative", foreign_keys=[cooperative_id], backref="resolutions")
+    meeting = db.relationship("Meeting", backref="resolutions")
+    responsible_user = db.relationship("User", foreign_keys=[responsible_user_id])
+    created_by_user = db.relationship("User", foreign_keys=[created_by_user_id])
+    certified_by_user = db.relationship("User", foreign_keys=[certified_by_user_id])
+
+    @property
+    def accountability_status(self):
+        if self.status in {"Closed", "Rejected"}:
+            return self.status
+        today = crm_today()
+        if self.status in {"Assigned", "In Progress"} and self.due_date:
+            if self.due_date < today:
+                return "Overdue"
+            if self.due_date <= today + timedelta(days=3):
+                return "At Risk"
+        return self.status
+
+    def __repr__(self):
+        return f"<Resolution {self.resolution_number}>"
+
+
+class TaskUpdate(db.Model):
+    """Append-only progress update for an accountability task."""
+    __tablename__ = "task_update"
+
+    id = db.Column(db.Integer, primary_key=True)
+    task_id = db.Column(db.Integer, db.ForeignKey("task.id", ondelete="CASCADE"), nullable=False, index=True)
+    cooperative_id = db.Column(db.Integer, db.ForeignKey("cooperative.id"), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    status = db.Column(db.String(30), nullable=False)
+    progress_percentage = db.Column(db.Integer, nullable=False, default=0)
+    comment = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=utc_now, nullable=False, index=True)
+
+    task = db.relationship("Task", backref=db.backref("progress_updates", lazy=True, cascade="all, delete-orphan", order_by="TaskUpdate.created_at.desc()"))
+    cooperative = db.relationship("Cooperative", foreign_keys=[cooperative_id])
+    user = db.relationship("User", foreign_keys=[user_id])
+
+
+class TaskEvidence(db.Model):
+    """Immutable supporting evidence uploaded against an accountability task."""
+    __tablename__ = "task_evidence"
+
+    id = db.Column(db.Integer, primary_key=True)
+    task_id = db.Column(db.Integer, db.ForeignKey("task.id", ondelete="CASCADE"), nullable=False, index=True)
+    cooperative_id = db.Column(db.Integer, db.ForeignKey("cooperative.id"), nullable=False, index=True)
+    evidence_type = db.Column(db.String(60), nullable=False)
+    description = db.Column(db.String(300), nullable=True)
+    original_name = db.Column(db.String(255), nullable=False)
+    stored_name = db.Column(db.String(255), nullable=False, unique=True)
+    file_sha256 = db.Column(db.String(64), nullable=False)
+    uploaded_by_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
+
+    task = db.relationship("Task", backref=db.backref("evidence_files", lazy=True, cascade="all, delete-orphan"))
+    cooperative = db.relationship("Cooperative", foreign_keys=[cooperative_id])
+    uploaded_by_user = db.relationship("User", foreign_keys=[uploaded_by_user_id])
 
 
 # =========================================================
@@ -511,6 +890,33 @@ PRIMARY_EXECUTIVE_ROLES = {
     "Primary Vice Secretary",
     "Primary Treasurer",
 }
+
+EXECUTIVE_POSITIONS = (
+    "Chairperson",
+    "Vice Chairperson",
+    "Secretary",
+    "Vice Secretary",
+    "Treasurer",
+)
+
+
+def executive_role_for(cooperative_type, position):
+    """Return the role string for a cooperative type and executive position."""
+    if cooperative_type not in {"Secondary", "Primary"}:
+        return None
+    if position not in EXECUTIVE_POSITIONS:
+        return None
+    return f"{cooperative_type} {position}"
+
+
+def executive_position_from_role(role):
+    """Return the human position name from a valid executive role."""
+    for prefix in ("Secondary ", "Primary "):
+        if role.startswith(prefix):
+            position = role[len(prefix):]
+            if position in EXECUTIVE_POSITIONS:
+                return position
+    return None
 
 SECONDARY_ROLES = SYSTEM_ROLES | SECONDARY_EXECUTIVE_ROLES
 PRIMARY_ROLES = PRIMARY_EXECUTIVE_ROLES
@@ -538,11 +944,16 @@ AUDIT_LOG_ROLES = {
 }
 
 # Executive responsibility rules
+# Individual members belong to Primary cooperatives. Secondary Secretaries have
+# network oversight, while Primary Secretary/Vice Secretary maintain the register.
 MEMBERSHIP_MANAGEMENT_ROLES = {
-    "Secondary Secretary",
-    "Secondary Vice Secretary",
     "Primary Secretary",
     "Primary Vice Secretary",
+}
+
+MEMBERSHIP_OVERSIGHT_ROLES = {
+    "Secondary Secretary",
+    "Secondary Vice Secretary",
 }
 
 FINANCE_RECORD_ROLES = {
@@ -553,6 +964,20 @@ FINANCE_RECORD_ROLES = {
 FINANCE_APPROVAL_ROLES = {
     "Secondary Chairperson",
     "Primary Chairperson",
+}
+
+# Phase 6 governance/accountability permissions. System Admin remains a technical
+# administrator and is intentionally not treated as a cooperative executive.
+GOVERNANCE_VIEW_ROLES = SECONDARY_EXECUTIVE_ROLES | PRIMARY_EXECUTIVE_ROLES
+MEETING_RECORD_ROLES = {
+    "Secondary Secretary", "Secondary Vice Secretary",
+    "Primary Secretary", "Primary Vice Secretary",
+}
+MEETING_CONFIRM_ROLES = {"Secondary Chairperson", "Primary Chairperson"}
+RESOLUTION_RECORD_ROLES = MEETING_RECORD_ROLES
+ACCOUNTABILITY_VERIFY_ROLES = {
+    "Secondary Chairperson", "Secondary Vice Chairperson", "Secondary Secretary",
+    "Primary Chairperson", "Primary Vice Chairperson", "Primary Secretary",
 }
 
 # Route-level cooperative permissions.
@@ -570,7 +995,7 @@ PRIMARY_OPERATION_RECORD_ROLES = {
     "Primary Vice Chairperson",
 }
 
-FARMER_VIEW_ROLES = MEMBERSHIP_MANAGEMENT_ROLES | LEADERSHIP_ROLES
+FARMER_VIEW_ROLES = MEMBERSHIP_MANAGEMENT_ROLES | MEMBERSHIP_OVERSIGHT_ROLES | LEADERSHIP_ROLES
 FARMER_RECORD_ROLES = MEMBERSHIP_MANAGEMENT_ROLES
 
 AGRICULTURE_VIEW_ROLES = LEADERSHIP_ROLES
@@ -580,6 +1005,36 @@ BUSINESS_RECORD_ROLES = FINANCE_RECORD_ROLES
 
 FINANCE_VIEW_ROLES = LEADERSHIP_ROLES | FINANCE_RECORD_ROLES
 MEMBERSHIP_VIEW_ROLES = COOPERATIVE_EXECUTIVE_ROLES
+MEMBERSHIP_ALLOWED_STATUSES = {
+    "Pending",
+    "Active",
+    "Suspended",
+    "Resigned",
+    "Deceased",
+    "Inactive",
+}
+MEMBERSHIP_FEE_CATEGORY = "Membership Fee"
+MEMBERSHIP_FEE_CATEGORY_ALIASES = {"membership fee", "membership"}
+
+# Deferred/extended module permissions. Secondary leadership may view operational
+# records across the network, while Primary Chair/Vice Chair mutate farm operations.
+CUSTOMER_VIEW_ROLES = BUSINESS_VIEW_ROLES
+CUSTOMER_RECORD_ROLES = BUSINESS_RECORD_ROLES
+SUPPLIER_VIEW_ROLES = BUSINESS_VIEW_ROLES
+SUPPLIER_RECORD_ROLES = BUSINESS_RECORD_ROLES
+OPERATIONS_VIEW_ROLES = AGRICULTURE_VIEW_ROLES
+OPERATIONS_RECORD_ROLES = PRIMARY_OPERATION_RECORD_ROLES
+INTERACTION_VIEW_ROLES = FARMER_VIEW_ROLES
+INTERACTION_RECORD_ROLES = FARMER_RECORD_ROLES
+
+# Authentication throttling. This is intentionally conservative and dependency-free.
+# It operates per application process; a shared Redis-backed limiter can replace it
+# later if the deployment is scaled to multiple Gunicorn workers/instances.
+LOGIN_FAILURE_WINDOW_SECONDS = int(os.getenv("LOGIN_FAILURE_WINDOW_SECONDS", "900"))
+LOGIN_MAX_FAILURES_PER_ACCOUNT = int(os.getenv("LOGIN_MAX_FAILURES_PER_ACCOUNT", "5"))
+LOGIN_MAX_FAILURES_PER_IP = int(os.getenv("LOGIN_MAX_FAILURES_PER_IP", "20"))
+_LOGIN_FAILURES = defaultdict(deque)
+_LOGIN_FAILURE_LOCK = threading.Lock()
 
 # Historical confirmed statuses are retained so existing data keeps counting.
 CONFIRMED_EXPENSE_STATUSES = ("Paid", "Confirmed")
@@ -600,10 +1055,264 @@ CROP_ALLOWED_STATUSES = {
 HARVEST_ALLOWED_STATUSES = {"Available", "Reserved", "Sold", "Spoiled"}
 HARVEST_ALLOWED_UNITS = {"kg", "tonnes", "bags", "crates"}
 
+# Malenge governance structure: one Secondary Cooperative coordinates two Primaries.
+MALENGE_MAX_SECONDARY_COOPERATIVES = 1
+MALENGE_MAX_PRIMARY_COOPERATIVES = 2
+COOPERATIVE_ALLOWED_STATUSES = {"Active", "Inactive"}
+
 
 # =========================================================
-# AUTHENTICATION HELPERS
+# AUTHENTICATION / REQUEST SECURITY HELPERS
 # =========================================================
+def client_ip_address():
+    """Return the best available client IP without blindly trusting proxy headers."""
+    if not has_request_context():
+        return None
+
+    if app.config.get("TRUST_PROXY_HEADERS"):
+        forwarded = request.headers.get("X-Forwarded-For", "").strip()
+        if forwarded:
+            return forwarded.split(",", 1)[0].strip()[:64]
+
+    return (request.remote_addr or "")[:64] or None
+
+
+def csrf_token():
+    """Return the per-session CSRF token used by all state-changing forms."""
+    token = session.get("_csrf_token")
+    if not token:
+        token = secrets.token_urlsafe(32)
+        session["_csrf_token"] = token
+    return token
+
+
+def _prune_login_failures(bucket, now):
+    cutoff = now - LOGIN_FAILURE_WINDOW_SECONDS
+    while bucket and bucket[0] < cutoff:
+        bucket.popleft()
+
+
+def _login_failure_keys(email):
+    email_key = (email or "").strip().lower() or "<blank>"
+    ip_key = client_ip_address() or "unknown"
+    return f"account:{email_key}", f"ip:{ip_key}"
+
+
+def login_rate_limited(email):
+    """Check account and IP failure windows before attempting authentication."""
+    if app.config.get("TESTING"):
+        return False
+
+    now = time.monotonic()
+    account_key, ip_key = _login_failure_keys(email)
+
+    with _LOGIN_FAILURE_LOCK:
+        account_bucket = _LOGIN_FAILURES[account_key]
+        ip_bucket = _LOGIN_FAILURES[ip_key]
+        _prune_login_failures(account_bucket, now)
+        _prune_login_failures(ip_bucket, now)
+        return (
+            len(account_bucket) >= LOGIN_MAX_FAILURES_PER_ACCOUNT
+            or len(ip_bucket) >= LOGIN_MAX_FAILURES_PER_IP
+        )
+
+
+def record_login_failure(email):
+    """Record a failed authentication attempt for both account and IP limits."""
+    if app.config.get("TESTING"):
+        return
+
+    now = time.monotonic()
+    account_key, ip_key = _login_failure_keys(email)
+
+    with _LOGIN_FAILURE_LOCK:
+        for key in (account_key, ip_key):
+            bucket = _LOGIN_FAILURES[key]
+            _prune_login_failures(bucket, now)
+            bucket.append(now)
+
+
+def clear_login_failures(email):
+    """Clear the account-specific failure bucket after a successful login."""
+    if app.config.get("TESTING"):
+        return
+
+    account_key, _ = _login_failure_keys(email)
+    with _LOGIN_FAILURE_LOCK:
+        _LOGIN_FAILURES.pop(account_key, None)
+
+
+def _two_factor_fernet():
+    """Derive an authenticated-encryption key from the configured SECRET_KEY."""
+    material = str(app.config["SECRET_KEY"]).encode("utf-8")
+    digest = hmac.new(material, b"malenge-two-factor-secret-v1", hashlib.sha256).digest()
+    return Fernet(base64.urlsafe_b64encode(digest))
+
+
+def encrypt_two_factor_secret(secret):
+    """Encrypt a TOTP secret before storing it in the database."""
+    return _two_factor_fernet().encrypt(secret.encode("ascii")).decode("ascii")
+
+
+def decrypt_two_factor_secret(value):
+    """Decrypt a stored TOTP secret. A changed SECRET_KEY requires 2FA reset."""
+    if not value:
+        return None
+    try:
+        return _two_factor_fernet().decrypt(value.encode("ascii")).decode("ascii")
+    except (InvalidToken, ValueError, TypeError) as exc:
+        raise RuntimeError(
+            "This account's Google Authenticator secret cannot be decrypted. "
+            "The account needs a 2FA reset before it can be used."
+        ) from exc
+
+
+def generate_totp_secret():
+    """Generate a 160-bit Base32 secret compatible with Google Authenticator."""
+    return base64.b32encode(secrets.token_bytes(20)).decode("ascii").rstrip("=")
+
+
+def _decode_base32(secret):
+    padding = "=" * ((8 - len(secret) % 8) % 8)
+    return base64.b32decode((secret + padding).upper(), casefold=True)
+
+
+def totp_code_for_counter(secret, counter, digits=6):
+    """Return the RFC 6238 SHA-1 TOTP code for one counter value."""
+    digest = hmac.new(
+        _decode_base32(secret),
+        struct.pack(">Q", int(counter)),
+        hashlib.sha1,
+    ).digest()
+    offset = digest[-1] & 0x0F
+    binary = struct.unpack(">I", digest[offset:offset + 4])[0] & 0x7FFFFFFF
+    return f"{binary % (10 ** digits):0{digits}d}"
+
+
+def verify_totp_code(secret, token, valid_window=1, at_time=None):
+    """Verify a six-digit Google Authenticator code and return its counter."""
+    token = "".join(ch for ch in str(token or "") if ch.isdigit())
+    if len(token) != 6:
+        return None
+
+    now = int(time.time() if at_time is None else at_time)
+    current_counter = now // 30
+    for offset in range(-valid_window, valid_window + 1):
+        counter = current_counter + offset
+        if counter < 0:
+            continue
+        expected = totp_code_for_counter(secret, counter)
+        if hmac.compare_digest(expected, token):
+            return counter
+    return None
+
+
+def google_authenticator_uri(user, secret):
+    """Build the standard otpauth URI consumed by Google Authenticator."""
+    issuer = app.config.get("TWO_FACTOR_ISSUER", "Malenge Farmers CRM")
+    label = f"{issuer}:{user.email}"
+    return (
+        f"otpauth://totp/{quote(label, safe='')}?"
+        f"secret={quote(secret, safe='')}&issuer={quote(issuer, safe='')}"
+        "&algorithm=SHA1&digits=6&period=30"
+    )
+
+
+def google_authenticator_qr_data_uri(uri):
+    """Render an otpauth URI as an in-memory PNG data URI."""
+    image = qrcode.make(uri)
+    output = io.BytesIO()
+    image.save(output, format="PNG")
+    return "data:image/png;base64," + base64.b64encode(output.getvalue()).decode("ascii")
+
+
+def _normalize_recovery_code(code):
+    return "".join(ch for ch in str(code or "").upper() if ch.isalnum())
+
+
+def _hash_recovery_code(code):
+    normalized = _normalize_recovery_code(code)
+    key = str(app.config["SECRET_KEY"]).encode("utf-8")
+    return hmac.new(key, normalized.encode("ascii"), hashlib.sha256).hexdigest()
+
+
+def generate_recovery_codes(count=8):
+    """Generate one-time recovery codes and their keyed hashes."""
+    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    codes = []
+    for _ in range(count):
+        raw = "".join(secrets.choice(alphabet) for _ in range(12))
+        codes.append(f"{raw[:4]}-{raw[4:8]}-{raw[8:]}")
+    return codes
+
+
+def set_recovery_codes(user, codes):
+    user.two_factor_recovery_codes = json.dumps([_hash_recovery_code(code) for code in codes])
+
+
+def recovery_code_count(user):
+    try:
+        values = json.loads(user.two_factor_recovery_codes or "[]")
+    except (TypeError, ValueError):
+        return 0
+    return len(values) if isinstance(values, list) else 0
+
+
+def consume_recovery_code(user, code):
+    """Consume one valid recovery code and return True; recovery codes are one-use."""
+    candidate = _hash_recovery_code(code)
+    try:
+        hashes = json.loads(user.two_factor_recovery_codes or "[]")
+    except (TypeError, ValueError):
+        hashes = []
+
+    if not isinstance(hashes, list):
+        return False
+
+    for index, stored in enumerate(hashes):
+        if isinstance(stored, str) and hmac.compare_digest(stored, candidate):
+            del hashes[index]
+            user.two_factor_recovery_codes = json.dumps(hashes)
+            return True
+    return False
+
+
+def two_factor_policy_enabled():
+    """Return the effective global 2FA policy selected by the Admin.
+
+    TWO_FACTOR_REQUIRED remains an environment-level master switch. The
+    Admin runtime setting can temporarily pause enforcement without deleting
+    any user's Google Authenticator enrollment.
+    """
+    if not app.config.get("TWO_FACTOR_REQUIRED", True):
+        return False
+    return bool(load_system_settings().get("two_factor_required", True))
+
+
+def two_factor_is_required():
+    """Return whether this request should enforce mandatory 2FA."""
+    if not two_factor_policy_enabled():
+        return False
+    if app.config.get("TESTING") and not app.config.get("TEST_TWO_FACTOR"):
+        return False
+    return True
+
+
+def two_factor_session_complete():
+    # A password-only session created while Admin temporarily disabled 2FA
+    # must not stay trusted after Admin reactivates the policy.
+    return bool(session.get("two_factor_authenticated")) and not bool(session.get("two_factor_bypassed"))
+
+
+def clear_user_two_factor(user):
+    """Reset a user's Google Authenticator enrollment without deleting the user."""
+    user.two_factor_enabled = False
+    user.two_factor_secret = None
+    user.two_factor_recovery_codes = None
+    user.two_factor_confirmed_at = None
+    user.two_factor_last_counter = None
+
+
 def logged_in():
     """Check if a user is currently logged in."""
     return "user_id" in session
@@ -842,6 +1551,118 @@ def own_cooperative_query(model):
 
 
 # =========================================================
+# PHASE 6 ACCOUNTABILITY HELPERS
+# =========================================================
+def cooperative_record_prefix(cooperative):
+    """Stable short prefix for meeting/resolution references."""
+    if not cooperative:
+        return "COOP"
+    raw = (cooperative.code or cooperative.name or "COOP").upper()
+    cleaned = re.sub(r"[^A-Z0-9]", "", raw)
+    return (cleaned[:12] or f"C{cooperative.id}")
+
+
+def next_governance_number(model, cooperative, kind, date_value=None):
+    """Generate human-readable sequential meeting/resolution references."""
+    date_value = date_value or crm_today()
+    year = date_value.year
+    prefix = cooperative_record_prefix(cooperative)
+    field = Meeting.meeting_number if model is Meeting else Resolution.resolution_number
+    pattern_prefix = f"{prefix}-{kind}-{year}-"
+    existing = model.query.filter(
+        model.cooperative_id == cooperative.id,
+        field.ilike(f"{pattern_prefix}%"),
+    ).with_entities(field).all()
+    highest = 0
+    for (value,) in existing:
+        try:
+            highest = max(highest, int((value or "").rsplit("-", 1)[-1]))
+        except (TypeError, ValueError):
+            continue
+    return f"{pattern_prefix}{highest + 1:03d}"
+
+
+def active_executive_accesses(cooperative_id):
+    """Return active executive access records for one cooperative."""
+    return UserAccess.query.filter_by(
+        cooperative_id=cooperative_id,
+        status="Active",
+    ).filter(UserAccess.role.in_(GOVERNANCE_VIEW_ROLES)).join(User).order_by(UserAccess.role.asc()).all()
+
+
+def accountability_file_extension(filename):
+    name = secure_filename(filename or "")
+    if "." not in name:
+        return None
+    extension = name.rsplit(".", 1)[1].lower()
+    return extension if extension in ACCOUNTABILITY_ALLOWED_EXTENSIONS else None
+
+
+def save_accountability_upload(file_storage, category):
+    """Persist an evidence upload outside static and return immutable metadata."""
+    if not file_storage or not file_storage.filename:
+        raise ValueError("Please choose a PDF or image to upload.")
+    extension = accountability_file_extension(file_storage.filename)
+    if not extension:
+        raise ValueError("Only PDF, PNG, JPG, JPEG and WEBP evidence files are allowed.")
+
+    original_name = secure_filename(file_storage.filename)[:255] or f"evidence.{extension}"
+    stored_name = f"{category}_{uuid.uuid4().hex}.{extension}"
+    destination = ACCOUNTABILITY_UPLOAD_DIR / stored_name
+    file_storage.save(destination)
+
+    # Do not trust a filename extension alone. A lightweight signature check keeps
+    # HTML/scripts or unrelated binaries from being stored as official evidence.
+    header = destination.read_bytes()[:16]
+    valid_signature = (
+        (extension == "pdf" and header.startswith(b"%PDF-"))
+        or (extension == "png" and header.startswith(b"\x89PNG\r\n\x1a\n"))
+        or (extension in {"jpg", "jpeg"} and header.startswith(b"\xff\xd8\xff"))
+        or (extension == "webp" and header[:4] == b"RIFF" and header[8:12] == b"WEBP")
+    )
+    if not valid_signature:
+        destination.unlink(missing_ok=True)
+        raise ValueError("The uploaded file content does not match its PDF/image file type.")
+
+    digest = hashlib.sha256(destination.read_bytes()).hexdigest()
+    return original_name, stored_name, digest
+
+
+def accountability_file_path(stored_name):
+    """Resolve one stored evidence filename without accepting path traversal."""
+    safe_name = Path(stored_name or "").name
+    if safe_name != stored_name:
+        abort(404)
+    path = ACCOUNTABILITY_UPLOAD_DIR / safe_name
+    if not path.is_file():
+        abort(404)
+    return path
+
+
+def can_update_accountability_task(task, access=None):
+    """Only the executive made responsible may report progress on that responsibility."""
+    access = access or current_access()
+    if not access or access.status != "Active" or task.cooperative_id != access.cooperative_id:
+        return False
+    return task.assigned_user_id == session.get("user_id")
+
+
+def sync_resolution_from_task(task):
+    """Keep the structured resolution status aligned with its implementation task."""
+    if not task or not task.resolution:
+        return
+    if task.status == "Verified":
+        task.resolution.status = "Closed"
+        task.resolution.closed_at = task.verified_at or utc_now()
+    elif task.status == "Awaiting Verification":
+        task.resolution.status = "Awaiting Verification"
+    elif task.status == "In Progress":
+        task.resolution.status = "In Progress"
+    elif task.status == "Open":
+        task.resolution.status = "Assigned"
+
+
+# =========================================================
 # DECORATORS
 # =========================================================
 def login_required(view_func):
@@ -888,7 +1709,7 @@ def roles_required(*allowed_roles):
 # UTILITY FUNCTIONS
 # =========================================================
 def parse_float(value, default=None):
-    """Parse a float value from a string."""
+    """Parse numeric form input; blank uses default, malformed input returns None."""
     if value is None:
         return default
     value = str(value).strip()
@@ -897,7 +1718,7 @@ def parse_float(value, default=None):
     try:
         return float(value)
     except (TypeError, ValueError):
-        return default
+        return None
 
 
 def parse_int(value, default=None):
@@ -920,22 +1741,52 @@ def parse_date(value):
     return datetime.strptime(value, "%Y-%m-%d").date()
 
 
-def add_audit_log(action, entity_type, entity_id=None, details=None, cooperative_id=None):
-    """Add an entry to the audit log."""
-    if cooperative_id is None and logged_in():
-        access = UserAccess.query.filter_by(user_id=session.get("user_id")).first()
+def add_audit_log(
+        action,
+        entity_type,
+        entity_id=None,
+        details=None,
+        cooperative_id=None,
+        user_id=None,
+):
+    """Add a permanent audit entry with request/security metadata."""
+    resolved_user_id = user_id
+    request_id = None
+    ip_address = None
+    request_method = None
+    request_path = None
+    user_agent = None
+
+    if has_request_context():
+        if resolved_user_id is None:
+            resolved_user_id = session.get("user_id")
+
+        request_id = getattr(g, "request_id", None)
+        ip_address = client_ip_address()
+        request_method = request.method[:12] if request.method else None
+        request_path = request.path[:255] if request.path else None
+        user_agent = (request.headers.get("User-Agent", "") or "")[:255] or None
+
+    if cooperative_id is None and resolved_user_id:
+        access = UserAccess.query.filter_by(user_id=resolved_user_id).first()
         if access:
             cooperative_id = access.cooperative_id
 
     log = AuditLog(
-        user_id=session.get("user_id"),
+        user_id=resolved_user_id,
         cooperative_id=cooperative_id,
         action=action,
         entity_type=entity_type,
         entity_id=entity_id,
         details=details,
+        ip_address=ip_address,
+        request_method=request_method,
+        request_path=request_path,
+        request_id=request_id,
+        user_agent=user_agent,
     )
     db.session.add(log)
+    return log
 
 
 def sale_paid_amount(sale, exclude_payment_id=None):
@@ -1028,13 +1879,119 @@ def sync_crop_status_after_harvest_change(crop):
         crop.status = "Planted"
 
 
+def normalize_membership_status(value, default="Active"):
+    """Return a permitted Phase 5 membership lifecycle status."""
+    status = (value or default).strip().title()
+    if status not in MEMBERSHIP_ALLOWED_STATUSES:
+        return None
+    return status
+
+
+def membership_number_prefix(cooperative):
+    """Build a stable human-readable prefix for a Primary cooperative."""
+    if not cooperative:
+        return "MEM"
+    raw = (cooperative.code or "").strip().upper()
+    cleaned = re.sub(r"[^A-Z0-9]", "", raw)
+    if cleaned:
+        return cleaned[:12]
+    return f"P{cooperative.id}"
+
+
+def generate_member_number(cooperative):
+    """Generate the next member number such as SIYA-0001 for a Primary cooperative."""
+    prefix = membership_number_prefix(cooperative)
+    pattern = re.compile(rf"^{re.escape(prefix)}-(\d+)$", re.IGNORECASE)
+    highest = 0
+    existing = Membership.query.filter(Membership.member_number.ilike(f"{prefix}-%")).with_entities(
+        Membership.member_number
+    ).all()
+    for (number,) in existing:
+        match = pattern.match(number or "")
+        if match:
+            highest = max(highest, int(match.group(1)))
+    return f"{prefix}-{highest + 1:04d}"
+
+
+def record_membership_history(membership, event_type, description=None, from_status=None, to_status=None, user_id=None):
+    """Append an immutable lifecycle event for a membership."""
+    if not membership or not membership.id:
+        raise ValueError("Membership must be flushed before history is recorded.")
+    entry = MembershipHistory(
+        membership_id=membership.id,
+        cooperative_id=membership.cooperative_id,
+        user_id=user_id if user_id is not None else session.get("user_id") if has_request_context() else None,
+        event_type=event_type,
+        from_status=from_status,
+        to_status=to_status,
+        description=description,
+    )
+    db.session.add(entry)
+    return entry
+
+
+def membership_filtered_query(search="", status="", fee_status="", cooperative_id=None):
+    """Build the role-scoped Phase 5 membership register query."""
+    query = scoped_model_query(Membership).join(Farmer).join(
+        Cooperative, Membership.cooperative_id == Cooperative.id
+    ).filter(Cooperative.cooperative_type == "Primary")
+
+    if search:
+        query = query.filter(or_(
+            Membership.member_number.ilike(f"%{search}%"),
+            Membership.membership_type.ilike(f"%{search}%"),
+            Membership.status.ilike(f"%{search}%"),
+            Farmer.fullname.ilike(f"%{search}%"),
+            Farmer.phone.ilike(f"%{search}%"),
+        ))
+
+    if status in MEMBERSHIP_ALLOWED_STATUSES:
+        query = query.filter(Membership.status == status)
+
+    if cooperative_id:
+        query = query.filter(Membership.cooperative_id == cooperative_id)
+
+    pending_membership_fee = (
+        db.session.query(func.coalesce(func.sum(Contribution.amount), 0))
+        .filter(
+            Contribution.membership_id == Membership.id,
+            Contribution.status == "Pending Confirmation",
+            func.lower(func.trim(func.coalesce(Contribution.category, ""))).in_(MEMBERSHIP_FEE_CATEGORY_ALIASES),
+        )
+        .correlate(Membership)
+        .scalar_subquery()
+    )
+
+    if fee_status == "paid":
+        query = query.filter(Membership.fee_paid >= Membership.fee_amount)
+    elif fee_status == "due":
+        query = query.filter(
+            (Membership.fee_paid + pending_membership_fee) < Membership.fee_amount
+        )
+    elif fee_status == "pending":
+        query = query.filter(pending_membership_fee > 0)
+
+    return query
+
+
+def csv_safe_cell(value):
+    """Prevent spreadsheet formula execution in exported user-controlled text."""
+    if not isinstance(value, str):
+        return value
+
+    stripped = value.lstrip()
+    if stripped.startswith(("=", "+", "-", "@", "\t", "\r")):
+        return "'" + value
+    return value
+
+
 def make_csv_response(filename, headers, rows):
-    """Create a CSV response."""
+    """Create a CSV response with spreadsheet-injection protection."""
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(headers)
+    writer.writerow([csv_safe_cell(value) for value in headers])
     for row in rows:
-        writer.writerow(row)
+        writer.writerow([csv_safe_cell(value) for value in row])
     return Response(
         output.getvalue(),
         mimetype="text/csv",
@@ -1054,6 +2011,9 @@ DEFAULT_SYSTEM_SETTINGS = {
     "default_location": "Malenge",
     "session_timeout_minutes": 480,
     "maintenance_notice": "",
+    # Admin-controlled runtime policy. Disabling this does not erase any
+    # user's enrolled Google Authenticator secret or recovery codes.
+    "two_factor_required": True,
 }
 
 
@@ -1061,67 +2021,67 @@ ROLE_PERMISSION_MATRIX = [
     {
         "role": "Admin",
         "scope": "System-wide",
-        "allowed": "CRM users, access, cooperative structure, audit logs, security, backup/restore, system health, exports and system settings.",
+        "allowed": "CRM users, access, executive appointments/history, cooperative structure, audit logs, security, backup/restore, system health, exports and system settings.",
         "restricted": "Does not perform Secretary, Treasurer or Chairperson cooperative duties."
     },
     {
         "role": "Secondary Chairperson",
         "scope": "Malenge Secondary Cooperative",
-        "allowed": "Leadership oversight and confirmation/rejection of Secondary Cooperative financial entries.",
+        "allowed": "Leadership oversight, meeting evidence confirmation, resolution certification, accountability verification and confirmation/rejection of Secondary Cooperative financial entries.",
         "restricted": "Cannot manage CRM users or change system configuration."
     },
     {
         "role": "Secondary Vice Chairperson",
         "scope": "Malenge Secondary Cooperative",
-        "allowed": "Leadership and operational oversight.",
+        "allowed": "Leadership/operational oversight, assigned accountability execution and independent verification when not self-verifying.",
         "restricted": "No CRM administration and no finance confirmation unless policy is changed later."
     },
     {
         "role": "Secondary Secretary",
         "scope": "Malenge Secondary Cooperative",
-        "allowed": "Secondary-level membership/governance administration and records.",
-        "restricted": "Does not record or approve cooperative money."
+        "allowed": "Network-wide membership oversight; registers Secondary meeting evidence, captures resolutions and maintains accountability records.",
+        "restricted": "Individual member registration belongs to each Primary Secretary/Vice Secretary; does not record or approve cooperative money."
     },
     {
         "role": "Secondary Vice Secretary",
         "scope": "Malenge Secondary Cooperative",
-        "allowed": "Assists with membership and administrative records.",
-        "restricted": "Does not record or approve cooperative money."
+        "allowed": "Assists with network membership oversight, meeting evidence uploads and draft accountability/resolution records.",
+        "restricted": "Cannot create or edit individual Primary membership records and does not record or approve cooperative money."
     },
     {
         "role": "Secondary Treasurer",
         "scope": "Malenge Secondary Cooperative",
-        "allowed": "Records Secondary Cooperative money and views permitted financial information.",
+        "allowed": "Records Secondary Cooperative money, views governance evidence and carries out assigned accountability tasks.",
         "restricted": "Cannot confirm own entries or transact for Primary Cooperatives."
     },
     {
         "role": "Primary Chairperson",
         "scope": "Assigned Primary Cooperative",
-        "allowed": "Leadership oversight and confirmation/rejection of that Primary Cooperative's financial entries.",
+        "allowed": "Leadership oversight, meeting evidence confirmation, resolution certification, accountability verification and confirmation/rejection of that Primary Cooperative's financial entries.",
         "restricted": "Cannot manage CRM users or another cooperative's transactions."
     },
     {
         "role": "Primary Vice Chairperson",
         "scope": "Assigned Primary Cooperative",
-        "allowed": "Leadership and operational oversight for the assigned Primary Cooperative.",
+        "allowed": "Leadership/operational oversight, assigned accountability execution and independent verification when not self-verifying.",
         "restricted": "No CRM administration and no finance confirmation unless policy is changed later."
     },
     {
         "role": "Primary Secretary",
         "scope": "Assigned Primary Cooperative",
-        "allowed": "Registers and maintains membership records for the assigned Primary Cooperative.",
+        "allowed": "Registers and maintains membership records; registers meeting evidence, captures resolutions and maintains accountability records.",
         "restricted": "Does not record actual money paid."
     },
     {
         "role": "Primary Vice Secretary",
         "scope": "Assigned Primary Cooperative",
-        "allowed": "Assists with membership and administrative records for the assigned Primary Cooperative.",
+        "allowed": "Assists with membership, meeting evidence uploads and draft governance/accountability records for the assigned Primary Cooperative.",
         "restricted": "Does not record actual money paid."
     },
     {
         "role": "Primary Treasurer",
         "scope": "Assigned Primary Cooperative",
-        "allowed": "Records contributions, expenses and permitted money records for the assigned Primary Cooperative.",
+        "allowed": "Records contributions, expenses and permitted money records; views governance evidence and carries out assigned accountability tasks.",
         "restricted": "Cannot confirm own entries or transact for another cooperative."
     },
 ]
@@ -1154,6 +2114,13 @@ def load_system_settings():
         timeout = 480
 
     settings["session_timeout_minutes"] = min(max(timeout, 15), 1440)
+
+    raw_two_factor = settings.get("two_factor_required", True)
+    if isinstance(raw_two_factor, str):
+        settings["two_factor_required"] = raw_two_factor.strip().lower() in {"1", "true", "yes", "on"}
+    else:
+        settings["two_factor_required"] = bool(raw_two_factor)
+
     return settings
 
 
@@ -1295,29 +2262,63 @@ def admin_export_rows(dataset):
             ] for r in rows]
         )
 
+    if dataset == "executive-history":
+        rows = ExecutiveAppointment.query.order_by(
+            ExecutiveAppointment.start_date.desc(),
+            ExecutiveAppointment.created_at.desc(),
+        ).all()
+        return (
+            [
+                "ID", "Cooperative", "Type", "Position", "Role", "Executive",
+                "Email", "Start Date", "End Date", "Status", "Appointed By",
+                "Ended By", "Notes"
+            ],
+            [[
+                r.id,
+                r.cooperative.name if r.cooperative else "",
+                r.cooperative.cooperative_type if r.cooperative else "",
+                executive_position_from_role(r.role) or "",
+                r.role,
+                r.user.fullname if r.user else "",
+                r.user.email if r.user else "",
+                r.start_date or "",
+                r.end_date or "",
+                r.status,
+                r.appointed_by.fullname if r.appointed_by else "",
+                r.ended_by.fullname if r.ended_by else "",
+                r.notes or "",
+            ] for r in rows]
+        )
+
     if dataset == "audit-logs":
         rows = AuditLog.query.order_by(AuditLog.created_at.desc()).all()
         return (
-            ["ID", "Date/Time", "User", "Action", "Entity", "Entity ID", "Cooperative", "Details"],
+            [
+                "ID", "Date/Time UTC", "User", "Action", "Entity", "Entity ID",
+                "Cooperative", "Details", "IP Address", "Method", "Path",
+                "Request ID", "User Agent"
+            ],
             [[
                 r.id, r.created_at or "",
                 r.user.fullname if r.user else "",
                 r.action, r.entity_type, r.entity_id or "",
                 r.cooperative.name if r.cooperative else "",
-                r.details or ""
+                r.details or "", r.ip_address or "", r.request_method or "",
+                r.request_path or "", r.request_id or "", r.user_agent or ""
             ] for r in rows]
         )
 
     if dataset == "memberships":
         rows = Membership.query.order_by(Membership.created_at.desc()).all()
         return (
-            ["ID", "Member Number", "Member", "Cooperative", "Type", "Join Date", "Fee Expected", "Fee Paid", "Status"],
+            ["ID", "Member Number", "Member", "Cooperative", "Type", "Join Date", "Fee Expected", "Fee Confirmed", "Fee Pending", "Fee Outstanding", "Fee Status", "Status", "Updated"],
             [[
                 r.id, r.member_number,
                 r.farmer.fullname if r.farmer else "",
                 r.cooperative.name if r.cooperative else "",
                 r.membership_type or "", r.join_date or "",
-                r.fee_amount or 0, r.fee_paid or 0, r.status
+                r.fee_amount or 0, r.fee_paid or 0, r.fee_pending, r.fee_outstanding, r.fee_status,
+                r.status, r.updated_at or r.created_at or ""
             ] for r in rows]
         )
 
@@ -1431,6 +2432,9 @@ SENSITIVE_FORM_FIELDS = {
     "confirm_password",
     "current_password",
     "new_password",
+    "code",
+    "two_factor_code",
+    "recovery_code",
 }
 
 
@@ -1597,6 +2601,79 @@ def _render_branded_error(status_code, title, message):
 # APPLICATION CONTEXT PROCESSORS AND REQUEST HANDLERS
 # =========================================================
 @app.context_processor
+def inject_security_context():
+    """Expose only safe request-security helpers to Jinja templates."""
+    return {
+        "csrf_token": csrf_token,
+        "format_sast": format_sast,
+        "recovery_code_count": recovery_code_count,
+        "two_factor_policy_enabled": two_factor_policy_enabled,
+    }
+
+
+@app.before_request
+def assign_request_context():
+    """Attach a stable request ID used by responses and audit records."""
+    incoming = request.headers.get("X-Request-ID", "").strip()
+    g.request_id = (incoming[:64] if incoming else uuid.uuid4().hex)
+
+
+@app.before_request
+def protect_csrf():
+    """Reject forged state-changing requests with a session-bound token."""
+    if app.config.get("TESTING"):
+        return None
+
+    if request.method in {"GET", "HEAD", "OPTIONS", "TRACE"}:
+        return None
+
+    expected = session.get("_csrf_token")
+    provided = (
+        request.form.get("csrf_token")
+        or request.headers.get("X-CSRFToken")
+        or request.headers.get("X-CSRF-Token")
+    )
+
+    if not expected or not provided or not hmac.compare_digest(str(expected), str(provided)):
+        abort(400, description="Your security token is missing or expired. Refresh the page and try again.")
+
+    return None
+
+
+@app.after_request
+def add_security_headers(response):
+    """Apply baseline browser security headers to every response."""
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    response.headers.setdefault(
+        "Content-Security-Policy",
+        "default-src 'self'; "
+        "img-src 'self' data:; "
+        "style-src 'self' 'unsafe-inline'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "font-src 'self' data:; "
+        "connect-src 'self'; "
+        "object-src 'none'; "
+        "base-uri 'self'; "
+        "frame-ancestors 'none'; "
+        "form-action 'self'"
+    )
+
+    if request.is_secure:
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+
+    if getattr(g, "request_id", None):
+        response.headers.setdefault("X-Request-ID", g.request_id)
+
+    if logged_in() and request.endpoint != "static":
+        response.headers.setdefault("Cache-Control", "no-store")
+
+    return response
+
+
+@app.context_processor
 def inject_access_context():
     """Inject access-related variables into templates."""
     if not logged_in():
@@ -1617,6 +2694,11 @@ def inject_access_context():
             "can_view_business": False,
             "can_manage_business": False,
             "can_view_finance": False,
+            "can_view_governance": False,
+            "can_record_meetings": False,
+            "can_confirm_meetings": False,
+            "can_record_resolutions": False,
+            "can_verify_accountability": False,
             "system_settings": load_system_settings(),
             "sale_paid_amount": sale_paid_amount,
             "sale_outstanding_amount": sale_outstanding_amount,
@@ -1649,6 +2731,11 @@ def inject_access_context():
         "can_view_business": active and access.role in BUSINESS_VIEW_ROLES,
         "can_manage_business": active and access.role in BUSINESS_RECORD_ROLES,
         "can_view_finance": active and access.role in FINANCE_VIEW_ROLES,
+        "can_view_governance": active and access.role in GOVERNANCE_VIEW_ROLES,
+        "can_record_meetings": active and access.role in MEETING_RECORD_ROLES,
+        "can_confirm_meetings": active and access.role in MEETING_CONFIRM_ROLES,
+        "can_record_resolutions": active and access.role in RESOLUTION_RECORD_ROLES,
+        "can_verify_accountability": active and access.role in ACCOUNTABILITY_VERIFY_ROLES,
         "system_settings": load_system_settings(),
         "sale_paid_amount": sale_paid_amount,
         "sale_outstanding_amount": sale_outstanding_amount,
@@ -1686,6 +2773,39 @@ def enforce_active_access():
 
 
 @app.before_request
+def enforce_two_factor():
+    """Keep password-only sessions away from protected CRM routes."""
+    if not two_factor_is_required() or not logged_in():
+        return None
+
+    exempt_endpoints = {
+        "home",
+        "login",
+        "register",
+        "health",
+        "static",
+        "logout",
+        "two_factor_setup",
+        "two_factor_verify",
+    }
+    if request.endpoint in exempt_endpoints:
+        return None
+
+    user = current_user()
+    if not user:
+        session.clear()
+        return redirect(url_for("login"))
+
+    if two_factor_session_complete():
+        return None
+
+    if user.two_factor_enabled:
+        return redirect(url_for("two_factor_verify"))
+
+    return redirect(url_for("two_factor_setup"))
+
+
+@app.before_request
 def load_form_feedback():
     """Load form feedback from session."""
     g.malenge_form_error = session.pop("_malenge_form_error", None)
@@ -1709,7 +2829,7 @@ def improve_error_experience(response):
             return redirect(_safe_feedback_target(), code=303)
 
     # Replace simple non-form HTTP errors with a branded page
-    if response.status_code in {400, 401, 403, 404, 500}:
+    if response.status_code in {400, 401, 403, 404, 413, 429, 500}:
         message = _plain_error_message(response)
 
         if message:
@@ -1718,6 +2838,8 @@ def improve_error_experience(response):
                 401: "Sign-in required",
                 403: "Access denied",
                 404: "Page not found",
+                413: "Request too large",
+                429: "Too many attempts",
                 500: "Something went wrong",
             }
             html_response = _render_branded_error(
@@ -1922,38 +3044,45 @@ def health():
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
-    """User login with security auditing."""
+    """User login with throttling and security auditing."""
     if request.method == "POST":
         email = request.form.get("email", "").strip().lower()
         password = request.form.get("password", "")
 
+        if login_rate_limited(email):
+            add_audit_log(
+                "LOGIN_RATE_LIMITED",
+                "User",
+                details=f"Login temporarily blocked after repeated failures for {email or 'blank email'}.",
+            )
+            db.session.commit()
+            return "Too many failed login attempts. Please wait before trying again.", 429
+
         user = User.query.filter_by(email=email).first()
 
         if not user or not check_password_hash(user.password, password):
-            log = AuditLog(
+            record_login_failure(email)
+            add_audit_log(
+                "LOGIN_FAILED",
+                "User",
+                user.id if user else None,
+                f"Failed login attempt for {email or 'blank email'}",
                 user_id=user.id if user else None,
-                cooperative_id=None,
-                action="LOGIN_FAILED",
-                entity_type="User",
-                entity_id=user.id if user else None,
-                details=f"Failed login attempt for {email or 'blank email'}",
             )
-            db.session.add(log)
             db.session.commit()
             return "Invalid email or password.", 401
 
         access = get_user_access(user.id)
 
         if access.status == "Pending":
-            log = AuditLog(
-                user_id=user.id,
+            add_audit_log(
+                "LOGIN_DENIED",
+                "User",
+                user.id,
+                "Login denied because account is Pending.",
                 cooperative_id=access.cooperative_id,
-                action="LOGIN_DENIED",
-                entity_type="User",
-                entity_id=user.id,
-                details="Login denied because account is Pending.",
+                user_id=user.id,
             )
-            db.session.add(log)
             db.session.commit()
             return (
                 "Your CRM account is awaiting authorization "
@@ -1962,39 +3091,68 @@ def login():
             )
 
         if access.status != "Active":
-            log = AuditLog(
-                user_id=user.id,
+            add_audit_log(
+                "LOGIN_DENIED",
+                "User",
+                user.id,
+                f"Login denied because account status is {access.status}.",
                 cooperative_id=access.cooperative_id,
-                action="LOGIN_DENIED",
-                entity_type="User",
-                entity_id=user.id,
-                details=f"Login denied because account status is {access.status}.",
+                user_id=user.id,
             )
-            db.session.add(log)
             db.session.commit()
             return "Your CRM account is currently inactive.", 403
 
         if access.role not in VALID_ACCESS_ROLES:
-            log = AuditLog(
-                user_id=user.id,
+            add_audit_log(
+                "LOGIN_DENIED",
+                "User",
+                user.id,
+                f"Login denied because role is {access.role}.",
                 cooperative_id=access.cooperative_id,
-                action="LOGIN_DENIED",
-                entity_type="User",
-                entity_id=user.id,
-                details=f"Login denied because role is {access.role}.",
+                user_id=user.id,
             )
-            db.session.add(log)
             db.session.commit()
             return (
                 "Your CRM account requires an updated role assignment.",
                 403,
             )
 
+        clear_login_failures(email)
         apply_session_timeout()
+        session.clear()
         session.permanent = True
         session["user_id"] = user.id
         session["fullname"] = user.fullname
+        session["two_factor_authenticated"] = False
+        session["two_factor_bypassed"] = False
+        session["two_factor_failures"] = 0
+        # Rotate the CSRF token when the authentication state changes.
+        session["_csrf_token"] = secrets.token_urlsafe(32)
 
+        if two_factor_is_required():
+            if user.two_factor_enabled:
+                add_audit_log(
+                    "TWO_FACTOR_CHALLENGE",
+                    "User",
+                    user.id,
+                    "Password accepted; Google Authenticator verification required.",
+                    cooperative_id=access.cooperative_id,
+                )
+                db.session.commit()
+                return redirect(url_for("two_factor_verify"))
+
+            add_audit_log(
+                "TWO_FACTOR_ENROLLMENT_REQUIRED",
+                "User",
+                user.id,
+                "Password accepted; mandatory Google Authenticator enrollment required.",
+                cooperative_id=access.cooperative_id,
+            )
+            db.session.commit()
+            return redirect(url_for("two_factor_setup"))
+
+        session["two_factor_authenticated"] = True
+        session["two_factor_bypassed"] = True
         add_audit_log(
             "LOGIN_SUCCESS",
             "User",
@@ -2003,7 +3161,6 @@ def login():
             cooperative_id=access.cooperative_id,
         )
         db.session.commit()
-
         return redirect(url_for("dashboard"))
 
     return render_template("login.html")
@@ -2011,15 +3168,12 @@ def login():
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
-    """
-    Bootstrap registration.
-
-    Public self-registration is disabled once the CRM has any users.
-    This route exists only so a brand-new database can create its first
-    system Admin account.
-    """
+    """Bootstrap the first Admin account only when explicitly allowed."""
     if User.query.count() > 0:
         return redirect(url_for("login"))
+
+    if not app.config.get("ALLOW_BOOTSTRAP_REGISTRATION"):
+        abort(403, description="Bootstrap registration is disabled. Create the first Admin from a trusted environment.")
 
     if request.method == "POST":
         fullname = request.form.get("fullname", "").strip()
@@ -2029,14 +3183,7 @@ def register():
         password = request.form.get("password", "")
         confirm_password = request.form.get("confirm_password", "")
 
-        if not all([
-            fullname,
-            phone,
-            email,
-            farm_location,
-            password,
-            confirm_password,
-        ]):
+        if not all([fullname, phone, email, farm_location, password, confirm_password]):
             return "Please complete all required fields.", 400
 
         if password != confirm_password:
@@ -2045,7 +3192,7 @@ def register():
         if len(password) < 8:
             return "Password must be at least 8 characters.", 400
 
-        existing_user = User.query.filter_by(email=email).first()
+        existing_user = User.query.filter(func.lower(User.email) == email.lower()).first()
         if existing_user:
             return "An account with this email already exists.", 400
 
@@ -2056,7 +3203,6 @@ def register():
             farm_location=farm_location,
             password=generate_password_hash(password),
         )
-
         db.session.add(new_user)
         db.session.flush()
 
@@ -2066,8 +3212,14 @@ def register():
             status="Active",
             cooperative_id=None,
         )
-
         db.session.add(access)
+        add_audit_log(
+            "BOOTSTRAP_ADMIN_CREATE",
+            "User",
+            new_user.id,
+            "Initial CRM Admin account created through bootstrap registration.",
+            user_id=new_user.id,
+        )
         db.session.commit()
         return redirect(url_for("login"))
 
@@ -2161,7 +3313,7 @@ def dashboard():
         Membership.status == "Active"
     ).all()
     membership_fee_due_value = sum(
-        max(float(m.fee_amount or 0) - float(m.fee_paid or 0), 0.0)
+        m.fee_outstanding
         for m in visible_active_memberships
     )
 
@@ -2170,7 +3322,7 @@ def dashboard():
     expense_count = scoped_model_query(Expense).count()
     inventory_count = scoped_model_query(InventoryItem).count()
     equipment_count = scoped_model_query(Equipment).count()
-    open_task_count = scoped_model_query(Task).filter(Task.status != "Completed").count()
+    open_task_count = scoped_model_query(Task).filter(Task.status.notin_(["Completed", "Cancelled", "Verified"])).count()
 
     recent_farmers = scoped_model_query(Farmer).order_by(Farmer.created_at.desc()).limit(5).all()
     recent_sales = active_sales_query.order_by(Sale.created_at.desc()).limit(5).all()
@@ -2223,7 +3375,7 @@ def dashboard():
             status="Active",
         ).all()
         coop_fee_due = sum(
-            max(float(m.fee_amount or 0) - float(m.fee_paid or 0), 0.0)
+            m.fee_outstanding
             for m in coop_active_memberships
         )
 
@@ -2255,7 +3407,7 @@ def dashboard():
             "pending_finance": pending_finance,
             "open_tasks": Task.query.filter(
                 Task.cooperative_id == cooperative.id,
-                Task.status != "Completed",
+                Task.status.notin_(["Completed", "Cancelled", "Verified"]),
             ).count(),
             "low_stock_items": InventoryItem.query.filter(
                 InventoryItem.cooperative_id == cooperative.id,
@@ -2267,10 +3419,10 @@ def dashboard():
     # -----------------------------------------------------
     # Alerts in the user's visibility scope
     # -----------------------------------------------------
-    today = utc_now().date()
+    today = crm_today()
 
     overdue_task_count = scoped_model_query(Task).filter(
-        Task.status != "Completed",
+        Task.status.notin_(["Completed", "Cancelled", "Verified"]),
         Task.due_date.isnot(None),
         Task.due_date < today,
     ).count()
@@ -2286,10 +3438,13 @@ def dashboard():
         Equipment.status != "Retired",
     ).count()
 
-    unpaid_membership_count = scoped_model_query(Membership).filter(
-        Membership.status == "Active",
-        Membership.fee_paid < Membership.fee_amount,
-    ).count()
+    unpaid_membership_count = sum(
+        1
+        for membership in scoped_model_query(Membership).filter(
+            Membership.status == "Active"
+        ).all()
+        if membership.fee_outstanding > 1e-9
+    )
 
     recent_cooperative_activity = scoped_model_query(AuditLog).filter(
         AuditLog.cooperative_id.isnot(None)
@@ -2340,7 +3495,7 @@ def dashboard():
             status="Active",
         ).all()
         own_membership_fee_due = sum(
-            max(float(m.fee_amount or 0) - float(m.fee_paid or 0), 0.0)
+            m.fee_outstanding
             for m in own_memberships_for_due
         )
 
@@ -2421,6 +3576,49 @@ def dashboard():
         }
         own_positions_filled = len(filled_roles)
         own_positions_vacant = max(5 - own_positions_filled, 0)
+
+    # -----------------------------------------------------
+    # Phase 6 accountability command-centre metrics
+    # -----------------------------------------------------
+    accountability_open_count = 0
+    accountability_overdue_count = 0
+    accountability_awaiting_verification_count = 0
+    my_accountability_task_count = 0
+    my_overdue_accountability_count = 0
+    recent_resolutions = []
+    upcoming_meetings = []
+
+    if own_cooperative_id and not is_admin_dashboard:
+        own_resolutions = Resolution.query.filter_by(cooperative_id=own_cooperative_id)
+        accountability_open_count = own_resolutions.filter(
+            Resolution.status.in_(["Assigned", "In Progress", "Awaiting Verification"])
+        ).count()
+        accountability_overdue_count = own_resolutions.filter(
+            Resolution.status.in_(["Assigned", "In Progress"]),
+            Resolution.due_date.isnot(None),
+            Resolution.due_date < today,
+        ).count()
+        accountability_awaiting_verification_count = own_resolutions.filter_by(
+            status="Awaiting Verification"
+        ).count()
+        recent_resolutions = own_resolutions.order_by(Resolution.created_at.desc()).limit(5).all()
+        upcoming_meetings = Meeting.query.filter(
+            Meeting.cooperative_id == own_cooperative_id,
+            Meeting.meeting_date >= today,
+        ).order_by(Meeting.meeting_date.asc()).limit(4).all()
+
+        my_tasks = Task.query.filter(
+            Task.cooperative_id == own_cooperative_id,
+            Task.resolution_id.isnot(None),
+            Task.assigned_user_id == session.get("user_id"),
+            Task.status.in_(["Open", "In Progress", "Awaiting Verification"]),
+        )
+        my_accountability_task_count = my_tasks.count()
+        my_overdue_accountability_count = my_tasks.filter(
+            Task.due_date.isnot(None),
+            Task.due_date < today,
+            Task.status.in_(["Open", "In Progress"]),
+        ).count()
 
     # -----------------------------------------------------
     # Admin-only dashboard variables
@@ -2506,6 +3704,15 @@ def dashboard():
         own_executives=own_executives,
         own_positions_filled=own_positions_filled,
         own_positions_vacant=own_positions_vacant,
+
+        # Phase 6 accountability
+        accountability_open_count=accountability_open_count,
+        accountability_overdue_count=accountability_overdue_count,
+        accountability_awaiting_verification_count=accountability_awaiting_verification_count,
+        my_accountability_task_count=my_accountability_task_count,
+        my_overdue_accountability_count=my_overdue_accountability_count,
+        recent_resolutions=recent_resolutions,
+        upcoming_meetings=upcoming_meetings,
 
         # Admin totals
         admin_user_count=admin_user_count,
@@ -3523,7 +4730,7 @@ def delete_payment(payment_id):
 # ROUTES - CUSTOMERS
 # =========================================================
 @app.route("/customers")
-@login_required
+@roles_required(*CUSTOMER_VIEW_ROLES)
 def customers_list():
     """List customers."""
     search = request.args.get("search", "").strip()
@@ -3543,7 +4750,7 @@ def customers_list():
 
 
 @app.route("/customers/add", methods=["GET", "POST"])
-@login_required
+@roles_required(*CUSTOMER_RECORD_ROLES)
 def add_customer():
     """Add a customer."""
     if request.method == "POST":
@@ -3551,8 +4758,12 @@ def add_customer():
         if not name:
             return "Customer name is required.", 400
 
+        cooperative_id = own_cooperative_id()
+        if not cooperative_id:
+            abort(403)
+
         customer = Customer(
-            cooperative_id=default_record_cooperative_id(),
+            cooperative_id=cooperative_id,
             name=name,
             contact_person=request.form.get("contact_person", "").strip() or None,
             phone=request.form.get("phone", "").strip() or None,
@@ -3572,10 +4783,11 @@ def add_customer():
 
 
 @app.route("/customers/edit/<int:customer_id>", methods=["GET", "POST"])
-@login_required
+@roles_required(*CUSTOMER_RECORD_ROLES)
 def edit_customer(customer_id):
     """Edit a customer."""
     customer = scoped_get_or_404(Customer, customer_id)
+    require_own_cooperative(customer.cooperative_id)
 
     if request.method == "POST":
         customer.name = request.form.get("name", "").strip()
@@ -3597,11 +4809,12 @@ def edit_customer(customer_id):
 
 
 @app.route("/customers/delete/<int:customer_id>", methods=["POST"])
-@login_required
+@roles_required(*CUSTOMER_RECORD_ROLES)
 def delete_customer(customer_id):
     """Delete a customer."""
     customer = scoped_get_or_404(Customer, customer_id)
-    add_audit_log("DELETE", "Customer", customer.id, customer.name)
+    require_own_cooperative(customer.cooperative_id)
+    add_audit_log("DELETE", "Customer", customer.id, customer.name, cooperative_id=customer.cooperative_id)
     db.session.delete(customer)
     db.session.commit()
     return redirect(url_for("customers_list"))
@@ -3611,7 +4824,7 @@ def delete_customer(customer_id):
 # ROUTES - SUPPLIERS
 # =========================================================
 @app.route("/suppliers")
-@login_required
+@roles_required(*SUPPLIER_VIEW_ROLES)
 def suppliers_list():
     """List suppliers."""
     search = request.args.get("search", "").strip()
@@ -3631,7 +4844,7 @@ def suppliers_list():
 
 
 @app.route("/suppliers/add", methods=["GET", "POST"])
-@login_required
+@roles_required(*SUPPLIER_RECORD_ROLES)
 def add_supplier():
     """Add a supplier."""
     if request.method == "POST":
@@ -3639,8 +4852,12 @@ def add_supplier():
         if not name:
             return "Supplier name is required.", 400
 
+        cooperative_id = own_cooperative_id()
+        if not cooperative_id:
+            abort(403)
+
         supplier = Supplier(
-            cooperative_id=default_record_cooperative_id(),
+            cooperative_id=cooperative_id,
             name=name,
             contact_person=request.form.get("contact_person", "").strip() or None,
             phone=request.form.get("phone", "").strip() or None,
@@ -3660,10 +4877,11 @@ def add_supplier():
 
 
 @app.route("/suppliers/edit/<int:supplier_id>", methods=["GET", "POST"])
-@login_required
+@roles_required(*SUPPLIER_RECORD_ROLES)
 def edit_supplier(supplier_id):
     """Edit a supplier."""
     supplier = scoped_get_or_404(Supplier, supplier_id)
+    require_own_cooperative(supplier.cooperative_id)
 
     if request.method == "POST":
         supplier.name = request.form.get("name", "").strip()
@@ -3685,10 +4903,11 @@ def edit_supplier(supplier_id):
 
 
 @app.route("/suppliers/delete/<int:supplier_id>", methods=["POST"])
-@login_required
+@roles_required(*SUPPLIER_RECORD_ROLES)
 def delete_supplier(supplier_id):
     """Delete a supplier."""
     supplier = scoped_get_or_404(Supplier, supplier_id)
+    require_own_cooperative(supplier.cooperative_id)
     if supplier.expenses or supplier.inventory_items:
         return "This supplier cannot be deleted because linked records exist.", 400
     add_audit_log("DELETE", "Supplier", supplier.id, supplier.name)
@@ -3756,6 +4975,10 @@ def add_expense():
         farm_record = db.session.get(Farm, farm_id_value) if farm_id_value else None
         supplier_record = db.session.get(Supplier, supplier_id_value) if supplier_id_value else None
 
+        if farm_id_value and not farm_record:
+            return "Selected farm does not exist.", 400
+        if supplier_id_value and not supplier_record:
+            return "Selected supplier does not exist.", 400
         if farm_record and farm_record.cooperative_id != access.cooperative_id:
             abort(403)
         if supplier_record and supplier_record.cooperative_id != access.cooperative_id:
@@ -3830,6 +5053,10 @@ def edit_expense(expense_id):
         farm_record = db.session.get(Farm, farm_id_value) if farm_id_value else None
         supplier_record = db.session.get(Supplier, supplier_id_value) if supplier_id_value else None
 
+        if farm_id_value and not farm_record:
+            return "Selected farm does not exist.", 400
+        if supplier_id_value and not supplier_record:
+            return "Selected supplier does not exist.", 400
         if farm_record and farm_record.cooperative_id != access.cooperative_id:
             abort(403)
         if supplier_record and supplier_record.cooperative_id != access.cooperative_id:
@@ -3923,7 +5150,7 @@ def delete_expense(expense_id):
 # ROUTES - INVENTORY
 # =========================================================
 @app.route("/inventory")
-@login_required
+@roles_required(*OPERATIONS_VIEW_ROLES)
 def inventory_list():
     """List inventory items."""
     search = request.args.get("search", "").strip()
@@ -3942,7 +5169,7 @@ def inventory_list():
 
 
 @app.route("/inventory/add", methods=["GET", "POST"])
-@login_required
+@roles_required(*OPERATIONS_RECORD_ROLES)
 def add_inventory_item():
     """Add an inventory item."""
     suppliers = scoped_model_query(Supplier).order_by(Supplier.name.asc()).all()
@@ -3952,17 +5179,32 @@ def add_inventory_item():
         if not name:
             return "Inventory item name is required.", 400
 
+        cooperative_id = own_cooperative_id()
+        if not cooperative_id:
+            abort(403)
+
         supplier_id_value = parse_int(request.form.get("supplier_id"))
         supplier_record = scoped_get(Supplier, supplier_id_value) if supplier_id_value else None
+        if supplier_id_value and (not supplier_record or supplier_record.cooperative_id != cooperative_id):
+            return "Please select a supplier from your own cooperative.", 400
 
+        quantity_on_hand = parse_float(request.form.get("quantity_on_hand"), 0)
+        reorder_level = parse_float(request.form.get("reorder_level"), 0)
+        unit_cost = parse_float(request.form.get("unit_cost"), 0)
+        if quantity_on_hand is None or reorder_level is None or unit_cost is None:
+            return "Inventory quantities and unit cost must be valid numbers.", 400
+        if quantity_on_hand < 0 or reorder_level < 0 or unit_cost < 0:
+            return "Inventory quantities and unit cost cannot be negative.", 400
+
+        unit = request.form.get("unit", "units").strip() or "units"
         item = InventoryItem(
-            cooperative_id=default_record_cooperative_id(supplier_record.cooperative_id if supplier_record else None),
+            cooperative_id=cooperative_id,
             name=name,
             category=request.form.get("category", "").strip() or None,
-            unit=request.form.get("unit", "units").strip(),
-            quantity_on_hand=parse_float(request.form.get("quantity_on_hand"), 0),
-            reorder_level=parse_float(request.form.get("reorder_level"), 0),
-            unit_cost=parse_float(request.form.get("unit_cost"), 0),
+            unit=unit,
+            quantity_on_hand=quantity_on_hand,
+            reorder_level=reorder_level,
+            unit_cost=unit_cost,
             storage_location=request.form.get("storage_location", "").strip() or None,
             supplier_id=supplier_id_value,
             status=request.form.get("status", "Active").strip(),
@@ -3978,28 +5220,36 @@ def add_inventory_item():
 
 
 @app.route("/inventory/edit/<int:item_id>", methods=["GET", "POST"])
-@login_required
+@roles_required(*OPERATIONS_RECORD_ROLES)
 def edit_inventory_item(item_id):
     """Edit an inventory item."""
     item = scoped_get_or_404(InventoryItem, item_id)
-    suppliers = scoped_model_query(Supplier).order_by(Supplier.name.asc()).all()
+    require_own_cooperative(item.cooperative_id)
+    suppliers = own_cooperative_query(Supplier).order_by(Supplier.name.asc()).all()
 
     if request.method == "POST":
         item.name = request.form.get("name", "").strip()
         if not item.name:
             return "Inventory item name is required.", 400
 
+        reorder_level = parse_float(request.form.get("reorder_level"), 0)
+        unit_cost = parse_float(request.form.get("unit_cost"), 0)
+        if reorder_level is None or unit_cost is None:
+            return "Reorder level and unit cost must be valid numbers.", 400
+        if reorder_level < 0 or unit_cost < 0:
+            return "Reorder level and unit cost cannot be negative.", 400
+
         item.category = request.form.get("category", "").strip() or None
-        item.unit = request.form.get("unit", "units").strip()
-        item.reorder_level = parse_float(request.form.get("reorder_level"), 0)
-        item.unit_cost = parse_float(request.form.get("unit_cost"), 0)
+        item.unit = request.form.get("unit", "units").strip() or "units"
+        item.reorder_level = reorder_level
+        item.unit_cost = unit_cost
         item.storage_location = request.form.get("storage_location", "").strip() or None
 
         supplier_id_value = parse_int(request.form.get("supplier_id"))
         supplier_record = scoped_get(Supplier, supplier_id_value) if supplier_id_value else None
+        if supplier_id_value and (not supplier_record or supplier_record.cooperative_id != item.cooperative_id):
+            return "Please select a supplier from your own cooperative.", 400
         item.supplier_id = supplier_id_value
-        item.cooperative_id = default_record_cooperative_id(
-            supplier_record.cooperative_id if supplier_record else item.cooperative_id)
 
         item.status = request.form.get("status", "Active").strip()
         item.notes = request.form.get("notes", "").strip() or None
@@ -4011,13 +5261,17 @@ def edit_inventory_item(item_id):
 
 
 @app.route("/inventory/adjust/<int:item_id>", methods=["POST"])
-@login_required
+@roles_required(*OPERATIONS_RECORD_ROLES)
 def adjust_inventory(item_id):
     """Adjust inventory quantity."""
     item = scoped_get_or_404(InventoryItem, item_id)
+    require_own_cooperative(item.cooperative_id)
     transaction_type = request.form.get("transaction_type", "").strip()
     quantity = parse_float(request.form.get("quantity"))
-    transaction_date = parse_date(request.form.get("transaction_date"))
+    try:
+        transaction_date = parse_date(request.form.get("transaction_date"))
+    except ValueError:
+        return "Please enter a valid inventory transaction date.", 400
 
     if transaction_type not in {"IN", "OUT", "ADJUSTMENT"}:
         return "Invalid inventory transaction type.", 400
@@ -4054,10 +5308,11 @@ def adjust_inventory(item_id):
 
 
 @app.route("/inventory/delete/<int:item_id>", methods=["POST"])
-@login_required
+@roles_required(*OPERATIONS_RECORD_ROLES)
 def delete_inventory_item(item_id):
     """Delete an inventory item."""
     item = scoped_get_or_404(InventoryItem, item_id)
+    require_own_cooperative(item.cooperative_id)
     if item.transactions:
         return "This inventory item cannot be deleted because transaction history exists.", 400
     add_audit_log("DELETE", "InventoryItem", item.id, item.name)
@@ -4070,7 +5325,7 @@ def delete_inventory_item(item_id):
 # ROUTES - EQUIPMENT
 # =========================================================
 @app.route("/equipment")
-@login_required
+@roles_required(*OPERATIONS_VIEW_ROLES)
 def equipment_list():
     """List equipment."""
     search = request.args.get("search", "").strip()
@@ -4090,7 +5345,7 @@ def equipment_list():
 
 
 @app.route("/equipment/add", methods=["GET", "POST"])
-@login_required
+@roles_required(*OPERATIONS_RECORD_ROLES)
 def add_equipment():
     """Add equipment."""
     farms = scoped_model_query(Farm).order_by(Farm.name.asc()).all()
@@ -4100,19 +5355,41 @@ def add_equipment():
         if not name:
             return "Equipment name is required.", 400
 
+        cooperative_id = own_cooperative_id()
+        if not cooperative_id:
+            abort(403)
+
         farm_id_value = parse_int(request.form.get("farm_id"))
         farm = scoped_get(Farm, farm_id_value) if farm_id_value else None
+        if farm_id_value and (not farm or farm.cooperative_id != cooperative_id):
+            return "Please select a farm from your own cooperative.", 400
+
+        try:
+            purchase_date = parse_date(request.form.get("purchase_date"))
+            last_service_date = parse_date(request.form.get("last_service_date"))
+            next_service_date = parse_date(request.form.get("next_service_date"))
+        except ValueError:
+            return "Please enter valid equipment dates.", 400
+
+        purchase_cost_raw = request.form.get("purchase_cost")
+        purchase_cost = parse_float(purchase_cost_raw)
+        if purchase_cost_raw and str(purchase_cost_raw).strip() and purchase_cost is None:
+            return "Purchase cost must be a valid number.", 400
+        if purchase_cost is not None and purchase_cost < 0:
+            return "Purchase cost cannot be negative.", 400
+        if last_service_date and next_service_date and next_service_date < last_service_date:
+            return "Next service date cannot be earlier than the last service date.", 400
 
         equipment_item = Equipment(
-            cooperative_id=default_record_cooperative_id(farm.cooperative_id if farm else None),
+            cooperative_id=cooperative_id,
             name=name,
             equipment_type=request.form.get("equipment_type", "").strip() or None,
             serial_number=request.form.get("serial_number", "").strip() or None,
             farm_id=farm_id_value,
-            purchase_date=parse_date(request.form.get("purchase_date")),
-            purchase_cost=parse_float(request.form.get("purchase_cost")),
-            last_service_date=parse_date(request.form.get("last_service_date")),
-            next_service_date=parse_date(request.form.get("next_service_date")),
+            purchase_date=purchase_date,
+            purchase_cost=purchase_cost,
+            last_service_date=last_service_date,
+            next_service_date=next_service_date,
             status=request.form.get("status", "Available").strip(),
             notes=request.form.get("notes", "").strip() or None,
         )
@@ -4127,11 +5404,12 @@ def add_equipment():
 
 
 @app.route("/equipment/edit/<int:equipment_id>", methods=["GET", "POST"])
-@login_required
+@roles_required(*OPERATIONS_RECORD_ROLES)
 def edit_equipment(equipment_id):
     """Edit equipment."""
     equipment_item = scoped_get_or_404(Equipment, equipment_id)
-    farms = scoped_model_query(Farm).order_by(Farm.name.asc()).all()
+    require_own_cooperative(equipment_item.cooperative_id)
+    farms = own_cooperative_query(Farm).order_by(Farm.name.asc()).all()
 
     if request.method == "POST":
         equipment_item.name = request.form.get("name", "").strip()
@@ -4143,14 +5421,30 @@ def edit_equipment(equipment_id):
 
         farm_id_value = parse_int(request.form.get("farm_id"))
         farm = scoped_get(Farm, farm_id_value) if farm_id_value else None
+        if farm_id_value and (not farm or farm.cooperative_id != equipment_item.cooperative_id):
+            return "Please select a farm from your own cooperative.", 400
         equipment_item.farm_id = farm_id_value
-        equipment_item.cooperative_id = default_record_cooperative_id(
-            farm.cooperative_id if farm else equipment_item.cooperative_id)
 
-        equipment_item.purchase_date = parse_date(request.form.get("purchase_date"))
-        equipment_item.purchase_cost = parse_float(request.form.get("purchase_cost"))
-        equipment_item.last_service_date = parse_date(request.form.get("last_service_date"))
-        equipment_item.next_service_date = parse_date(request.form.get("next_service_date"))
+        try:
+            purchase_date = parse_date(request.form.get("purchase_date"))
+            last_service_date = parse_date(request.form.get("last_service_date"))
+            next_service_date = parse_date(request.form.get("next_service_date"))
+        except ValueError:
+            return "Please enter valid equipment dates.", 400
+
+        purchase_cost_raw = request.form.get("purchase_cost")
+        purchase_cost = parse_float(purchase_cost_raw)
+        if purchase_cost_raw and str(purchase_cost_raw).strip() and purchase_cost is None:
+            return "Purchase cost must be a valid number.", 400
+        if purchase_cost is not None and purchase_cost < 0:
+            return "Purchase cost cannot be negative.", 400
+        if last_service_date and next_service_date and next_service_date < last_service_date:
+            return "Next service date cannot be earlier than the last service date.", 400
+
+        equipment_item.purchase_date = purchase_date
+        equipment_item.purchase_cost = purchase_cost
+        equipment_item.last_service_date = last_service_date
+        equipment_item.next_service_date = next_service_date
         equipment_item.status = request.form.get("status", "Available").strip()
         equipment_item.notes = request.form.get("notes", "").strip() or None
         add_audit_log("UPDATE", "Equipment", equipment_item.id, equipment_item.name)
@@ -4161,11 +5455,12 @@ def edit_equipment(equipment_id):
 
 
 @app.route("/equipment/delete/<int:equipment_id>", methods=["POST"])
-@login_required
+@roles_required(*OPERATIONS_RECORD_ROLES)
 def delete_equipment(equipment_id):
     """Delete equipment."""
     equipment_item = scoped_get_or_404(Equipment, equipment_id)
-    add_audit_log("DELETE", "Equipment", equipment_item.id, equipment_item.name)
+    require_own_cooperative(equipment_item.cooperative_id)
+    add_audit_log("DELETE", "Equipment", equipment_item.id, equipment_item.name, cooperative_id=equipment_item.cooperative_id)
     db.session.delete(equipment_item)
     db.session.commit()
     return redirect(url_for("equipment_list"))
@@ -4175,11 +5470,13 @@ def delete_equipment(equipment_id):
 # ROUTES - TASKS
 # =========================================================
 @app.route("/tasks")
-@login_required
+@roles_required(*OPERATIONS_VIEW_ROLES)
 def tasks_list():
     """List tasks."""
     search = request.args.get("search", "").strip()
-    query = scoped_model_query(Task).outerjoin(Farm).outerjoin(User)
+    # Resolution-linked accountability tasks are deliberately managed only through
+    # the Accountability Register so the legacy task editor cannot bypass proof/verification controls.
+    query = scoped_model_query(Task).filter(Task.resolution_id.is_(None)).outerjoin(Farm).outerjoin(User, Task.assigned_user_id == User.id)
 
     if search:
         query = query.filter(or_(
@@ -4196,7 +5493,7 @@ def tasks_list():
 
 
 @app.route("/tasks/add", methods=["GET", "POST"])
-@login_required
+@roles_required(*OPERATIONS_RECORD_ROLES)
 def add_task():
     """Add a task."""
     farms = scoped_model_query(Farm).order_by(Farm.name.asc()).all()
@@ -4207,25 +5504,36 @@ def add_task():
         if not title:
             return "Task title is required.", 400
 
+        cooperative_id = own_cooperative_id()
+        if not cooperative_id:
+            abort(403)
+
         farm_id_value = parse_int(request.form.get("farm_id"))
         assigned_user_id_value = parse_int(request.form.get("assigned_user_id"))
         farm = scoped_get(Farm, farm_id_value) if farm_id_value else None
+        if farm_id_value and (not farm or farm.cooperative_id != cooperative_id):
+            return "Please select a farm from your own cooperative.", 400
+
         assigned_user = accessible_users_query().filter(
             User.id == assigned_user_id_value).first() if assigned_user_id_value else None
-
         if assigned_user_id_value and not assigned_user:
             return "Selected user is outside your cooperative access.", 400
-
         assigned_access = UserAccess.query.filter_by(user_id=assigned_user.id).first() if assigned_user else None
-        inherited_cooperative_id = farm.cooperative_id if farm else assigned_access.cooperative_id if assigned_access else None
+        if assigned_access and assigned_access.cooperative_id != cooperative_id:
+            return "Tasks can only be assigned within your own cooperative.", 400
+
+        try:
+            due_date = parse_date(request.form.get("due_date"))
+        except ValueError:
+            return "Please enter a valid task due date.", 400
 
         task = Task(
-            cooperative_id=default_record_cooperative_id(inherited_cooperative_id),
+            cooperative_id=cooperative_id,
             title=title,
             description=request.form.get("description", "").strip() or None,
             farm_id=farm_id_value,
             assigned_user_id=assigned_user_id_value,
-            due_date=parse_date(request.form.get("due_date")),
+            due_date=due_date,
             priority=request.form.get("priority", "Normal").strip(),
             status=request.form.get("status", "Open").strip(),
         )
@@ -4243,12 +5551,15 @@ def add_task():
 
 
 @app.route("/tasks/edit/<int:task_id>", methods=["GET", "POST"])
-@login_required
+@roles_required(*OPERATIONS_RECORD_ROLES)
 def edit_task(task_id):
-    """Edit a task."""
+    """Edit a legacy operational task; accountability tasks use their protected workflow."""
     task = scoped_get_or_404(Task, task_id)
-    farms = scoped_model_query(Farm).order_by(Farm.name.asc()).all()
-    users = accessible_users_query().order_by(User.fullname.asc()).all()
+    require_own_cooperative(task.cooperative_id)
+    if task.resolution_id:
+        return "Resolution-linked accountability tasks cannot be edited here. Use the Accountability Register.", 400
+    farms = own_cooperative_query(Farm).order_by(Farm.name.asc()).all()
+    users = accessible_users_query().filter(UserAccess.cooperative_id == task.cooperative_id).order_by(User.fullname.asc()).all()
 
     if request.method == "POST":
         task.title = request.form.get("title", "").strip()
@@ -4260,19 +5571,26 @@ def edit_task(task_id):
         farm_id_value = parse_int(request.form.get("farm_id"))
         assigned_user_id_value = parse_int(request.form.get("assigned_user_id"))
         farm = scoped_get(Farm, farm_id_value) if farm_id_value else None
+        if farm_id_value and (not farm or farm.cooperative_id != task.cooperative_id):
+            return "Please select a farm from your own cooperative.", 400
+
         assigned_user = accessible_users_query().filter(
             User.id == assigned_user_id_value).first() if assigned_user_id_value else None
-
         if assigned_user_id_value and not assigned_user:
             return "Selected user is outside your cooperative access.", 400
 
         assigned_access = UserAccess.query.filter_by(user_id=assigned_user.id).first() if assigned_user else None
-        inherited_cooperative_id = farm.cooperative_id if farm else assigned_access.cooperative_id if assigned_access else task.cooperative_id
+        if assigned_access and assigned_access.cooperative_id != task.cooperative_id:
+            return "Tasks can only be assigned within your own cooperative.", 400
+
+        try:
+            due_date = parse_date(request.form.get("due_date"))
+        except ValueError:
+            return "Please enter a valid task due date.", 400
 
         task.farm_id = farm_id_value
         task.assigned_user_id = assigned_user_id_value
-        task.cooperative_id = default_record_cooperative_id(inherited_cooperative_id)
-        task.due_date = parse_date(request.form.get("due_date"))
+        task.due_date = due_date
         task.priority = request.form.get("priority", "Normal").strip()
         old_status = task.status
         task.status = request.form.get("status", "Open").strip()
@@ -4290,11 +5608,14 @@ def edit_task(task_id):
 
 
 @app.route("/tasks/delete/<int:task_id>", methods=["POST"])
-@login_required
+@roles_required(*OPERATIONS_RECORD_ROLES)
 def delete_task(task_id):
-    """Delete a task."""
+    """Delete a legacy operational task; official accountability history cannot be deleted here."""
     task = scoped_get_or_404(Task, task_id)
-    add_audit_log("DELETE", "Task", task.id, task.title)
+    require_own_cooperative(task.cooperative_id)
+    if task.resolution_id:
+        return "Resolution-linked accountability tasks cannot be deleted. They form part of the governance record.", 400
+    add_audit_log("DELETE", "Task", task.id, task.title, cooperative_id=task.cooperative_id)
     db.session.delete(task)
     db.session.commit()
     return redirect(url_for("tasks_list"))
@@ -4304,7 +5625,7 @@ def delete_task(task_id):
 # ROUTES - FARMER INTERACTIONS
 # =========================================================
 @app.route("/interactions")
-@login_required
+@roles_required(*INTERACTION_VIEW_ROLES)
 def interactions_list():
     """List farmer interactions."""
     search = request.args.get("search", "").strip()
@@ -4324,7 +5645,7 @@ def interactions_list():
 
 
 @app.route("/interactions/add", methods=["GET", "POST"])
-@login_required
+@roles_required(*INTERACTION_RECORD_ROLES)
 def add_interaction():
     """Add a farmer interaction."""
     farmers = scoped_model_query(Farmer).order_by(Farmer.fullname.asc()).all()
@@ -4332,17 +5653,23 @@ def add_interaction():
     if request.method == "POST":
         farmer_id = parse_int(request.form.get("farmer_id"))
         farmer = scoped_get(Farmer, farmer_id) if farmer_id else None
-        interaction_date = parse_date(request.form.get("interaction_date"))
+        try:
+            interaction_date = parse_date(request.form.get("interaction_date"))
+            follow_up_date = parse_date(request.form.get("follow_up_date"))
+        except ValueError:
+            return "Please enter valid interaction dates.", 400
         interaction_type = request.form.get("interaction_type", "").strip()
 
-        if not farmer:
-            return "Please select a valid farmer.", 400
+        if not farmer or farmer.cooperative_id != own_cooperative_id():
+            return "Please select a farmer from your own cooperative.", 400
 
         if not interaction_date:
             return "A valid interaction date is required.", 400
 
         if not interaction_type:
             return "Interaction type is required.", 400
+        if follow_up_date and follow_up_date < interaction_date:
+            return "Follow-up date cannot be earlier than the interaction date.", 400
 
         interaction = FarmerInteraction(
             cooperative_id=default_record_cooperative_id(farmer.cooperative_id),
@@ -4351,7 +5678,7 @@ def add_interaction():
             interaction_type=interaction_type,
             subject=request.form.get("subject", "").strip() or None,
             notes=request.form.get("notes", "").strip() or None,
-            follow_up_date=parse_date(request.form.get("follow_up_date")),
+            follow_up_date=follow_up_date,
             created_by=session.get("user_id"),
         )
         db.session.add(interaction)
@@ -4366,11 +5693,18 @@ def add_interaction():
 
 
 @app.route("/interactions/delete/<int:interaction_id>", methods=["POST"])
-@login_required
+@roles_required(*INTERACTION_RECORD_ROLES)
 def delete_interaction(interaction_id):
     """Delete a farmer interaction."""
     interaction = scoped_get_or_404(FarmerInteraction, interaction_id)
-    add_audit_log("DELETE", "FarmerInteraction", interaction.id, interaction.farmer.fullname)
+    require_own_cooperative(interaction.cooperative_id)
+    add_audit_log(
+        "DELETE",
+        "FarmerInteraction",
+        interaction.id,
+        interaction.farmer.fullname,
+        cooperative_id=interaction.cooperative_id,
+    )
     db.session.delete(interaction)
     db.session.commit()
     return redirect(url_for("interactions_list"))
@@ -4382,47 +5716,74 @@ def delete_interaction(interaction_id):
 @app.route("/memberships")
 @roles_required(*MEMBERSHIP_VIEW_ROLES)
 def memberships_list():
-    """List memberships within the user's visibility scope."""
+    """Phase 5 membership register with role-scoped filters and fee summary."""
     search = request.args.get("search", "").strip()
-    query = scoped_model_query(Membership).join(Farmer)
+    status_filter = request.args.get("status", "").strip().title()
+    fee_filter = request.args.get("fee", "").strip().lower()
+    cooperative_filter = parse_int(request.args.get("cooperative_id"))
 
-    if search:
-        query = query.filter(or_(
-            Membership.member_number.ilike(f"%{search}%"),
-            Membership.membership_type.ilike(f"%{search}%"),
-            Membership.status.ilike(f"%{search}%"),
-            Farmer.fullname.ilike(f"%{search}%")
-        ))
+    visible_primary_cooperatives = accessible_cooperative_query().filter(
+        Cooperative.cooperative_type == "Primary",
+        Cooperative.status == "Active",
+    ).order_by(Cooperative.name.asc()).all()
+    visible_ids = {coop.id for coop in visible_primary_cooperatives}
+    if cooperative_filter and cooperative_filter not in visible_ids:
+        abort(403)
 
-    memberships = query.order_by(Membership.created_at.desc()).all()
-    return render_optional_template(
+    query = membership_filtered_query(
+        search=search,
+        status=status_filter,
+        fee_status=fee_filter,
+        cooperative_id=cooperative_filter,
+    )
+    memberships = query.order_by(Membership.member_number.asc()).all()
+
+    base_query = membership_filtered_query(cooperative_id=cooperative_filter)
+    total_members = base_query.count()
+    active_members = base_query.filter(Membership.status == "Active").count()
+    attention_members = base_query.filter(Membership.status.in_(("Pending", "Suspended"))).count()
+    fee_memberships = base_query.all()
+    total_expected = sum(float(m.fee_amount or 0) for m in fee_memberships)
+    total_paid = sum(float(m.fee_paid or 0) for m in fee_memberships)
+    total_pending = sum(float(m.fee_pending or 0) for m in fee_memberships)
+    total_outstanding = sum(float(m.fee_outstanding or 0) for m in fee_memberships)
+
+    return render_template(
         "memberships.html",
-        "Memberships",
         memberships=memberships,
         search=search,
+        status_filter=status_filter if status_filter in MEMBERSHIP_ALLOWED_STATUSES else "",
+        fee_filter=fee_filter if fee_filter in {"paid", "due", "pending"} else "",
+        cooperative_filter=cooperative_filter,
+        primary_cooperatives=visible_primary_cooperatives,
+        membership_statuses=sorted(MEMBERSHIP_ALLOWED_STATUSES),
+        total_members=total_members,
+        active_members=active_members,
+        attention_members=attention_members,
+        total_expected=total_expected,
+        total_paid=total_paid,
+        total_pending=total_pending,
+        total_outstanding=total_outstanding,
     )
 
 
 @app.route("/memberships/add", methods=["GET", "POST"])
 @roles_required(*MEMBERSHIP_MANAGEMENT_ROLES)
 def add_membership():
-    """Register a membership. Secretary/Vice Secretary only."""
+    """Primary Secretary/Vice Secretary registers an individual member."""
     access = current_access()
+    cooperative = current_cooperative()
+    if not cooperative or cooperative.cooperative_type != "Primary":
+        abort(403)
+
     farmers = own_cooperative_query(Farmer).order_by(Farmer.fullname.asc()).all()
 
     if request.method == "POST":
         farmer_id = parse_int(request.form.get("farmer_id"))
         farmer = db.session.get(Farmer, farmer_id) if farmer_id else None
-        member_number = request.form.get("member_number", "").strip()
 
         if not farmer or farmer.cooperative_id != access.cooperative_id:
-            return "Please select a valid person from your cooperative.", 400
-
-        if not member_number:
-            return "Member number is required.", 400
-
-        if Membership.query.filter_by(member_number=member_number).first():
-            return "This member number already exists.", 400
+            return "Please select a valid person from your Primary cooperative.", 400
 
         existing = Membership.query.filter_by(
             cooperative_id=access.cooperative_id,
@@ -4430,6 +5791,11 @@ def add_membership():
         ).first()
         if existing:
             return "This person already has a membership record in your cooperative.", 400
+
+        requested_number = request.form.get("member_number", "").strip()
+        member_number = requested_number or generate_member_number(cooperative)
+        if Membership.query.filter_by(member_number=member_number).first():
+            return "This member number already exists. Please try again.", 400
 
         fee_amount = parse_float(request.form.get("fee_amount"), 300.0)
         if fee_amount is None or fee_amount < 0:
@@ -4440,62 +5806,66 @@ def add_membership():
         except ValueError:
             return "Please enter a valid join date.", 400
 
+        status = normalize_membership_status(request.form.get("status"), "Active")
+        if not status:
+            return "Please choose a valid membership status.", 400
+
         membership = Membership(
             cooperative_id=access.cooperative_id,
             farmer_id=farmer.id,
             member_number=member_number,
-            membership_type=request.form.get("membership_type", "Primary").strip() or "Primary",
+            membership_type="Primary",
             join_date=join_date,
             fee_amount=fee_amount,
             fee_paid=0,
-            status=request.form.get("status", "Active").strip() or "Active",
+            status=status,
             notes=request.form.get("notes", "").strip() or None,
         )
         db.session.add(membership)
         db.session.flush()
+        record_membership_history(
+            membership,
+            "REGISTERED",
+            description=f"Membership {member_number} registered for {farmer.fullname}.",
+            to_status=status,
+        )
         add_audit_log(
-            "CREATE",
+            "MEMBER_REGISTERED",
             "Membership",
             membership.id,
-            f"{member_number} - {farmer.fullname}",
+            f"{member_number} - {farmer.fullname} - {status}",
             cooperative_id=membership.cooperative_id,
         )
         db.session.commit()
         return redirect(url_for("memberships_list"))
 
-    return render_optional_template(
+    return render_template(
         "membership_form.html",
-        "Add Membership",
         membership=None,
         farmers=farmers,
+        generated_member_number=generate_member_number(cooperative),
+        membership_statuses=sorted(MEMBERSHIP_ALLOWED_STATUSES),
     )
 
 
 @app.route("/memberships/edit/<int:membership_id>", methods=["GET", "POST"])
 @roles_required(*MEMBERSHIP_MANAGEMENT_ROLES)
 def edit_membership(membership_id):
-    """Edit membership administration fields. Secretary/Vice Secretary only."""
+    """Primary Secretary/Vice Secretary maintains membership administration fields."""
     membership = scoped_get_or_404(Membership, membership_id)
     access = require_own_cooperative(membership.cooperative_id)
+    cooperative = current_cooperative()
+    if not cooperative or cooperative.cooperative_type != "Primary":
+        abort(403)
+
     farmers = own_cooperative_query(Farmer).order_by(Farmer.fullname.asc()).all()
 
     if request.method == "POST":
         farmer_id = parse_int(request.form.get("farmer_id"))
         farmer = db.session.get(Farmer, farmer_id) if farmer_id else None
-        member_number = request.form.get("member_number", "").strip()
 
         if not farmer or farmer.cooperative_id != access.cooperative_id:
-            return "Please select a valid person from your cooperative.", 400
-
-        if not member_number:
-            return "Member number is required.", 400
-
-        duplicate = Membership.query.filter(
-            Membership.member_number == member_number,
-            Membership.id != membership.id,
-        ).first()
-        if duplicate:
-            return "This member number already exists.", 400
+            return "Please select a valid person from your Primary cooperative.", 400
 
         duplicate_person = Membership.query.filter(
             Membership.cooperative_id == access.cooperative_id,
@@ -4505,48 +5875,117 @@ def edit_membership(membership_id):
         if duplicate_person:
             return "This person already has another membership record in your cooperative.", 400
 
+        submitted_number = request.form.get("member_number", membership.member_number).strip()
+        if submitted_number and submitted_number != membership.member_number:
+            return "Member numbers are permanent and cannot be changed after registration.", 400
+
         fee_amount = parse_float(request.form.get("fee_amount"), membership.fee_amount or 0)
         if fee_amount is None or fee_amount < 0:
             return "Membership fee cannot be negative.", 400
-        if float(membership.fee_paid or 0) > fee_amount + 1e-9:
-            return "Membership fee cannot be set below the amount already confirmed as paid.", 400
+        recorded_fee_total = float(membership.fee_paid or 0) + float(membership.fee_pending or 0)
+        if recorded_fee_total > fee_amount + 1e-9:
+            return "Membership fee cannot be set below the amount already recorded as paid or pending confirmation.", 400
 
         try:
             join_date = parse_date(request.form.get("join_date"))
         except ValueError:
             return "Please enter a valid join date.", 400
 
+        new_status = normalize_membership_status(request.form.get("status"), membership.status)
+        if not new_status:
+            return "Please choose a valid membership status.", 400
+
+        old_status = membership.status
+        status_reason = request.form.get("status_reason", "").strip()
+        if new_status != old_status and new_status in {"Suspended", "Resigned", "Deceased", "Inactive"} and not status_reason:
+            return f"Please record a reason when changing membership status to {new_status}.", 400
+
+        changes = []
+        if membership.farmer_id != farmer.id:
+            changes.append(f"member changed to {farmer.fullname}")
+        if membership.join_date != join_date:
+            changes.append("join date updated")
+        if abs(float(membership.fee_amount or 0) - float(fee_amount or 0)) > 1e-9:
+            changes.append(f"expected fee changed to R{float(fee_amount or 0):.2f}")
+        if membership.notes != (request.form.get("notes", "").strip() or None):
+            changes.append("notes updated")
+
         membership.farmer_id = farmer.id
-        membership.member_number = member_number
-        membership.membership_type = request.form.get("membership_type", "Primary").strip() or "Primary"
+        membership.membership_type = "Primary"
         membership.join_date = join_date
         membership.fee_amount = fee_amount
-        # fee_paid is finance data. It is updated only through a Treasurer contribution
-        # that is confirmed by the Chairperson.
-        membership.status = request.form.get("status", "Active").strip() or "Active"
+        membership.status = new_status
         membership.notes = request.form.get("notes", "").strip() or None
-        add_audit_log(
-            "UPDATE",
-            "Membership",
-            membership.id,
-            member_number,
-            cooperative_id=membership.cooperative_id,
-        )
+        membership.updated_at = utc_now()
+
+        if new_status != old_status:
+            record_membership_history(
+                membership,
+                "STATUS_CHANGED",
+                description=status_reason or f"Status changed from {old_status} to {new_status}.",
+                from_status=old_status,
+                to_status=new_status,
+            )
+            add_audit_log(
+                "MEMBERSHIP_STATUS_CHANGED",
+                "Membership",
+                membership.id,
+                f"{membership.member_number}: {old_status} -> {new_status}; {status_reason or 'no additional reason'}",
+                cooperative_id=membership.cooperative_id,
+            )
+        elif changes:
+            record_membership_history(
+                membership,
+                "DETAILS_UPDATED",
+                description="; ".join(changes),
+                from_status=old_status,
+                to_status=new_status,
+            )
+            add_audit_log(
+                "MEMBERSHIP_UPDATED",
+                "Membership",
+                membership.id,
+                f"{membership.member_number}: {'; '.join(changes)}",
+                cooperative_id=membership.cooperative_id,
+            )
+
         db.session.commit()
         return redirect(url_for("memberships_list"))
 
-    return render_optional_template(
+    return render_template(
         "membership_form.html",
-        "Edit Membership",
         membership=membership,
         farmers=farmers,
+        generated_member_number=membership.member_number,
+        membership_statuses=sorted(MEMBERSHIP_ALLOWED_STATUSES),
+    )
+
+
+@app.route("/memberships/<int:membership_id>/history")
+@roles_required(*MEMBERSHIP_VIEW_ROLES)
+def membership_history(membership_id):
+    """Show the lifecycle and finance history of one visible membership."""
+    membership = scoped_get_or_404(Membership, membership_id)
+    if not membership.cooperative or membership.cooperative.cooperative_type != "Primary":
+        abort(404)
+    history = MembershipHistory.query.filter_by(membership_id=membership.id).order_by(
+        MembershipHistory.created_at.desc(), MembershipHistory.id.desc()
+    ).all()
+    fee_contributions = Contribution.query.filter_by(membership_id=membership.id).order_by(
+        Contribution.contribution_date.desc(), Contribution.id.desc()
+    ).all()
+    return render_template(
+        "membership_history.html",
+        membership=membership,
+        history=history,
+        fee_contributions=fee_contributions,
     )
 
 
 @app.route("/memberships/delete/<int:membership_id>", methods=["POST"])
 @roles_required(*MEMBERSHIP_MANAGEMENT_ROLES)
 def delete_membership(membership_id):
-    """Delete only a mistaken membership with no confirmed money attached."""
+    """Delete only a mistaken membership with no financial transaction history."""
     membership = scoped_get_or_404(Membership, membership_id)
     require_own_cooperative(membership.cooperative_id)
 
@@ -4561,15 +6000,70 @@ def delete_membership(membership_id):
         return "A membership linked to contribution records cannot be deleted. Change its status instead.", 400
 
     add_audit_log(
-        "DELETE",
+        "MEMBERSHIP_DELETED",
         "Membership",
         membership.id,
-        membership.member_number,
+        f"Deleted mistaken membership {membership.member_number} for {membership.farmer.fullname}.",
         cooperative_id=membership.cooperative_id,
     )
     db.session.delete(membership)
     db.session.commit()
     return redirect(url_for("memberships_list"))
+
+
+@app.route("/exports/memberships.csv")
+@roles_required(*MEMBERSHIP_VIEW_ROLES)
+def export_memberships():
+    """Export the currently visible membership register."""
+    search = request.args.get("search", "").strip()
+    status_filter = request.args.get("status", "").strip().title()
+    fee_filter = request.args.get("fee", "").strip().lower()
+    cooperative_filter = parse_int(request.args.get("cooperative_id"))
+
+    visible_ids = {
+        coop.id for coop in accessible_cooperative_query().filter(
+            Cooperative.cooperative_type == "Primary"
+        ).all()
+    }
+    if cooperative_filter and cooperative_filter not in visible_ids:
+        abort(403)
+
+    rows = membership_filtered_query(
+        search=search,
+        status=status_filter,
+        fee_status=fee_filter,
+        cooperative_id=cooperative_filter,
+    ).order_by(Membership.member_number.asc()).all()
+
+    add_audit_log(
+        "DATA_EXPORT",
+        "Membership",
+        details=f"Exported {len(rows)} visible membership records.",
+        cooperative_id=current_access().cooperative_id if current_access() else None,
+    )
+    db.session.commit()
+
+    return make_csv_response(
+        f"malenge_memberships_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+        [
+            "Member Number", "Full Name", "Phone", "Primary Cooperative", "Join Date",
+            "Status", "Fee Expected", "Fee Confirmed", "Fee Pending", "Fee Outstanding", "Fee Status", "Notes",
+        ],
+        [[
+            membership.member_number,
+            membership.farmer.fullname,
+            membership.farmer.phone,
+            membership.cooperative.name if membership.cooperative else "",
+            membership.join_date or "",
+            membership.status,
+            membership.fee_amount or 0,
+            membership.fee_paid or 0,
+            membership.fee_pending,
+            membership.fee_outstanding,
+            membership.fee_status,
+            membership.notes or "",
+        ] for membership in rows],
+    )
 
 
 # =========================================================
@@ -4602,15 +6096,23 @@ def contributions_list():
 @app.route("/contributions/add", methods=["GET", "POST"])
 @roles_required(*FINANCE_RECORD_ROLES)
 def add_contribution():
-    """Treasurer records money; it waits for Chairperson confirmation."""
+    """Treasurer records money; membership-fee money is linked to the exact member record."""
     access = current_access()
     farmers = own_cooperative_query(Farmer).order_by(Farmer.fullname.asc()).all()
+    selected_membership = None
+
+    requested_membership_id = parse_int(request.args.get("membership_id"))
+    if requested_membership_id:
+        candidate = scoped_get(Membership, requested_membership_id)
+        if candidate and candidate.cooperative_id == access.cooperative_id:
+            selected_membership = candidate
 
     if request.method == "POST":
         farmer_id = parse_int(request.form.get("farmer_id"))
         farmer = db.session.get(Farmer, farmer_id) if farmer_id else None
         amount = parse_float(request.form.get("amount"))
         category = request.form.get("category", "").strip() or None
+        membership_id = parse_int(request.form.get("membership_id"))
 
         try:
             contribution_date = parse_date(request.form.get("contribution_date"))
@@ -4624,29 +6126,39 @@ def add_contribution():
         if not contribution_date:
             return "A valid contribution date is required.", 400
 
-        if category and category.casefold() == "membership fee":
-            membership = Membership.query.filter_by(
-                cooperative_id=access.cooperative_id,
-                farmer_id=farmer.id,
-            ).first()
-            if not membership:
+        linked_membership = None
+        if category and category.strip().casefold() in MEMBERSHIP_FEE_CATEGORY_ALIASES:
+            category = MEMBERSHIP_FEE_CATEGORY
+            if current_cooperative() and current_cooperative().cooperative_type != "Primary":
+                return "Individual membership fees are recorded by the Treasurer of the member's Primary cooperative.", 400
+
+            if membership_id:
+                linked_membership = db.session.get(Membership, membership_id)
+                if (
+                    not linked_membership
+                    or linked_membership.cooperative_id != access.cooperative_id
+                    or linked_membership.farmer_id != farmer.id
+                ):
+                    return "Please select a valid membership from your own Primary cooperative.", 400
+            else:
+                linked_membership = Membership.query.filter_by(
+                    cooperative_id=access.cooperative_id,
+                    farmer_id=farmer.id,
+                ).first()
+
+            if not linked_membership:
                 return "This person does not have a membership record for a membership-fee payment.", 400
-            outstanding = max(float(membership.fee_amount or 0) - float(membership.fee_paid or 0), 0.0)
-            pending_membership_fees = db.session.query(
-                func.coalesce(func.sum(Contribution.amount), 0)
-            ).filter(
-                Contribution.cooperative_id == access.cooperative_id,
-                Contribution.farmer_id == farmer.id,
-                func.lower(Contribution.category) == "membership fee",
-                Contribution.status == "Pending Confirmation",
-            ).scalar() or 0
-            available = max(outstanding - float(pending_membership_fees), 0.0)
+            if linked_membership.status in {"Resigned", "Deceased", "Inactive"}:
+                return f"Membership-fee payments cannot be recorded while the membership is {linked_membership.status}.", 400
+
+            available = linked_membership.fee_outstanding
             if amount > available + 1e-9:
                 return f"Membership-fee contribution exceeds the amount still due. Maximum: R {available:.2f}.", 400
 
         contribution = Contribution(
             cooperative_id=access.cooperative_id,
             farmer_id=farmer.id,
+            membership_id=linked_membership.id if linked_membership else None,
             amount=amount,
             contribution_date=contribution_date,
             category=category,
@@ -4657,21 +6169,29 @@ def add_contribution():
         )
         db.session.add(contribution)
         db.session.flush()
+        if linked_membership:
+            record_membership_history(
+                linked_membership,
+                "FEE_RECORDED",
+                description=f"Treasurer recorded R{amount:.2f} membership fee; pending Chairperson confirmation.",
+                from_status=linked_membership.status,
+                to_status=linked_membership.status,
+            )
         add_audit_log(
             "FINANCE_RECORDED",
             "Contribution",
             contribution.id,
-            f"{farmer.fullname} - R{amount:.2f} - pending Chairperson confirmation",
+            f"{farmer.fullname} - R{amount:.2f} - {category or 'Contribution'} - pending Chairperson confirmation",
             cooperative_id=contribution.cooperative_id,
         )
         db.session.commit()
         return redirect(url_for("contributions_list"))
 
-    return render_optional_template(
+    return render_template(
         "contribution_form.html",
-        "Add Contribution",
         contribution=None,
         farmers=farmers,
+        selected_membership=selected_membership,
     )
 
 
@@ -4689,26 +6209,51 @@ def decide_contribution(contribution_id):
     if decision not in {"approve", "reject"}:
         return "Please choose approve or reject.", 400
 
+    linked_membership = contribution.membership
+    if not linked_membership and (contribution.category or "").strip().casefold() in MEMBERSHIP_FEE_CATEGORY_ALIASES:
+        # Compatibility with membership-fee contributions created before Phase 5.
+        linked_membership = Membership.query.filter_by(
+            cooperative_id=contribution.cooperative_id,
+            farmer_id=contribution.farmer_id,
+        ).first()
+        if linked_membership:
+            contribution.membership_id = linked_membership.id
+
     if decision == "approve":
         contribution.status = "Confirmed"
 
-        if (contribution.category or "").casefold() == "membership fee":
-            membership = Membership.query.filter_by(
-                cooperative_id=contribution.cooperative_id,
-                farmer_id=contribution.farmer_id,
-            ).first()
-            if not membership:
+        if (contribution.category or "").strip().casefold() in MEMBERSHIP_FEE_CATEGORY_ALIASES:
+            if not linked_membership:
                 return "Membership record was not found for this membership-fee contribution.", 400
 
-            new_paid = float(membership.fee_paid or 0) + float(contribution.amount or 0)
-            if new_paid > float(membership.fee_amount or 0) + 1e-9:
+            new_paid = float(linked_membership.fee_paid or 0) + float(contribution.amount or 0)
+            if new_paid > float(linked_membership.fee_amount or 0) + 1e-9:
                 return "Approving this payment would exceed the member's recorded membership fee.", 400
-            membership.fee_paid = new_paid
+            linked_membership.fee_paid = new_paid
+            linked_membership.updated_at = utc_now()
+            record_membership_history(
+                linked_membership,
+                "FEE_CONFIRMED",
+                description=(
+                    f"Chairperson confirmed R{float(contribution.amount or 0):.2f} membership fee. "
+                    f"Total confirmed: R{new_paid:.2f}; outstanding: R{linked_membership.fee_outstanding:.2f}."
+                ),
+                from_status=linked_membership.status,
+                to_status=linked_membership.status,
+            )
 
         action = "FINANCE_CONFIRMED"
         details = f"Contribution R{float(contribution.amount or 0):.2f} confirmed by Chairperson"
     else:
         contribution.status = "Rejected"
+        if linked_membership:
+            record_membership_history(
+                linked_membership,
+                "FEE_REJECTED",
+                description=f"Chairperson rejected R{float(contribution.amount or 0):.2f} membership-fee record.",
+                from_status=linked_membership.status,
+                to_status=linked_membership.status,
+            )
         action = "FINANCE_REJECTED"
         details = f"Contribution R{float(contribution.amount or 0):.2f} rejected by Chairperson"
 
@@ -4733,6 +6278,16 @@ def delete_contribution(contribution_id):
     if contribution.status not in {"Pending Confirmation", "Rejected"}:
         return "Confirmed financial records cannot be deleted.", 400
 
+    linked_membership = contribution.membership
+    if linked_membership:
+        record_membership_history(
+            linked_membership,
+            "FEE_RECORD_REMOVED",
+            description=f"Treasurer removed unconfirmed/rejected R{float(contribution.amount or 0):.2f} membership-fee record.",
+            from_status=linked_membership.status,
+            to_status=linked_membership.status,
+        )
+
     add_audit_log(
         "DELETE",
         "Contribution",
@@ -4744,10 +6299,49 @@ def delete_contribution(contribution_id):
     db.session.commit()
     return redirect(url_for("contributions_list"))
 
-
 # =========================================================
 # ROUTES - COOPERATIVES
 # =========================================================
+def validate_cooperative_configuration(cooperative_type, parent_id, status, exclude_id=None):
+    """Enforce Malenge's one-Secondary/two-Primary governance structure."""
+    if cooperative_type not in {"Secondary", "Primary"}:
+        return None, "Cooperative type must be Secondary or Primary."
+
+    if status not in COOPERATIVE_ALLOWED_STATUSES:
+        return None, "Cooperative status must be Active or Inactive."
+
+    count_query = Cooperative.query.filter(Cooperative.cooperative_type == cooperative_type)
+    if exclude_id is not None:
+        count_query = count_query.filter(Cooperative.id != exclude_id)
+
+    limit = (
+        MALENGE_MAX_SECONDARY_COOPERATIVES
+        if cooperative_type == "Secondary"
+        else MALENGE_MAX_PRIMARY_COOPERATIVES
+    )
+    if count_query.count() >= limit:
+        label = "Secondary Cooperative" if cooperative_type == "Secondary" else "Primary Cooperatives"
+        return None, f"Malenge is configured for only {limit} {label}."
+
+    if cooperative_type == "Secondary":
+        return None, None
+
+    if not parent_id:
+        return None, "A Primary Cooperative must belong to the Secondary Cooperative."
+
+    if exclude_id is not None and parent_id == exclude_id:
+        return None, "A cooperative cannot be its own parent."
+
+    parent = db.session.get(Cooperative, parent_id)
+    if not parent or parent.cooperative_type != "Secondary":
+        return None, "Please select the valid Secondary Cooperative."
+
+    if status == "Active" and parent.status != "Active":
+        return None, "An active Primary Cooperative must belong to an active Secondary Cooperative."
+
+    return parent, None
+
+
 @app.route("/cooperatives")
 @roles_required(
     "Admin",
@@ -4790,24 +6384,26 @@ def add_cooperative():
         name = request.form.get("name", "").strip()
         cooperative_type = request.form.get("cooperative_type", "").strip()
         parent_id = parse_int(request.form.get("parent_id"))
+        status = request.form.get("status", "Active").strip()
 
         if not name:
             return "Cooperative name is required.", 400
 
-        if cooperative_type not in {"Secondary", "Primary"}:
-            return "Cooperative type must be Secondary or Primary.", 400
-
         if Cooperative.query.filter(func.lower(Cooperative.name) == name.lower()).first():
             return "A cooperative with this name already exists.", 400
+
+        parent, structure_error = validate_cooperative_configuration(
+            cooperative_type,
+            parent_id,
+            status,
+        )
+        if structure_error:
+            return structure_error, 400
 
         if cooperative_type == "Secondary":
             parent_id = None
         else:
-            if not parent_id:
-                return "A primary cooperative must belong to a secondary cooperative.", 400
-            parent = db.session.get(Cooperative, parent_id)
-            if not parent or parent.cooperative_type != "Secondary":
-                return "Please select a valid secondary cooperative.", 400
+            parent_id = parent.id
 
         cooperative = Cooperative(
             name=name,
@@ -4816,7 +6412,7 @@ def add_cooperative():
             registration_number=request.form.get("registration_number", "").strip() or None,
             code=request.form.get("code", "").strip() or None,
             location=request.form.get("location", "").strip() or None,
-            status=request.form.get("status", "Active").strip(),
+            status=status,
         )
         db.session.add(cooperative)
         db.session.flush()
@@ -4842,12 +6438,10 @@ def edit_cooperative(cooperative_id):
         name = request.form.get("name", "").strip()
         cooperative_type = request.form.get("cooperative_type", "").strip()
         parent_id = parse_int(request.form.get("parent_id"))
+        status = request.form.get("status", "Active").strip()
 
         if not name:
             return "Cooperative name is required.", 400
-
-        if cooperative_type not in {"Secondary", "Primary"}:
-            return "Cooperative type must be Secondary or Primary.", 400
 
         duplicate = Cooperative.query.filter(
             func.lower(Cooperative.name) == name.lower(),
@@ -4857,14 +6451,27 @@ def edit_cooperative(cooperative_id):
         if duplicate:
             return "A cooperative with this name already exists.", 400
 
+        if cooperative.cooperative_type == "Secondary" and cooperative_type != "Secondary":
+            if cooperative.primary_cooperatives:
+                return "The Secondary Cooperative cannot be changed to Primary while Primary Cooperatives belong to it.", 400
+
+        if cooperative.cooperative_type == "Secondary" and status == "Inactive":
+            if any(child.status == "Active" for child in cooperative.primary_cooperatives):
+                return "Deactivate the Primary Cooperatives before deactivating the Secondary Cooperative.", 400
+
+        parent, structure_error = validate_cooperative_configuration(
+            cooperative_type,
+            parent_id,
+            status,
+            exclude_id=cooperative.id,
+        )
+        if structure_error:
+            return structure_error, 400
+
         if cooperative_type == "Secondary":
             parent_id = None
         else:
-            if not parent_id:
-                return "A primary cooperative must belong to a secondary cooperative.", 400
-            parent = db.session.get(Cooperative, parent_id)
-            if not parent or parent.cooperative_type != "Secondary":
-                return "Please select a valid secondary cooperative.", 400
+            parent_id = parent.id
 
         cooperative.name = name
         cooperative.cooperative_type = cooperative_type
@@ -4872,7 +6479,7 @@ def edit_cooperative(cooperative_id):
         cooperative.registration_number = request.form.get("registration_number", "").strip() or None
         cooperative.code = request.form.get("code", "").strip() or None
         cooperative.location = request.form.get("location", "").strip() or None
-        cooperative.status = request.form.get("status", "Active").strip()
+        cooperative.status = status
         add_audit_log("UPDATE", "Cooperative", cooperative.id, cooperative.name, cooperative_id=cooperative.id)
         db.session.commit()
         return redirect(url_for("cooperatives_list"))
@@ -4882,14 +6489,627 @@ def edit_cooperative(cooperative_id):
 
 
 # =========================================================
+# ROUTES - PHASE 6 ACCOUNTABILITY & GOVERNANCE
+# =========================================================
+@app.route("/accountability")
+@roles_required(*GOVERNANCE_VIEW_ROLES)
+def accountability_register():
+    """Central register: what was decided, who owns it, due date, status and proof."""
+    access = current_access()
+    status_filter = request.args.get("status", "").strip()
+    search = request.args.get("search", "").strip()
+
+    query = own_cooperative_query(Resolution).join(Meeting)
+    if status_filter:
+        if status_filter == "Overdue":
+            query = query.filter(
+                Resolution.status.in_(["Assigned", "In Progress"]),
+                Resolution.due_date.isnot(None),
+                Resolution.due_date < crm_today(),
+            )
+        elif status_filter == "At Risk":
+            today = crm_today()
+            query = query.filter(
+                Resolution.status.in_(["Assigned", "In Progress"]),
+                Resolution.due_date.isnot(None),
+                Resolution.due_date >= today,
+                Resolution.due_date <= today + timedelta(days=3),
+            )
+        else:
+            query = query.filter(Resolution.status == status_filter)
+    if search:
+        query = query.filter(or_(
+            Resolution.resolution_number.ilike(f"%{search}%"),
+            Resolution.title.ilike(f"%{search}%"),
+            Resolution.resolution_text.ilike(f"%{search}%"),
+            Meeting.title.ilike(f"%{search}%"),
+        ))
+
+    resolutions = query.order_by(
+        Resolution.due_date.is_(None),
+        Resolution.due_date.asc(),
+        Resolution.created_at.desc(),
+    ).all()
+
+    today = crm_today()
+    all_own = own_cooperative_query(Resolution)
+    counts = {
+        "open": all_own.filter(Resolution.status.in_(["Assigned", "In Progress", "Awaiting Verification"])).count(),
+        "overdue": all_own.filter(
+            Resolution.status.in_(["Assigned", "In Progress"]),
+            Resolution.due_date.isnot(None),
+            Resolution.due_date < today,
+        ).count(),
+        "verification": all_own.filter_by(status="Awaiting Verification").count(),
+        "closed": all_own.filter_by(status="Closed").count(),
+    }
+
+    return render_template(
+        "accountability_register.html",
+        resolutions=resolutions,
+        counts=counts,
+        status_filter=status_filter,
+        search=search,
+        today=today,
+        current_access=access,
+    )
+
+
+@app.route("/meetings")
+@roles_required(*GOVERNANCE_VIEW_ROLES)
+def meetings_list():
+    search = request.args.get("search", "").strip()
+    query = own_cooperative_query(Meeting)
+    if search:
+        query = query.filter(or_(
+            Meeting.meeting_number.ilike(f"%{search}%"),
+            Meeting.title.ilike(f"%{search}%"),
+            Meeting.meeting_type.ilike(f"%{search}%"),
+            Meeting.venue.ilike(f"%{search}%"),
+        ))
+    meetings = query.order_by(Meeting.meeting_date.desc(), Meeting.created_at.desc()).all()
+    return render_template("meetings.html", meetings=meetings, search=search)
+
+
+@app.route("/meetings/add", methods=["GET", "POST"])
+@roles_required(*MEETING_RECORD_ROLES)
+def add_meeting():
+    access = current_access()
+    cooperative = current_cooperative()
+    if not cooperative or not access.cooperative_id:
+        abort(403)
+
+    if request.method == "POST":
+        meeting_type = request.form.get("meeting_type", "").strip()
+        title = request.form.get("title", "").strip()
+        venue = request.form.get("venue", "").strip() or None
+        quorum_status = request.form.get("quorum_status", "Not Recorded").strip()
+        notes = request.form.get("notes", "").strip() or None
+        try:
+            meeting_date = parse_date(request.form.get("meeting_date"))
+        except ValueError:
+            meeting_date = None
+
+        if not meeting_type or not title or not meeting_date:
+            return "Meeting type, title and date are required.", 400
+        if quorum_status not in {"Met", "Not Met", "Not Recorded"}:
+            return "Please choose a valid quorum status.", 400
+
+        meeting = Meeting(
+            cooperative_id=access.cooperative_id,
+            meeting_number=next_governance_number(Meeting, cooperative, "MTG", meeting_date),
+            meeting_type=meeting_type[:80],
+            title=title[:180],
+            meeting_date=meeting_date,
+            venue=venue[:200] if venue else None,
+            quorum_status=quorum_status,
+            status="Draft",
+            notes=notes,
+            created_by_user_id=session["user_id"],
+        )
+        db.session.add(meeting)
+        db.session.flush()
+        add_audit_log(
+            "MEETING_CREATED", "Meeting", meeting.id,
+            f"{meeting.meeting_number} - {meeting.title}", cooperative_id=meeting.cooperative_id,
+        )
+        db.session.commit()
+        return redirect(url_for("meeting_detail", meeting_id=meeting.id))
+
+    return render_template("meeting_form.html")
+
+
+@app.route("/meetings/<int:meeting_id>/edit", methods=["GET", "POST"])
+@roles_required(*MEETING_RECORD_ROLES)
+def edit_meeting(meeting_id):
+    meeting = scoped_get_or_404(Meeting, meeting_id)
+    require_own_cooperative(meeting.cooperative_id)
+    if meeting.status != "Draft":
+        return "Confirmed meeting records are locked. Historical evidence must not be silently edited.", 400
+
+    if request.method == "POST":
+        meeting_type = request.form.get("meeting_type", "").strip()
+        title = request.form.get("title", "").strip()
+        venue = request.form.get("venue", "").strip() or None
+        quorum_status = request.form.get("quorum_status", "Not Recorded").strip()
+        notes = request.form.get("notes", "").strip() or None
+        try:
+            meeting_date = parse_date(request.form.get("meeting_date"))
+        except ValueError:
+            meeting_date = None
+        if not meeting_type or not title or not meeting_date:
+            return "Meeting type, title and date are required.", 400
+        if quorum_status not in {"Met", "Not Met", "Not Recorded"}:
+            return "Please choose a valid quorum status.", 400
+
+        old_summary = f"{meeting.meeting_date} / {meeting.title}"
+        meeting.meeting_type = meeting_type[:80]
+        meeting.title = title[:180]
+        meeting.meeting_date = meeting_date
+        meeting.venue = venue[:200] if venue else None
+        meeting.quorum_status = quorum_status
+        meeting.notes = notes
+        add_audit_log(
+            "MEETING_DRAFT_UPDATED", "Meeting", meeting.id,
+            f"Draft meeting metadata updated from {old_summary} to {meeting.meeting_date} / {meeting.title}.",
+            cooperative_id=meeting.cooperative_id,
+        )
+        db.session.commit()
+        return redirect(url_for("meeting_detail", meeting_id=meeting.id))
+
+    return render_template("meeting_form.html", meeting=meeting)
+
+
+@app.route("/meetings/<int:meeting_id>")
+@roles_required(*GOVERNANCE_VIEW_ROLES)
+def meeting_detail(meeting_id):
+    meeting = scoped_get_or_404(Meeting, meeting_id)
+    require_own_cooperative(meeting.cooperative_id)
+    return render_template("meeting_detail.html", meeting=meeting)
+
+
+@app.route("/meetings/<int:meeting_id>/upload", methods=["POST"])
+@roles_required(*MEETING_RECORD_ROLES)
+def upload_meeting_document(meeting_id):
+    meeting = scoped_get_or_404(Meeting, meeting_id)
+    require_own_cooperative(meeting.cooperative_id)
+    if meeting.status == "Confirmed":
+        return "Confirmed meeting evidence is locked. Create an amendment record rather than replacing it.", 400
+
+    document_type = request.form.get("document_type", "Meeting Minutes").strip() or "Meeting Minutes"
+    try:
+        original_name, stored_name, digest = save_accountability_upload(request.files.get("document"), "meeting")
+    except ValueError as exc:
+        return str(exc), 400
+
+    document = MeetingDocument(
+        meeting_id=meeting.id,
+        cooperative_id=meeting.cooperative_id,
+        document_type=document_type[:60],
+        original_name=original_name,
+        stored_name=stored_name,
+        file_sha256=digest,
+        uploaded_by_user_id=session["user_id"],
+    )
+    db.session.add(document)
+    db.session.flush()
+    add_audit_log(
+        "MEETING_EVIDENCE_UPLOADED", "MeetingDocument", document.id,
+        f"{meeting.meeting_number}: {document.document_type} ({document.original_name}); SHA256 {digest}",
+        cooperative_id=meeting.cooperative_id,
+    )
+    db.session.commit()
+    return redirect(url_for("meeting_detail", meeting_id=meeting.id))
+
+
+@app.route("/meeting-documents/<int:document_id>/download")
+@roles_required(*GOVERNANCE_VIEW_ROLES)
+def download_meeting_document(document_id):
+    document = scoped_get_or_404(MeetingDocument, document_id)
+    require_own_cooperative(document.cooperative_id)
+    path = accountability_file_path(document.stored_name)
+    current_digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    if not hmac.compare_digest(current_digest, document.file_sha256):
+        abort(500, description="Stored evidence failed its integrity check.")
+    return send_file(path, as_attachment=False, download_name=document.original_name)
+
+
+@app.route("/meetings/<int:meeting_id>/confirm", methods=["POST"])
+@roles_required(*MEETING_CONFIRM_ROLES)
+def confirm_meeting(meeting_id):
+    meeting = scoped_get_or_404(Meeting, meeting_id)
+    require_own_cooperative(meeting.cooperative_id)
+    if meeting.status == "Confirmed":
+        return redirect(url_for("meeting_detail", meeting_id=meeting.id))
+    if not meeting.documents:
+        return "Upload the handwritten/signed meeting evidence before confirming the record.", 400
+
+    meeting.status = "Confirmed"
+    meeting.confirmed_by_user_id = session["user_id"]
+    meeting.confirmed_at = utc_now()
+    add_audit_log(
+        "MEETING_CONFIRMED", "Meeting", meeting.id,
+        f"{meeting.meeting_number} evidence confirmed and locked by Chairperson.",
+        cooperative_id=meeting.cooperative_id,
+    )
+    db.session.commit()
+    return redirect(url_for("meeting_detail", meeting_id=meeting.id))
+
+
+@app.route("/resolutions/add", methods=["GET", "POST"])
+@roles_required(*RESOLUTION_RECORD_ROLES)
+def add_resolution():
+    access = current_access()
+    cooperative = current_cooperative()
+    meetings = own_cooperative_query(Meeting).filter(
+        Meeting.status == "Confirmed",
+        Meeting.quorum_status != "Not Met",
+    ).order_by(Meeting.meeting_date.desc()).all()
+    executives = active_executive_accesses(access.cooperative_id)
+    selected_meeting_id = parse_int(request.args.get("meeting_id"))
+
+    if request.method == "POST":
+        meeting_id = parse_int(request.form.get("meeting_id"))
+        responsible_user_id = parse_int(request.form.get("responsible_user_id"))
+        title = request.form.get("title", "").strip()
+        resolution_text = request.form.get("resolution_text", "").strip()
+        priority = request.form.get("priority", "Normal").strip()
+        meeting = db.session.get(Meeting, meeting_id) if meeting_id else None
+        responsible_access = UserAccess.query.filter_by(
+            cooperative_id=access.cooperative_id,
+            user_id=responsible_user_id,
+            status="Active",
+        ).first() if responsible_user_id else None
+        try:
+            due_date = parse_date(request.form.get("due_date"))
+        except ValueError:
+            due_date = None
+
+        if not meeting or meeting.cooperative_id != access.cooperative_id or meeting.status != "Confirmed":
+            return "Choose a confirmed meeting from your cooperative.", 400
+        if meeting.quorum_status == "Not Met":
+            return "This meeting is recorded as not having quorum, so action resolutions cannot be created from it.", 400
+        if not responsible_access or responsible_access.role not in GOVERNANCE_VIEW_ROLES:
+            return "Choose an active executive from your cooperative.", 400
+        if not title or not resolution_text:
+            return "Resolution title and decision text are required.", 400
+        if priority not in {"Low", "Normal", "High", "Urgent"}:
+            return "Choose a valid priority.", 400
+
+        resolution = Resolution(
+            cooperative_id=access.cooperative_id,
+            meeting_id=meeting.id,
+            resolution_number=next_governance_number(Resolution, cooperative, "RES", meeting.meeting_date),
+            title=title[:180],
+            resolution_text=resolution_text,
+            responsible_role=responsible_access.role,
+            responsible_user_id=responsible_access.user_id,
+            due_date=due_date,
+            priority=priority,
+            status="Draft",
+            created_by_user_id=session["user_id"],
+        )
+        db.session.add(resolution)
+        db.session.flush()
+        add_audit_log(
+            "RESOLUTION_DRAFTED", "Resolution", resolution.id,
+            f"{resolution.resolution_number} - {resolution.title}; responsible: {resolution.responsible_role}",
+            cooperative_id=resolution.cooperative_id,
+        )
+        db.session.commit()
+        return redirect(url_for("resolution_detail", resolution_id=resolution.id))
+
+    return render_template(
+        "resolution_form.html",
+        meetings=meetings,
+        executives=executives,
+        selected_meeting_id=selected_meeting_id,
+    )
+
+
+@app.route("/resolutions/<int:resolution_id>/edit", methods=["GET", "POST"])
+@roles_required(*RESOLUTION_RECORD_ROLES)
+def edit_resolution(resolution_id):
+    resolution = scoped_get_or_404(Resolution, resolution_id)
+    access = require_own_cooperative(resolution.cooperative_id)
+    if resolution.status != "Draft":
+        return "Certified resolutions are locked into the accountability workflow.", 400
+
+    meetings = own_cooperative_query(Meeting).filter(
+        Meeting.status == "Confirmed",
+        Meeting.quorum_status != "Not Met",
+    ).order_by(Meeting.meeting_date.desc()).all()
+    executives = active_executive_accesses(access.cooperative_id)
+
+    if request.method == "POST":
+        meeting_id = parse_int(request.form.get("meeting_id"))
+        responsible_user_id = parse_int(request.form.get("responsible_user_id"))
+        title = request.form.get("title", "").strip()
+        resolution_text = request.form.get("resolution_text", "").strip()
+        priority = request.form.get("priority", "Normal").strip()
+        meeting = db.session.get(Meeting, meeting_id) if meeting_id else None
+        responsible_access = UserAccess.query.filter_by(
+            cooperative_id=access.cooperative_id, user_id=responsible_user_id, status="Active"
+        ).first() if responsible_user_id else None
+        try:
+            due_date = parse_date(request.form.get("due_date"))
+        except ValueError:
+            due_date = None
+
+        if not meeting or meeting.cooperative_id != access.cooperative_id or meeting.status != "Confirmed" or meeting.quorum_status == "Not Met":
+            return "Choose a confirmed meeting with quorum from your cooperative.", 400
+        if not responsible_access or responsible_access.role not in GOVERNANCE_VIEW_ROLES:
+            return "Choose an active executive from your cooperative.", 400
+        if not title or not resolution_text:
+            return "Resolution title and decision text are required.", 400
+        if priority not in {"Low", "Normal", "High", "Urgent"}:
+            return "Choose a valid priority.", 400
+
+        resolution.meeting_id = meeting.id
+        resolution.title = title[:180]
+        resolution.resolution_text = resolution_text
+        resolution.responsible_role = responsible_access.role
+        resolution.responsible_user_id = responsible_access.user_id
+        resolution.due_date = due_date
+        resolution.priority = priority
+        add_audit_log(
+            "RESOLUTION_DRAFT_UPDATED", "Resolution", resolution.id,
+            f"{resolution.resolution_number} draft updated before certification.",
+            cooperative_id=resolution.cooperative_id,
+        )
+        db.session.commit()
+        return redirect(url_for("resolution_detail", resolution_id=resolution.id))
+
+    return render_template(
+        "resolution_form.html", meetings=meetings, executives=executives,
+        selected_meeting_id=resolution.meeting_id, resolution=resolution,
+    )
+
+
+@app.route("/resolutions/<int:resolution_id>")
+@roles_required(*GOVERNANCE_VIEW_ROLES)
+def resolution_detail(resolution_id):
+    resolution = scoped_get_or_404(Resolution, resolution_id)
+    require_own_cooperative(resolution.cooperative_id)
+    task = Task.query.filter_by(resolution_id=resolution.id).first()
+    return render_template("resolution_detail.html", resolution=resolution, task=task)
+
+
+@app.route("/resolutions/<int:resolution_id>/certify", methods=["POST"])
+@roles_required(*MEETING_CONFIRM_ROLES)
+def certify_resolution(resolution_id):
+    resolution = scoped_get_or_404(Resolution, resolution_id)
+    require_own_cooperative(resolution.cooperative_id)
+    if resolution.status != "Draft":
+        return "Only draft resolutions can be certified.", 400
+    if resolution.meeting.status != "Confirmed":
+        return "The source meeting must be confirmed first.", 400
+    if resolution.meeting.quorum_status == "Not Met":
+        return "A resolution cannot be certified from a meeting recorded as not having quorum.", 400
+
+    resolution.status = "Assigned"
+    resolution.certified_by_user_id = session["user_id"]
+    resolution.certified_at = utc_now()
+
+    task = Task(
+        cooperative_id=resolution.cooperative_id,
+        resolution_id=resolution.id,
+        title=resolution.title,
+        description=resolution.resolution_text,
+        assigned_user_id=resolution.responsible_user_id,
+        assigned_role=resolution.responsible_role,
+        created_by_user_id=session["user_id"],
+        due_date=resolution.due_date,
+        priority=resolution.priority,
+        status="Open",
+        progress_percentage=0,
+    )
+    db.session.add(task)
+    db.session.flush()
+    db.session.add(TaskUpdate(
+        task_id=task.id,
+        cooperative_id=task.cooperative_id,
+        user_id=session["user_id"],
+        status="Open",
+        progress_percentage=0,
+        comment="Resolution certified and accountability task created.",
+    ))
+    add_audit_log(
+        "RESOLUTION_CERTIFIED", "Resolution", resolution.id,
+        f"{resolution.resolution_number} certified; task #{task.id} assigned to {resolution.responsible_role}.",
+        cooperative_id=resolution.cooperative_id,
+    )
+    db.session.commit()
+    return redirect(url_for("accountability_task_detail", task_id=task.id))
+
+
+@app.route("/accountability/tasks/<int:task_id>")
+@roles_required(*GOVERNANCE_VIEW_ROLES)
+def accountability_task_detail(task_id):
+    task = scoped_get_or_404(Task, task_id)
+    require_own_cooperative(task.cooperative_id)
+    if not task.resolution_id:
+        abort(404)
+    return render_template(
+        "accountability_task_detail.html",
+        task=task,
+        can_update_task=can_update_accountability_task(task),
+        can_verify_task=(
+            current_access().role in ACCOUNTABILITY_VERIFY_ROLES
+            and task.assigned_user_id != session.get("user_id")
+        ),
+        today=crm_today(),
+    )
+
+
+@app.route("/accountability/tasks/<int:task_id>/update", methods=["POST"])
+@roles_required(*GOVERNANCE_VIEW_ROLES)
+def update_accountability_task(task_id):
+    task = scoped_get_or_404(Task, task_id)
+    require_own_cooperative(task.cooperative_id)
+    if not task.resolution_id or not can_update_accountability_task(task):
+        abort(403)
+    if task.status == "Verified":
+        return "Verified accountability work is closed and cannot be edited.", 400
+
+    requested_status = request.form.get("status", "In Progress").strip()
+    comment = request.form.get("comment", "").strip() or None
+    progress = parse_int(request.form.get("progress_percentage"), task.progress_percentage or 0)
+    progress = max(0, min(100, progress if progress is not None else 0))
+    if requested_status not in {"Open", "In Progress", "Completed"}:
+        return "Choose Open, In Progress or Completed.", 400
+
+    if requested_status == "Completed":
+        task.status = "Awaiting Verification"
+        task.progress_percentage = 100
+        task.completed_at = utc_now()
+        log_status = "Awaiting Verification"
+    else:
+        task.status = requested_status
+        task.progress_percentage = progress
+        task.completed_at = None
+        if requested_status == "In Progress" and not task.started_at:
+            task.started_at = utc_now()
+        log_status = requested_status
+
+    db.session.add(TaskUpdate(
+        task_id=task.id,
+        cooperative_id=task.cooperative_id,
+        user_id=session["user_id"],
+        status=log_status,
+        progress_percentage=task.progress_percentage,
+        comment=comment,
+    ))
+    sync_resolution_from_task(task)
+    add_audit_log(
+        "ACCOUNTABILITY_PROGRESS", "Task", task.id,
+        f"{task.title}: {log_status} ({task.progress_percentage}%). {comment or ''}".strip(),
+        cooperative_id=task.cooperative_id,
+    )
+    db.session.commit()
+    return redirect(url_for("accountability_task_detail", task_id=task.id))
+
+
+@app.route("/accountability/tasks/<int:task_id>/evidence", methods=["POST"])
+@roles_required(*GOVERNANCE_VIEW_ROLES)
+def upload_task_evidence(task_id):
+    task = scoped_get_or_404(Task, task_id)
+    require_own_cooperative(task.cooperative_id)
+    if not task.resolution_id or not can_update_accountability_task(task):
+        abort(403)
+    if task.status == "Verified":
+        return "Verified accountability work is closed.", 400
+
+    evidence_type = request.form.get("evidence_type", "Supporting Evidence").strip() or "Supporting Evidence"
+    description = request.form.get("description", "").strip() or None
+    try:
+        original_name, stored_name, digest = save_accountability_upload(request.files.get("evidence"), "task")
+    except ValueError as exc:
+        return str(exc), 400
+
+    evidence = TaskEvidence(
+        task_id=task.id,
+        cooperative_id=task.cooperative_id,
+        evidence_type=evidence_type[:60],
+        description=description[:300] if description else None,
+        original_name=original_name,
+        stored_name=stored_name,
+        file_sha256=digest,
+        uploaded_by_user_id=session["user_id"],
+    )
+    db.session.add(evidence)
+    db.session.flush()
+    add_audit_log(
+        "ACCOUNTABILITY_EVIDENCE_UPLOADED", "TaskEvidence", evidence.id,
+        f"Task #{task.id}: {evidence.evidence_type} ({evidence.original_name}); SHA256 {digest}",
+        cooperative_id=task.cooperative_id,
+    )
+    db.session.commit()
+    return redirect(url_for("accountability_task_detail", task_id=task.id))
+
+
+@app.route("/task-evidence/<int:evidence_id>/download")
+@roles_required(*GOVERNANCE_VIEW_ROLES)
+def download_task_evidence(evidence_id):
+    evidence = scoped_get_or_404(TaskEvidence, evidence_id)
+    require_own_cooperative(evidence.cooperative_id)
+    path = accountability_file_path(evidence.stored_name)
+    current_digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    if not hmac.compare_digest(current_digest, evidence.file_sha256):
+        abort(500, description="Stored evidence failed its integrity check.")
+    return send_file(path, as_attachment=False, download_name=evidence.original_name)
+
+
+@app.route("/accountability/tasks/<int:task_id>/verify", methods=["POST"])
+@roles_required(*ACCOUNTABILITY_VERIFY_ROLES)
+def verify_accountability_task(task_id):
+    task = scoped_get_or_404(Task, task_id)
+    require_own_cooperative(task.cooperative_id)
+    if not task.resolution_id:
+        abort(404)
+    if task.assigned_user_id == session.get("user_id"):
+        return "The person responsible for the task cannot verify their own work.", 403
+    if task.status != "Awaiting Verification":
+        return "Only completed work awaiting verification can be reviewed.", 400
+
+    decision = request.form.get("decision", "").strip().lower()
+    notes = request.form.get("verification_notes", "").strip() or None
+    if not notes:
+        return "Add a short verification note describing what you checked or what must be corrected.", 400
+    if decision == "approve":
+        if not task.evidence_files:
+            return "At least one supporting evidence file is required before verification.", 400
+        task.status = "Verified"
+        task.verified_by_user_id = session["user_id"]
+        task.verified_at = utc_now()
+        task.verification_notes = notes
+        update_status = "Verified"
+        action = "ACCOUNTABILITY_VERIFIED"
+    elif decision == "return":
+        task.status = "In Progress"
+        task.verified_by_user_id = None
+        task.verified_at = None
+        task.verification_notes = notes
+        task.completed_at = None
+        task.progress_percentage = min(task.progress_percentage or 100, 95)
+        update_status = "Returned"
+        action = "ACCOUNTABILITY_RETURNED"
+    else:
+        return "Choose approve or return for more work.", 400
+
+    db.session.add(TaskUpdate(
+        task_id=task.id,
+        cooperative_id=task.cooperative_id,
+        user_id=session["user_id"],
+        status=update_status,
+        progress_percentage=task.progress_percentage,
+        comment=notes,
+    ))
+    sync_resolution_from_task(task)
+    add_audit_log(
+        action, "Task", task.id,
+        f"{task.title}: {update_status}. {notes or ''}".strip(),
+        cooperative_id=task.cooperative_id,
+    )
+    db.session.commit()
+    return redirect(url_for("accountability_task_detail", task_id=task.id))
+
+
+# =========================================================
 # ROUTES - REPORTS
 # =========================================================
 @app.route("/reports")
 @roles_required(*COOPERATIVE_EXECUTIVE_ROLES)
 def reports():
     """Generate reports."""
-    start_date = parse_date(request.args.get("start_date"))
-    end_date = parse_date(request.args.get("end_date"))
+    try:
+        start_date = parse_date(request.args.get("start_date"))
+        end_date = parse_date(request.args.get("end_date"))
+    except ValueError:
+        return "Please enter valid report dates.", 400
+
+    if start_date and end_date and end_date < start_date:
+        return "Report end date cannot be earlier than the start date.", 400
 
     sales_query = scoped_model_query(Sale).filter(Sale.status != "Cancelled")
     payments_query = scoped_model_query(Payment).filter(Payment.status.in_(PAYMENT_VALUE_STATUSES))
@@ -4927,6 +7147,13 @@ def reports():
     outstanding_balance = max(float(total_sales_value) - float(total_payments_value), 0.0)
     net_cash_position = float(total_payments_value) + float(total_contributions_value) - float(total_expenses_value)
 
+    membership_query = membership_filtered_query()
+    membership_fee_records = membership_query.all()
+    membership_fees_expected = sum(float(m.fee_amount or 0) for m in membership_fee_records)
+    membership_fees_paid = sum(float(m.fee_paid or 0) for m in membership_fee_records)
+    membership_fees_pending = sum(float(m.fee_pending or 0) for m in membership_fee_records)
+    membership_fees_outstanding = sum(float(m.fee_outstanding or 0) for m in membership_fee_records)
+
     return render_optional_template("reports.html", "Reports",
                                     farmer_count=scoped_model_query(Farmer).count(),
                                     farm_count=scoped_model_query(Farm).count(),
@@ -4937,6 +7164,12 @@ def reports():
                                     customer_count=scoped_model_query(Customer).count(),
                                     supplier_count=scoped_model_query(Supplier).count(),
                                     expense_count=scoped_model_query(Expense).count(),
+                                    membership_count=membership_query.count(),
+                                    active_membership_count=membership_query.filter(Membership.status == "Active").count(),
+                                    membership_fees_expected=membership_fees_expected,
+                                    membership_fees_paid=membership_fees_paid,
+                                    membership_fees_pending=membership_fees_pending,
+                                    membership_fees_outstanding=membership_fees_outstanding,
                                     total_sales_value=total_sales_value,
                                     total_payments_value=total_payments_value,
                                     total_expenses_value=total_expenses_value,
@@ -4953,6 +7186,237 @@ def reports():
                                     current_access=current_access(),
                                     current_cooperative=current_cooperative()
                                     )
+
+
+# =========================================================
+# ROUTES - GOOGLE AUTHENTICATOR / TWO-FACTOR AUTHENTICATION
+# =========================================================
+@app.route("/2fa/setup", methods=["GET", "POST"])
+@login_required
+def two_factor_setup():
+    """Enroll the signed-in account in Google Authenticator."""
+    user = current_user()
+    access = current_access()
+
+    if user.two_factor_enabled:
+        if not two_factor_session_complete():
+            return redirect(url_for("two_factor_verify"))
+        return redirect(url_for("settings"))
+
+    secret = None
+    if user.two_factor_secret:
+        try:
+            secret = decrypt_two_factor_secret(user.two_factor_secret)
+        except RuntimeError:
+            clear_user_two_factor(user)
+            db.session.commit()
+
+    if not secret:
+        secret = generate_totp_secret()
+        user.two_factor_secret = encrypt_two_factor_secret(secret)
+        db.session.commit()
+
+    if request.method == "POST":
+        code = request.form.get("code", "").strip()
+        matched_counter = verify_totp_code(secret, code)
+
+        if matched_counter is None:
+            add_audit_log(
+                "TWO_FACTOR_SETUP_FAILED",
+                "User",
+                user.id,
+                "Google Authenticator enrollment code was invalid.",
+                cooperative_id=access.cooperative_id if access else None,
+            )
+            db.session.commit()
+            return "The verification code is invalid. Check Google Authenticator and try again.", 400
+
+        recovery_codes = generate_recovery_codes()
+        set_recovery_codes(user, recovery_codes)
+        user.two_factor_enabled = True
+        user.two_factor_confirmed_at = utc_now()
+        # The enrollment code is considered used and cannot be replayed for login.
+        user.two_factor_last_counter = matched_counter
+        session["two_factor_authenticated"] = True
+        session["two_factor_bypassed"] = False
+        session["two_factor_failures"] = 0
+
+        add_audit_log(
+            "TWO_FACTOR_ENABLED",
+            "User",
+            user.id,
+            "Google Authenticator two-factor authentication enabled.",
+            cooperative_id=access.cooperative_id if access else None,
+        )
+        add_audit_log(
+            "LOGIN_SUCCESS",
+            "User",
+            user.id,
+            f"Successful login as {access.role if access else 'Unknown'} after Google Authenticator enrollment.",
+            cooperative_id=access.cooperative_id if access else None,
+        )
+        db.session.commit()
+
+        return render_template(
+            "two_factor_setup.html",
+            user=user,
+            setup_complete=True,
+            recovery_codes=recovery_codes,
+            secret=None,
+            qr_data_uri=None,
+        )
+
+    uri = google_authenticator_uri(user, secret)
+    return render_template(
+        "two_factor_setup.html",
+        user=user,
+        setup_complete=False,
+        recovery_codes=None,
+        secret=secret,
+        qr_data_uri=google_authenticator_qr_data_uri(uri),
+    )
+
+
+@app.route("/2fa/verify", methods=["GET", "POST"])
+@login_required
+def two_factor_verify():
+    """Verify Google Authenticator or a one-time recovery code after password login."""
+    user = current_user()
+    access = current_access()
+
+    if not user.two_factor_enabled:
+        return redirect(url_for("two_factor_setup"))
+
+    if two_factor_session_complete():
+        return redirect(url_for("dashboard"))
+
+    if request.method == "POST":
+        code = request.form.get("code", "").strip()
+        valid = False
+        used_recovery = False
+
+        try:
+            secret = decrypt_two_factor_secret(user.two_factor_secret)
+        except RuntimeError as exc:
+            return str(exc), 500
+
+        matched_counter = verify_totp_code(secret, code)
+        if matched_counter is not None:
+            if user.two_factor_last_counter is None or matched_counter > user.two_factor_last_counter:
+                valid = True
+                user.two_factor_last_counter = matched_counter
+        elif consume_recovery_code(user, code):
+            valid = True
+            used_recovery = True
+
+        if valid:
+            session["two_factor_authenticated"] = True
+            session["two_factor_bypassed"] = False
+            session["two_factor_failures"] = 0
+            action = "TWO_FACTOR_RECOVERY_USED" if used_recovery else "TWO_FACTOR_SUCCESS"
+            details = (
+                f"One-time recovery code accepted; {recovery_code_count(user)} recovery codes remain."
+                if used_recovery
+                else "Google Authenticator verification succeeded."
+            )
+            add_audit_log(
+                action,
+                "User",
+                user.id,
+                details,
+                cooperative_id=access.cooperative_id if access else None,
+            )
+            add_audit_log(
+                "LOGIN_SUCCESS",
+                "User",
+                user.id,
+                f"Successful login as {access.role if access else 'Unknown'} with two-factor authentication.",
+                cooperative_id=access.cooperative_id if access else None,
+            )
+            db.session.commit()
+            return redirect(url_for("dashboard"))
+
+        failures = int(session.get("two_factor_failures", 0)) + 1
+        session["two_factor_failures"] = failures
+        add_audit_log(
+            "TWO_FACTOR_FAILED",
+            "User",
+            user.id,
+            f"Invalid Google Authenticator/recovery code attempt {failures}.",
+            cooperative_id=access.cooperative_id if access else None,
+        )
+
+        if failures >= int(app.config.get("TWO_FACTOR_MAX_ATTEMPTS", 5)):
+            add_audit_log(
+                "TWO_FACTOR_RATE_LIMITED",
+                "User",
+                user.id,
+                "Too many invalid two-factor codes; password sign-in is required again.",
+                cooperative_id=access.cooperative_id if access else None,
+            )
+            db.session.commit()
+            session.clear()
+            return "Too many two-factor verification attempts. Sign in again.", 429
+
+        db.session.commit()
+        return "Invalid verification code or recovery code.", 401
+
+    return render_template(
+        "two_factor_verify.html",
+        user=user,
+        remaining_recovery_codes=recovery_code_count(user),
+    )
+
+
+@app.route("/2fa/recovery-codes", methods=["GET", "POST"])
+@login_required
+def two_factor_recovery_codes():
+    """Regenerate recovery codes after re-confirming password and Google Authenticator."""
+    user = current_user()
+    access = current_access()
+
+    if not user.two_factor_enabled or not two_factor_session_complete():
+        return redirect(url_for("two_factor_setup"))
+
+    if request.method == "POST":
+        password = request.form.get("current_password", "")
+        code = request.form.get("code", "").strip()
+
+        if not check_password_hash(user.password, password):
+            return "Current password is incorrect.", 400
+
+        try:
+            secret = decrypt_two_factor_secret(user.two_factor_secret)
+        except RuntimeError as exc:
+            return str(exc), 500
+
+        counter = verify_totp_code(secret, code)
+        if counter is None:
+            return "The Google Authenticator code is invalid.", 400
+
+        recovery_codes = generate_recovery_codes()
+        set_recovery_codes(user, recovery_codes)
+        add_audit_log(
+            "TWO_FACTOR_RECOVERY_REGENERATED",
+            "User",
+            user.id,
+            "User regenerated Google Authenticator recovery codes.",
+            cooperative_id=access.cooperative_id if access else None,
+        )
+        db.session.commit()
+        return render_template(
+            "two_factor_recovery_codes.html",
+            user=user,
+            recovery_codes=recovery_codes,
+            generated=True,
+        )
+
+    return render_template(
+        "two_factor_recovery_codes.html",
+        user=user,
+        recovery_codes=None,
+        generated=False,
+    )
 
 
 # =========================================================
@@ -5020,17 +7484,151 @@ def change_password():
 
 
 # =========================================================
+# EXECUTIVE APPOINTMENT HELPERS
+# =========================================================
+def active_executive_appointment_for_slot(cooperative_id, role):
+    """Return the current active holder of one cooperative executive position."""
+    return ExecutiveAppointment.query.filter_by(
+        cooperative_id=cooperative_id,
+        role=role,
+        status="Active",
+    ).first()
+
+
+def active_executive_appointment_for_user(user_id):
+    """Return a user's active executive appointment, if any."""
+    return ExecutiveAppointment.query.filter_by(
+        user_id=user_id,
+        status="Active",
+    ).first()
+
+
+def close_executive_appointment(appointment, end_date=None, ended_by_user_id=None):
+    """Close an active appointment without deleting its history."""
+    if not appointment or appointment.status != "Active":
+        return appointment
+
+    end_date = end_date or utc_now().date()
+    if end_date < appointment.start_date:
+        raise ValueError("Executive end date cannot be earlier than the appointment start date.")
+
+    appointment.status = "Inactive"
+    appointment.end_date = end_date
+    appointment.ended_by_user_id = ended_by_user_id
+    appointment.updated_at = utc_now()
+    return appointment
+
+
+def create_executive_appointment(
+        user,
+        cooperative,
+        role,
+        start_date=None,
+        appointed_by_user_id=None,
+        notes=None,
+):
+    """Create one active appointment after business-rule validation."""
+    start_date = start_date or utc_now().date()
+
+    if role not in COOPERATIVE_EXECUTIVE_ROLES:
+        raise ValueError("Please select a cooperative executive role.")
+
+    if cooperative.cooperative_type == "Secondary" and role not in SECONDARY_EXECUTIVE_ROLES:
+        raise ValueError("The selected role does not belong to a Secondary Cooperative.")
+
+    if cooperative.cooperative_type == "Primary" and role not in PRIMARY_EXECUTIVE_ROLES:
+        raise ValueError("The selected role does not belong to a Primary Cooperative.")
+
+    occupied = active_executive_appointment_for_slot(cooperative.id, role)
+    if occupied:
+        holder = occupied.user.fullname if occupied.user else "another executive"
+        raise ValueError(f"{role} is already actively held by {holder} for {cooperative.name}.")
+
+    current_for_user = active_executive_appointment_for_user(user.id)
+    if current_for_user:
+        raise ValueError(
+            f"{user.fullname} already has an active executive appointment: "
+            f"{current_for_user.role} at {current_for_user.cooperative.name}. "
+            "Deactivate or replace that appointment first."
+        )
+
+    appointment = ExecutiveAppointment(
+        cooperative_id=cooperative.id,
+        user_id=user.id,
+        role=role,
+        start_date=start_date,
+        status="Active",
+        appointed_by_user_id=appointed_by_user_id,
+        notes=notes or None,
+    )
+    db.session.add(appointment)
+    return appointment
+
+
+def sync_access_to_executive_history(
+        user,
+        access,
+        old_role,
+        old_status,
+        old_cooperative_id,
+        new_role,
+        new_status,
+        new_cooperative_id,
+        effective_date=None,
+):
+    """Keep UserAccess and executive appointment history aligned after Admin changes."""
+    effective_date = effective_date or utc_now().date()
+    actor_id = session.get("user_id") if has_request_context() else None
+
+    old_active_exec = (
+        old_status == "Active"
+        and old_role in COOPERATIVE_EXECUTIVE_ROLES
+        and old_cooperative_id is not None
+    )
+    new_active_exec = (
+        new_status == "Active"
+        and new_role in COOPERATIVE_EXECUTIVE_ROLES
+        and new_cooperative_id is not None
+    )
+    same_assignment = (
+        old_active_exec
+        and new_active_exec
+        and old_role == new_role
+        and old_cooperative_id == new_cooperative_id
+    )
+
+    if old_active_exec and not same_assignment:
+        old_appointment = ExecutiveAppointment.query.filter_by(
+            user_id=user.id,
+            cooperative_id=old_cooperative_id,
+            role=old_role,
+            status="Active",
+        ).first()
+        if old_appointment:
+            close_executive_appointment(old_appointment, effective_date, actor_id)
+
+    if new_active_exec and not same_assignment:
+        cooperative = db.session.get(Cooperative, new_cooperative_id)
+        create_executive_appointment(
+            user,
+            cooperative,
+            new_role,
+            start_date=effective_date,
+            appointed_by_user_id=actor_id,
+            notes="Created from Users & Access assignment.",
+        )
+
+
+# =========================================================
 # ROUTES - USER MANAGEMENT
 # =========================================================
-def validate_admin_user_assignment(role, status, cooperative_id):
-    """Validate an Admin-selected CRM role, status and cooperative."""
+def validate_admin_user_assignment(role, status, cooperative_id, exclude_user_id=None):
+    """Validate an Admin-selected role and protect active executive positions."""
     if role not in VALID_ACCESS_ROLES:
         return None, "Please select a valid CRM role."
 
     if status not in {"Active", "Inactive"}:
         return None, "Invalid access status."
-
-    cooperative = None
 
     if role == "Admin":
         return None, None
@@ -5039,9 +7637,11 @@ def validate_admin_user_assignment(role, status, cooperative_id):
         return None, "Please assign this executive to a cooperative."
 
     cooperative = db.session.get(Cooperative, cooperative_id)
-
     if not cooperative:
         return None, "Selected cooperative does not exist."
+
+    if cooperative.status != "Active" and status == "Active":
+        return None, "An active executive cannot be assigned to an inactive cooperative."
 
     if role in SECONDARY_EXECUTIVE_ROLES and cooperative.cooperative_type != "Secondary":
         return None, "A Secondary executive role must be assigned to the Secondary Cooperative."
@@ -5049,7 +7649,366 @@ def validate_admin_user_assignment(role, status, cooperative_id):
     if role in PRIMARY_EXECUTIVE_ROLES and cooperative.cooperative_type != "Primary":
         return None, "A Primary executive role must be assigned to a Primary Cooperative."
 
+    if status == "Active":
+        duplicate_query = UserAccess.query.filter_by(
+            cooperative_id=cooperative.id,
+            role=role,
+            status="Active",
+        )
+        if exclude_user_id is not None:
+            duplicate_query = duplicate_query.filter(UserAccess.user_id != exclude_user_id)
+
+        duplicate = duplicate_query.first()
+        if duplicate:
+            holder = duplicate.user.fullname if duplicate.user else "another CRM user"
+            return (
+                None,
+                f"{role} is already actively assigned to {holder} for {cooperative.name}. "
+                "Deactivate or reassign that executive before assigning this position.",
+            )
+
+        appointment_query = ExecutiveAppointment.query.filter_by(
+            cooperative_id=cooperative.id,
+            role=role,
+            status="Active",
+        )
+        if exclude_user_id is not None:
+            appointment_query = appointment_query.filter(ExecutiveAppointment.user_id != exclude_user_id)
+
+        appointment = appointment_query.first()
+        if appointment:
+            holder = appointment.user.fullname if appointment.user else "another executive"
+            return (
+                None,
+                f"{role} already has an active appointment for {holder} at {cooperative.name}. "
+                "Use Executive Management to replace or deactivate the current holder.",
+            )
+
     return cooperative, None
+
+
+# =========================================================
+# ROUTES - EXECUTIVE MANAGEMENT
+# =========================================================
+@app.route("/executives")
+@roles_required("Admin")
+def executives_list():
+    """Admin dashboard for the 15 cooperative executive positions."""
+    cooperatives = Cooperative.query.order_by(
+        Cooperative.cooperative_type.desc(),
+        Cooperative.name.asc(),
+    ).all()
+
+    active_appointments = ExecutiveAppointment.query.filter_by(status="Active").all()
+    appointment_map = {
+        (appointment.cooperative_id, appointment.role): appointment
+        for appointment in active_appointments
+    }
+
+    cooperative_rows = []
+    total_positions = 0
+    filled_positions = 0
+    for cooperative in cooperatives:
+        slots = []
+        for position in EXECUTIVE_POSITIONS:
+            role = executive_role_for(cooperative.cooperative_type, position)
+            if not role:
+                continue
+            appointment = appointment_map.get((cooperative.id, role))
+            total_positions += 1
+            if appointment:
+                filled_positions += 1
+            slots.append({
+                "position": position,
+                "role": role,
+                "appointment": appointment,
+            })
+        cooperative_rows.append({
+            "cooperative": cooperative,
+            "slots": slots,
+        })
+
+    return render_optional_template(
+        "executives.html",
+        "Executives",
+        cooperative_rows=cooperative_rows,
+        total_positions=total_positions,
+        filled_positions=filled_positions,
+        vacant_positions=max(total_positions - filled_positions, 0),
+        today=crm_today(),
+    )
+
+
+@app.route("/executives/assign", methods=["GET", "POST"])
+@roles_required("Admin")
+def assign_executive():
+    """Assign an existing CRM user to a vacant cooperative executive position."""
+    cooperatives = Cooperative.query.order_by(
+        Cooperative.cooperative_type.desc(),
+        Cooperative.name.asc(),
+    ).all()
+    users = User.query.order_by(User.fullname.asc()).all()
+
+    selected_cooperative_id = parse_int(request.values.get("cooperative_id"))
+    selected_role = request.values.get("role", "").strip()
+
+    if request.method == "POST":
+        user_id = parse_int(request.form.get("user_id"))
+        cooperative_id = parse_int(request.form.get("cooperative_id"))
+        role = request.form.get("role", "").strip()
+        start_date_raw = request.form.get("start_date", "").strip()
+        notes = request.form.get("notes", "").strip()
+
+        try:
+            start_date = parse_date(start_date_raw) if start_date_raw else utc_now().date()
+        except ValueError:
+            return "Please enter a valid appointment start date.", 400
+
+        user = db.session.get(User, user_id) if user_id else None
+        if not user:
+            return "Please select a CRM user.", 400
+
+        access = get_user_access(user.id)
+        if access.role == "Admin" and access.status == "Active":
+            return "The System Admin account cannot also hold a cooperative executive position.", 400
+
+        cooperative, assignment_error = validate_admin_user_assignment(
+            role,
+            "Active",
+            cooperative_id,
+            exclude_user_id=user.id,
+        )
+        if assignment_error:
+            return assignment_error, 400
+
+        active_for_user = active_executive_appointment_for_user(user.id)
+        if active_for_user:
+            return (
+                f"{user.fullname} already holds {active_for_user.role} at "
+                f"{active_for_user.cooperative.name}. Deactivate or replace that appointment first.",
+                400,
+            )
+
+        if access.status == "Active" and access.role in COOPERATIVE_EXECUTIVE_ROLES:
+            return (
+                f"{user.fullname} already has active CRM executive access as {access.role}. "
+                "Use Executive Management to change the existing appointment.",
+                400,
+            )
+
+        try:
+            appointment = create_executive_appointment(
+                user,
+                cooperative,
+                role,
+                start_date=start_date,
+                appointed_by_user_id=session.get("user_id"),
+                notes=notes,
+            )
+        except ValueError as exc:
+            return str(exc), 400
+
+        access.role = role
+        access.status = "Active"
+        access.cooperative_id = cooperative.id
+        db.session.flush()
+
+        add_audit_log(
+            "EXECUTIVE_ASSIGNED",
+            "ExecutiveAppointment",
+            appointment.id,
+            f"{user.fullname} appointed as {role} for {cooperative.name} from {start_date.isoformat()}.",
+            cooperative_id=cooperative.id,
+        )
+        add_audit_log(
+            "ACCESS_UPDATE",
+            "User",
+            user.id,
+            f"Executive access activated: {role} / {cooperative.name}.",
+            cooperative_id=cooperative.id,
+        )
+        db.session.commit()
+        return redirect(url_for("executives_list"))
+
+    return render_optional_template(
+        "executive_assignment_form.html",
+        "Assign Executive",
+        cooperatives=cooperatives,
+        users=users,
+        selected_cooperative_id=selected_cooperative_id,
+        selected_role=selected_role,
+        executive_positions=EXECUTIVE_POSITIONS,
+        today=crm_today(),
+    )
+
+
+@app.route("/executives/replace/<int:appointment_id>", methods=["GET", "POST"])
+@roles_required("Admin")
+def replace_executive(appointment_id):
+    """End one appointment and appoint a replacement while preserving history."""
+    appointment = db.session.get(ExecutiveAppointment, appointment_id)
+    if not appointment:
+        abort(404)
+    if appointment.status != "Active":
+        return "Only an active executive appointment can be replaced.", 400
+
+    users = User.query.order_by(User.fullname.asc()).all()
+
+    if request.method == "POST":
+        new_user_id = parse_int(request.form.get("user_id"))
+        effective_raw = request.form.get("effective_date", "").strip()
+        notes = request.form.get("notes", "").strip()
+
+        try:
+            effective_date = parse_date(effective_raw) if effective_raw else utc_now().date()
+        except ValueError:
+            return "Please enter a valid replacement date.", 400
+
+        if effective_date < appointment.start_date:
+            return "Replacement date cannot be earlier than the current appointment start date.", 400
+
+        new_user = db.session.get(User, new_user_id) if new_user_id else None
+        if not new_user:
+            return "Please select the replacement CRM user.", 400
+        if new_user.id == appointment.user_id:
+            return "Please select a different user as the replacement.", 400
+
+        new_access = get_user_access(new_user.id)
+        if new_access.role == "Admin" and new_access.status == "Active":
+            return "The System Admin account cannot also hold a cooperative executive position.", 400
+
+        existing_new_appointment = active_executive_appointment_for_user(new_user.id)
+        if existing_new_appointment:
+            return (
+                f"{new_user.fullname} already holds {existing_new_appointment.role} at "
+                f"{existing_new_appointment.cooperative.name}.",
+                400,
+            )
+
+        if new_access.status == "Active" and new_access.role in COOPERATIVE_EXECUTIVE_ROLES:
+            return f"{new_user.fullname} already has active executive access as {new_access.role}.", 400
+
+        old_user = appointment.user
+        old_access = get_user_access(old_user.id)
+
+        close_executive_appointment(
+            appointment,
+            end_date=effective_date,
+            ended_by_user_id=session.get("user_id"),
+        )
+        if (
+            old_access.role == appointment.role
+            and old_access.cooperative_id == appointment.cooperative_id
+        ):
+            old_access.status = "Inactive"
+
+        replacement = create_executive_appointment(
+            new_user,
+            appointment.cooperative,
+            appointment.role,
+            start_date=effective_date,
+            appointed_by_user_id=session.get("user_id"),
+            notes=notes or f"Replaced {old_user.fullname}.",
+        )
+        new_access.role = appointment.role
+        new_access.status = "Active"
+        new_access.cooperative_id = appointment.cooperative_id
+        db.session.flush()
+
+        add_audit_log(
+            "EXECUTIVE_REPLACED",
+            "ExecutiveAppointment",
+            replacement.id,
+            f"{old_user.fullname} replaced by {new_user.fullname} as {appointment.role}; effective {effective_date.isoformat()}.",
+            cooperative_id=appointment.cooperative_id,
+        )
+        db.session.commit()
+        return redirect(url_for("executives_list"))
+
+    return render_optional_template(
+        "executive_replace_form.html",
+        "Replace Executive",
+        appointment=appointment,
+        users=users,
+        today=crm_today(),
+    )
+
+
+@app.route("/executives/deactivate/<int:appointment_id>", methods=["POST"])
+@roles_required("Admin")
+def deactivate_executive(appointment_id):
+    """Deactivate an executive appointment and retain it as historical evidence."""
+    appointment = db.session.get(ExecutiveAppointment, appointment_id)
+    if not appointment:
+        abort(404)
+    if appointment.status != "Active":
+        return "This executive appointment is already inactive.", 400
+
+    end_raw = request.form.get("end_date", "").strip()
+    try:
+        end_date = parse_date(end_raw) if end_raw else utc_now().date()
+    except ValueError:
+        return "Please enter a valid executive end date.", 400
+
+    try:
+        close_executive_appointment(
+            appointment,
+            end_date=end_date,
+            ended_by_user_id=session.get("user_id"),
+        )
+    except ValueError as exc:
+        return str(exc), 400
+
+    access = get_user_access(appointment.user_id)
+    if access.role == appointment.role and access.cooperative_id == appointment.cooperative_id:
+        access.status = "Inactive"
+
+    add_audit_log(
+        "EXECUTIVE_DEACTIVATED",
+        "ExecutiveAppointment",
+        appointment.id,
+        f"{appointment.user.fullname} ended service as {appointment.role} on {end_date.isoformat()}.",
+        cooperative_id=appointment.cooperative_id,
+    )
+    db.session.commit()
+    return redirect(url_for("executives_list"))
+
+
+@app.route("/executives/history")
+@roles_required("Admin")
+def executive_history():
+    """View the appointment history without overwriting former office holders."""
+    cooperative_id = parse_int(request.args.get("cooperative_id"))
+    role = request.args.get("role", "").strip()
+    user_id = parse_int(request.args.get("user_id"))
+
+    query = ExecutiveAppointment.query
+    if cooperative_id:
+        query = query.filter(ExecutiveAppointment.cooperative_id == cooperative_id)
+    if role in COOPERATIVE_EXECUTIVE_ROLES:
+        query = query.filter(ExecutiveAppointment.role == role)
+    if user_id:
+        query = query.filter(ExecutiveAppointment.user_id == user_id)
+
+    appointments = query.order_by(
+        ExecutiveAppointment.start_date.desc(),
+        ExecutiveAppointment.created_at.desc(),
+    ).all()
+
+    cooperatives = Cooperative.query.order_by(Cooperative.name.asc()).all()
+    users = User.query.order_by(User.fullname.asc()).all()
+
+    return render_optional_template(
+        "executive_history.html",
+        "Executive History",
+        appointments=appointments,
+        cooperatives=cooperatives,
+        users=users,
+        valid_roles=sorted(COOPERATIVE_EXECUTIVE_ROLES),
+        selected_cooperative_id=cooperative_id,
+        selected_role=role,
+        selected_user_id=user_id,
+    )
 
 
 @app.route("/users")
@@ -5158,6 +8117,24 @@ def add_user():
             cooperative_id=cooperative_id,
         )
         db.session.add(access)
+
+        if role in COOPERATIVE_EXECUTIVE_ROLES and status == "Active":
+            appointment = create_executive_appointment(
+                user,
+                cooperative,
+                role,
+                start_date=utc_now().date(),
+                appointed_by_user_id=session.get("user_id"),
+                notes="Initial executive appointment created with CRM user.",
+            )
+            db.session.flush()
+            add_audit_log(
+                "EXECUTIVE_ASSIGNED",
+                "ExecutiveAppointment",
+                appointment.id,
+                f"{user.fullname} appointed as {role} for {cooperative.name}.",
+                cooperative_id=cooperative.id,
+            )
 
         add_audit_log(
             "CREATE",
@@ -5275,6 +8252,34 @@ def reset_user_password(user_id):
     )
 
 
+@app.route("/users/reset-2fa/<int:user_id>", methods=["POST"])
+@roles_required("Admin")
+def reset_user_two_factor(user_id):
+    """Admin resets another user's Google Authenticator enrollment."""
+    user = db.session.get(User, user_id)
+    if not user:
+        abort(404)
+
+    if user.id == session.get("user_id"):
+        return (
+            "You cannot reset your own Google Authenticator enrollment from the Admin page. "
+            "Use your recovery codes, or use the trusted reset_user_2fa.py maintenance script if both are lost.",
+            400,
+        )
+
+    access = get_user_access(user.id)
+    clear_user_two_factor(user)
+    add_audit_log(
+        "TWO_FACTOR_ADMIN_RESET",
+        "User",
+        user.id,
+        f"Admin reset Google Authenticator enrollment for {user.email}.",
+        cooperative_id=access.cooperative_id if access else None,
+    )
+    db.session.commit()
+    return redirect(url_for("users_list"))
+
+
 @app.route("/users/access/<int:user_id>", methods=["POST"])
 @roles_required("Admin")
 def update_user_access(user_id):
@@ -5302,6 +8307,7 @@ def update_user_access(user_id):
         role,
         status,
         cooperative_id,
+        exclude_user_id=user.id,
     )
     if assignment_error:
         return assignment_error, 400
@@ -5311,9 +8317,43 @@ def update_user_access(user_id):
     else:
         cooperative_id = cooperative.id
 
+    old_role = access.role
+    old_status = access.status
+    old_cooperative_id = access.cooperative_id
+
+    sync_access_to_executive_history(
+        user,
+        access,
+        old_role,
+        old_status,
+        old_cooperative_id,
+        role,
+        status,
+        cooperative_id,
+    )
+
     access.role = role
     access.status = status
     access.cooperative_id = cooperative_id
+
+    if (old_role, old_status, old_cooperative_id) != (role, status, cooperative_id):
+        if old_role in COOPERATIVE_EXECUTIVE_ROLES and role in COOPERATIVE_EXECUTIVE_ROLES:
+            executive_action = "EXECUTIVE_ROLE_CHANGED"
+        elif old_role in COOPERATIVE_EXECUTIVE_ROLES and status != "Active":
+            executive_action = "EXECUTIVE_DEACTIVATED"
+        elif role in COOPERATIVE_EXECUTIVE_ROLES and status == "Active":
+            executive_action = "EXECUTIVE_ASSIGNED"
+        else:
+            executive_action = None
+
+        if executive_action:
+            add_audit_log(
+                executive_action,
+                "User",
+                user.id,
+                f"{user.fullname}: {old_role}/{old_status} -> {role}/{status}.",
+                cooperative_id=cooperative_id or old_cooperative_id,
+            )
 
     add_audit_log(
         "ACCESS_UPDATE",
@@ -5504,6 +8544,52 @@ def export_expenses():
 # =========================================================
 # ROUTES - SYSTEM ADMINISTRATION
 # =========================================================
+@app.route("/admin/security/2fa-policy", methods=["POST"])
+@roles_required("Admin")
+def admin_two_factor_policy():
+    """Temporarily disable or reactivate mandatory 2FA for all CRM accounts."""
+    action = request.form.get("action", "").strip().lower()
+    if action not in {"enable", "disable"}:
+        return "Choose whether to enable or disable two-factor authentication.", 400
+
+    settings_data = load_system_settings()
+    previous = bool(settings_data.get("two_factor_required", True))
+    enabled = action == "enable"
+
+    # The environment switch is still the top-level safety control. If it is
+    # disabled, the web UI cannot claim that 2FA has been reactivated.
+    if enabled and not app.config.get("TWO_FACTOR_REQUIRED", True):
+        return (
+            "Two-factor authentication is disabled by the TWO_FACTOR_REQUIRED environment setting. "
+            "Set TWO_FACTOR_REQUIRED=true and restart the CRM before enabling it here.",
+            400,
+        )
+
+    settings_data["two_factor_required"] = enabled
+    save_system_settings(settings_data)
+
+    if enabled:
+        # Ensure the Admin who reactivates 2FA is challenged again on the next
+        # protected request unless this session already completed real 2FA.
+        if session.get("two_factor_bypassed"):
+            session["two_factor_authenticated"] = False
+    else:
+        # Do not clear anyone's enrollment. This flag only pauses enforcement.
+        session["two_factor_bypassed"] = True
+
+    if previous != enabled:
+        action_name = "TWO_FACTOR_GLOBAL_ENABLED" if enabled else "TWO_FACTOR_GLOBAL_DISABLED"
+        detail = (
+            "Admin reactivated mandatory Google Authenticator 2FA for all CRM accounts."
+            if enabled
+            else "Admin temporarily disabled mandatory Google Authenticator 2FA for all CRM accounts for testing."
+        )
+        add_audit_log(action_name, "SystemSecurity", details=detail)
+        db.session.commit()
+
+    return redirect(url_for("admin_security"))
+
+
 @app.route("/admin/security")
 @roles_required("Admin")
 def admin_security():
@@ -5512,6 +8598,20 @@ def admin_security():
         "LOGIN_SUCCESS",
         "LOGIN_FAILED",
         "LOGIN_DENIED",
+        "LOGIN_RATE_LIMITED",
+        "TWO_FACTOR_CHALLENGE",
+        "TWO_FACTOR_ENROLLMENT_REQUIRED",
+        "TWO_FACTOR_ENABLED",
+        "TWO_FACTOR_SETUP_FAILED",
+        "TWO_FACTOR_SUCCESS",
+        "TWO_FACTOR_FAILED",
+        "TWO_FACTOR_RATE_LIMITED",
+        "TWO_FACTOR_RECOVERY_USED",
+        "TWO_FACTOR_RECOVERY_REGENERATED",
+        "TWO_FACTOR_ADMIN_RESET",
+        "TWO_FACTOR_TRUSTED_RESET",
+        "TWO_FACTOR_GLOBAL_DISABLED",
+        "TWO_FACTOR_GLOBAL_ENABLED",
         "LOGOUT",
         "PASSWORD_CHANGE",
         "ADMIN_PASSWORD_RESET",
@@ -5531,6 +8631,18 @@ def admin_security():
         admin_users=UserAccess.query.filter_by(role="Admin", status="Active").count(),
         failed_logins=AuditLog.query.filter_by(action="LOGIN_FAILED").count(),
         denied_logins=AuditLog.query.filter_by(action="LOGIN_DENIED").count(),
+        rate_limited_logins=AuditLog.query.filter_by(action="LOGIN_RATE_LIMITED").count(),
+        two_factor_enabled_users=User.query.join(UserAccess, UserAccess.user_id == User.id).filter(
+            UserAccess.status == "Active", User.two_factor_enabled.is_(True)
+        ).count(),
+        two_factor_pending_users=User.query.join(UserAccess, UserAccess.user_id == User.id).filter(
+            UserAccess.status == "Active", User.two_factor_enabled.is_(False)
+        ).count(),
+        two_factor_failures=AuditLog.query.filter(
+            AuditLog.action.in_(("TWO_FACTOR_FAILED", "TWO_FACTOR_RATE_LIMITED"))
+        ).count(),
+        two_factor_policy_enabled=two_factor_policy_enabled(),
+        two_factor_environment_enabled=bool(app.config.get("TWO_FACTOR_REQUIRED", True)),
     )
 
 
@@ -5538,11 +8650,12 @@ def admin_security():
 @roles_required("Admin")
 def admin_backup_restore():
     """Admin-only Backup & Restore page."""
+    database_backend = db.engine.url.get_backend_name()
     return render_optional_template(
         "admin_backup_restore.html",
         "Backup & Restore",
-        database_backend=db.engine.url.get_backend_name(),
-        backups=list_database_backups(),
+        database_backend=database_backend,
+        backups=list_database_backups() if database_backend == "sqlite" else [],
     )
 
 
@@ -5718,6 +8831,7 @@ def admin_data_exports():
     datasets = [
         ("users", "Users & Access", "CRM login holders, roles, status and cooperative assignments."),
         ("cooperatives", "Cooperative Structure", "Secondary and Primary cooperative structure."),
+        ("executive-history", "Executive History", "Current and former executive appointments across all cooperatives."),
         ("audit-logs", "Audit Logs", "Complete recorded CRM activity."),
         ("memberships", "Memberships", "System-wide membership register."),
         ("farmers", "Farmers", "All farmer records."),
@@ -5803,6 +8917,7 @@ def admin_system_settings():
             "default_location": default_location[:150],
             "session_timeout_minutes": timeout,
             "maintenance_notice": maintenance_notice[:500],
+            "two_factor_required": bool(settings_data.get("two_factor_required", True)),
         }
 
         save_system_settings(settings_data)
@@ -5854,48 +8969,52 @@ def database_backup():
 # ERROR HANDLERS
 # =========================================================
 @app.errorhandler(400)
-def bad_request(_error):
-    """Handle 400 errors."""
-    return _render_branded_error(
-        400,
-        "Please check the information",
-        "The request could not be completed because some information is invalid.",
-    ), 400
+def bad_request(error):
+    """Handle bad requests, including CSRF validation failures."""
+    message = getattr(error, "description", None) or "The request could not be completed because some information is invalid."
+    return _render_branded_error(400, "Please check the information", message), 400
 
 
 @app.errorhandler(401)
-def unauthorized(_error):
-    """Handle 401 errors."""
-    return _render_branded_error(
-        401,
-        "Sign-in required",
-        "Please sign in with an authorized Malenge Farmers CRM account.",
-    ), 401
+def unauthorized(error):
+    """Handle unauthenticated requests."""
+    message = getattr(error, "description", None) or "Please sign in with an authorized Malenge Farmers CRM account."
+    return _render_branded_error(401, "Sign-in required", message), 401
 
 
 @app.errorhandler(403)
-def forbidden(_error):
-    """Handle 403 errors."""
-    return _render_branded_error(
-        403,
-        "Access denied",
-        "You do not have permission to access this page.",
-    ), 403
+def forbidden(error):
+    """Handle permission failures."""
+    message = getattr(error, "description", None) or "You do not have permission to access this page."
+    return _render_branded_error(403, "Access denied", message), 403
 
 
 @app.errorhandler(404)
 def page_not_found(_error):
-    """Handle 404 errors."""
+    """Handle unknown routes."""
+    return _render_branded_error(404, "Page not found", "The requested page was not found."), 404
+
+
+@app.errorhandler(413)
+def request_too_large(_error):
+    """Handle requests larger than the configured application limit."""
     return _render_branded_error(
-        404,
-        "Page not found",
-        "The requested page was not found.",
-    ), 404
+        413,
+        "Request too large",
+        "The submitted request is larger than the CRM allows.",
+    ), 413
+
+
+@app.errorhandler(429)
+def too_many_requests(error):
+    """Handle authentication throttling and other rate limits."""
+    message = getattr(error, "description", None) or "Too many requests were received. Please wait and try again."
+    return _render_branded_error(429, "Too many attempts", message), 429
 
 
 @app.errorhandler(500)
 def internal_error(_error):
-    """Handle 500 errors."""
+    """Handle unexpected server failures without exposing internals."""
     db.session.rollback()
     return _render_branded_error(
         500,

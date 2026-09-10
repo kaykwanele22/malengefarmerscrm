@@ -9,7 +9,7 @@
 .admin-eyebrow{color:#26834f;font-size:11px;font-weight:800;letter-spacing:1.4px}
 .admin-card{background:#fff;border:1px solid #e1e9e3;border-radius:16px;box-shadow:0 8px 24px rgba(18,63,41,.04)}
 .admin-card-pad{padding:22px}
-.admin-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+.admin-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:16px}
 .admin-stat{padding:20px;background:#fff;border:1px solid #e1e9e3;border-radius:14px}
 .admin-stat span{display:block;margin-bottom:7px;color:#738077;font-size:11px}
 .admin-stat strong{color:#123f29;font-size:25px}
@@ -55,16 +55,54 @@
         </div>
     </div>
 
+    <section class="admin-card">
+        <div class="admin-card-pad">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:18px;flex-wrap:wrap">
+                <div style="max-width:760px">
+                    <span class="admin-eyebrow">GLOBAL LOGIN POLICY</span>
+                    <h2 class="admin-section-title" style="margin-top:7px">Google Authenticator 2FA</h2>
+                    {% if two_factor_policy_enabled %}
+                    <div class="admin-note">
+                        <strong>2FA is required for all authorized CRM accounts.</strong> Users with an existing enrollment must verify their Google Authenticator code at login. New authorized accounts must enroll first.
+                    </div>
+                    {% else %}
+                    <div class="admin-warning">
+                        <strong>2FA is temporarily disabled for all accounts.</strong> Password login still applies, but Google Authenticator is skipped. Existing authenticator secrets and recovery codes are preserved so reactivation does not require everyone to enroll again.
+                    </div>
+                    {% endif %}
+                    {% if not two_factor_environment_enabled %}
+                    <div class="admin-danger" style="margin-top:12px">
+                        TWO_FACTOR_REQUIRED is disabled in the environment. Set it to <strong>true</strong> and restart the CRM before 2FA can be reactivated here.
+                    </div>
+                    {% endif %}
+                </div>
+                <form method="POST" action="{{ url_for('admin_two_factor_policy') }}" style="margin:0">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    {% if two_factor_policy_enabled %}
+                    <input type="hidden" name="action" value="disable">
+                    <button type="submit" class="admin-button-danger" onclick="return confirm('Temporarily disable Google Authenticator 2FA for ALL CRM accounts? Password login will still be required.')">Disable 2FA for Testing</button>
+                    {% else %}
+                    <input type="hidden" name="action" value="enable">
+                    <button type="submit" class="admin-button" {% if not two_factor_environment_enabled %}disabled{% endif %} onclick="return confirm('Reactivate mandatory Google Authenticator 2FA for ALL CRM accounts?')">Reactivate 2FA for All</button>
+                    {% endif %}
+                </form>
+            </div>
+        </div>
+    </section>
+
     <div class="admin-stats">
         <div class="admin-stat"><span>Active Accounts</span><strong>{{ active_users }}</strong></div>
         <div class="admin-stat"><span>Inactive Accounts</span><strong>{{ inactive_users }}</strong></div>
         <div class="admin-stat"><span>Active Admins</span><strong>{{ admin_users }}</strong></div>
         <div class="admin-stat"><span>Failed / Denied Logins</span><strong>{{ failed_logins + denied_logins }}</strong></div>
+        <div class="admin-stat"><span>Rate-Limited Attempts</span><strong>{{ rate_limited_logins }}</strong></div>
+        <div class="admin-stat"><span>Google 2FA Enabled</span><strong>{{ two_factor_enabled_users }}</strong></div>
+        <div class="admin-stat"><span>2FA Enrollment Pending</span><strong>{{ two_factor_pending_users }}</strong></div>
+        <div class="admin-stat"><span>Failed 2FA Checks</span><strong>{{ two_factor_failures }}</strong></div>
     </div>
 
     <div class="admin-note">
-        Security activity is recorded in the existing audit trail. Admin can deactivate an account,
-        reset a password or change access from <strong>Users &amp; Access</strong>.
+        Security activity is recorded in the existing audit trail. Admin can temporarily pause or reactivate global 2FA enforcement above, deactivate an account, reset a password, reset another user's 2FA enrollment or change access from <strong>Users &amp; Access</strong>. Disabling 2FA does not erase existing authenticator enrollment.
     </div>
 
     <section class="admin-card">
@@ -77,11 +115,11 @@
                 <tbody>
                 {% for log in security_logs %}
                 <tr>
-                    <td>{{ log.created_at.strftime('%d %b %Y %H:%M') if log.created_at else '—' }}</td>
+                    <td>{{ format_sast(log.created_at, '%d %b %Y %H:%M') }} SAST</td>
                     <td>{{ log.user.fullname if log.user else 'Unknown / Unmatched' }}</td>
-                    <td><span class="status-pill {% if log.action in ['LOGIN_FAILED','LOGIN_DENIED'] %}warning{% endif %}">{{ log.action }}</span></td>
+                    <td><span class="status-pill {% if log.action in ['LOGIN_FAILED','LOGIN_DENIED','LOGIN_RATE_LIMITED','TWO_FACTOR_FAILED','TWO_FACTOR_RATE_LIMITED'] %}warning{% endif %}">{{ log.action }}</span></td>
                     <td>{{ log.cooperative.name if log.cooperative else 'System' }}</td>
-                    <td>{{ log.details or '—' }}</td>
+                    <td>{{ log.details or '—' }}<br><small>IP: {{ log.ip_address or 'not recorded' }} · {{ log.request_method or '—' }} {{ log.request_path or '' }}</small></td>
                 </tr>
                 {% else %}
                 <tr><td colspan="5">No security activity has been recorded yet.</td></tr>

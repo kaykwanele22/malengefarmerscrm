@@ -78,7 +78,7 @@
                     <td>{{ contribution.contribution_date.strftime('%d %b %Y') if contribution.contribution_date else '—' }}</td>
                     <td><span class="name">{{ contribution.farmer.fullname }}</span></td>
                     <td>{{ contribution.cooperative.name if contribution.cooperative else 'Unassigned' }}</td>
-                    <td>{{ contribution.category or '—' }}</td>
+                    <td>{{ contribution.category or '—' }}{% if contribution.membership %}<span style="display:block;margin-top:4px;color:#89938d;font-size:10px">{{ contribution.membership.member_number }}</span>{% endif %}</td>
                     <td><span class="amount">R {{ "{:,.2f}".format(contribution.amount|float) }}</span></td>
                     <td>{{ contribution.method or '—' }}</td>
                     <td>{{ contribution.reference or '—' }}</td>
@@ -88,10 +88,12 @@
                         <div class="actions">
                             {% if can_approve_finance and current_access and contribution.cooperative_id == current_access.cooperative_id and contribution.status == 'Pending Confirmation' %}
                             <form method="POST" action="{{ url_for('decide_contribution', contribution_id=contribution.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <input type="hidden" name="decision" value="approve">
                                 <button type="submit" class="approve">Approve</button>
                             </form>
                             <form method="POST" action="{{ url_for('decide_contribution', contribution_id=contribution.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <input type="hidden" name="decision" value="reject">
                                 <button type="submit" class="reject">Reject</button>
                             </form>
@@ -99,6 +101,7 @@
 
                             {% if can_record_finance and current_access and contribution.cooperative_id == current_access.cooperative_id and contribution.status in ['Pending Confirmation','Rejected'] %}
                             <form method="POST" action="{{ url_for('delete_contribution', contribution_id=contribution.id) }}" onsubmit="return confirm('Delete this unconfirmed contribution record?');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <button type="submit" class="delete-btn">Delete</button>
                             </form>
                             {% endif %}
