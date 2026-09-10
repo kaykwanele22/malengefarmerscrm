@@ -41,6 +41,7 @@
     </div>
 
     <form method="POST" class="form-card">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="form-grid">
             <div class="group">
                 <label for="category">Category *</label>

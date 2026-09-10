@@ -21,6 +21,7 @@
 
 <div class="form-card">
     <form method="POST" id="farmer-form" novalidate>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="form-grid">
             <!-- Full Name -->
             <div class="form-group full-width">

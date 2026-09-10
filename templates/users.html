@@ -43,12 +43,14 @@
 .access-badge.inactive{color:#b32626;background:#fde1e1}
 .access-badge.pending{color:#966314;background:#fff1cf}
 .access-badge.role{color:#315441;background:#edf4ef}
-.user-details{padding:18px 24px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:20px;background:#fbfdfb;border-bottom:1px solid #eef2ef}
+.user-details{padding:18px 24px;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:20px;background:#fbfdfb;border-bottom:1px solid #eef2ef}
 .user-detail label{display:block;margin-bottom:4px;color:#829087;font-size:10px;font-weight:800;letter-spacing:0.8px;text-transform:uppercase}
 .user-detail span{color:#25382c;font-size:13px;font-weight:600}
 .user-tools{padding:14px 24px;display:flex;gap:10px;flex-wrap:wrap;border-bottom:1px solid #eef2ef}
 .user-tool{min-height:38px;padding:0 13px;display:inline-flex;align-items:center;justify-content:center;border:1px solid #d7e3db;border-radius:8px;background:#f6f9f7;color:#315441;text-decoration:none;font-size:11px;font-weight:800}
 .user-tool.password{background:#fffaf0;border-color:#eadfbf;color:#725c26}
+.user-tool.twofa{background:#eef7ff;border-color:#cfe0ef;color:#2b5f84}
+.user-tool-form{margin:0;display:inline-flex}.user-tool-form button{font-family:inherit;cursor:pointer}
 .access-form-wrapper{padding:22px 24px 24px}
 .access-form-title{margin-bottom:15px;color:#173e29;font-size:13px;font-weight:800}
 .access-form{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1.2fr) minmax(0,0.8fr) auto;gap:14px;align-items:end}
@@ -171,6 +173,7 @@
                 {% if access %}
                 <span class="access-badge {{ card_status }}">{{ access.status }}</span>
                 <span class="access-badge role">{{ access.role }}</span>
+                <span class="access-badge {% if not two_factor_policy_enabled() %}pending{% elif user.two_factor_enabled %}active{% else %}pending{% endif %}">2FA {{ 'Paused' if not two_factor_policy_enabled() else ('Enabled' if user.two_factor_enabled else 'Required') }}</span>
                 {% else %}
                 <span class="access-badge pending">No Access Record</span>
                 {% endif %}
@@ -181,12 +184,19 @@
             <div class="user-detail"><label>Phone</label><span>{{ user.phone or "—" }}</span></div>
             <div class="user-detail"><label>Area / Location</label><span>{{ user.farm_location or "—" }}</span></div>
             <div class="user-detail"><label>Cooperative</label><span>{% if access and access.cooperative %}{{ access.cooperative.name }}{% else %}System / Unassigned{% endif %}</span></div>
+            <div class="user-detail"><label>2FA Security</label><span>{{ 'Globally paused by Admin' if not two_factor_policy_enabled() else ('Google Authenticator enabled' if user.two_factor_enabled else 'Enrollment required') }}</span></div>
             <div class="user-detail"><label>Account Created</label><span>{% if user.created_at %}{{ user.created_at.strftime("%Y-%m-%d") }}{% else %}—{% endif %}</span></div>
         </div>
 
         <div class="user-tools">
             <a href="{{ url_for('edit_user', user_id=user.id) }}" class="user-tool">Edit Details</a>
             <a href="{{ url_for('reset_user_password', user_id=user.id) }}" class="user-tool password">Reset Password</a>
+            {% if user.two_factor_enabled and (not current_access or user.id != current_access.user_id) %}
+            <form method="POST" action="{{ url_for('reset_user_two_factor', user_id=user.id) }}" class="user-tool-form" onsubmit="return confirm('Reset Google Authenticator for this user? They will have to enroll again at next sign-in.')">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="user-tool twofa">Reset Google 2FA</button>
+            </form>
+            {% endif %}
         </div>
 
         <div class="access-form-wrapper">
@@ -200,6 +210,7 @@
             </div>
             {% else %}
             <form method="POST" action="{{ url_for('update_user_access', user_id=user.id) }}" class="access-form" data-access-form>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="access-field">
                     <label>Executive / System Role</label>
                     <select name="role" class="role-select" required>

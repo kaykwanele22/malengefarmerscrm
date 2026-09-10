@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Meetings & Evidence | Malenge Farmers CRM{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{{ url_for('static', filename='css/accountability.css') }}">{% endblock %}
+{% block content %}
+<div class="acc-page">
+  <div class="acc-head"><div><span class="acc-eyebrow">Evidence Register</span><h1>Meetings &amp; Evidence</h1><p>Index official meetings without retyping handwritten minutes. Upload scans or photos and extract only the decisions that need accountability.</p></div><div class="acc-actions"><a class="acc-btn" href="{{ url_for('accountability_register') }}">← Accountability</a>{% if can_record_meetings %}<a class="acc-btn primary" href="{{ url_for('add_meeting') }}">+ Register Meeting</a>{% endif %}</div></div>
+  <section class="acc-card">
+    <div class="acc-card-body"><form class="acc-search" method="GET"><input name="search" value="{{ search or '' }}" placeholder="Search meeting reference, title, type or venue..."><button class="acc-btn" type="submit">Search</button>{% if search %}<a class="acc-btn" href="{{ url_for('meetings_list') }}">Clear</a>{% endif %}</form></div>
+    <div class="acc-table-wrap"><table class="acc-table"><thead><tr><th>Meeting</th><th>Date</th><th>Venue</th><th>Quorum</th><th>Evidence</th><th>Status</th><th></th></tr></thead><tbody>
+      {% for meeting in meetings %}<tr><td><span class="acc-ref">{{ meeting.meeting_number }}</span><br><strong>{{ meeting.title }}</strong><span class="acc-muted">{{ meeting.meeting_type }}</span></td><td>{{ meeting.meeting_date.strftime('%d %b %Y') }}</td><td>{{ meeting.venue or '—' }}</td><td>{{ meeting.quorum_status }}</td><td><strong>{{ meeting.documents|length }}</strong><span class="acc-muted">uploaded file{{ '' if meeting.documents|length == 1 else 's' }}</span></td><td><span class="acc-badge {% if meeting.status=='Confirmed' %}closed{% else %}draft{% endif %}">{{ meeting.status }}</span></td><td><a class="acc-btn" href="{{ url_for('meeting_detail', meeting_id=meeting.id) }}">Open</a></td></tr>
+      {% else %}<tr><td colspan="7"><div class="acc-empty">No meetings registered yet.</div></td></tr>{% endfor %}
+    </tbody></table></div>
+  </section>
+</div>
+{% endblock %}

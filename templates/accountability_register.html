@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Accountability Register | Malenge Farmers CRM{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{{ url_for('static', filename='css/accountability.css') }}">{% endblock %}
+{% block content %}
+<div class="acc-page">
+  <div class="acc-head">
+    <div><span class="acc-eyebrow">Governance &amp; Evidence</span><h1>Accountability Register</h1><p>One place to see what was decided, who is responsible, what is overdue, and whether proof has been verified.</p></div>
+    <div class="acc-actions"><a class="acc-btn" href="{{ url_for('meetings_list') }}">📎 Meeting Evidence</a>{% if can_record_resolutions %}<a class="acc-btn primary" href="{{ url_for('add_resolution') }}">+ Capture Resolution</a>{% endif %}</div>
+  </div>
+
+  <div class="acc-grid">
+    <div class="acc-stat"><span>Open Accountability</span><strong>{{ counts.open }}</strong><small>Assigned, in progress or awaiting verification</small></div>
+    <div class="acc-stat danger"><span>Overdue</span><strong>{{ counts.overdue }}</strong><small>Deadline passed without verified closure</small></div>
+    <div class="acc-stat attention"><span>Awaiting Verification</span><strong>{{ counts.verification }}</strong><small>Completed work needing independent review</small></div>
+    <div class="acc-stat good"><span>Closed</span><strong>{{ counts.closed }}</strong><small>Completed and independently verified</small></div>
+  </div>
+
+  <section class="acc-card">
+    <div class="acc-card-head"><h2>Resolution Accountability</h2></div>
+    <div class="acc-card-body">
+      <form class="acc-search" method="GET">
+        <input name="search" value="{{ search or '' }}" placeholder="Search reference, matter or meeting...">
+        <select name="status">
+          <option value="">All statuses</option>
+          {% for value in ['Draft','Assigned','In Progress','At Risk','Awaiting Verification','Overdue','Closed'] %}<option value="{{ value }}" {% if status_filter==value %}selected{% endif %}>{{ value }}</option>{% endfor %}
+        </select>
+        <button class="acc-btn" type="submit">Filter</button>{% if search or status_filter %}<a class="acc-btn" href="{{ url_for('accountability_register') }}">Clear</a>{% endif %}
+      </form>
+    </div>
+    <div class="acc-table-wrap"><table class="acc-table"><thead><tr><th>Reference / Matter</th><th>Responsible</th><th>Source Meeting</th><th>Due</th><th>Status</th><th>Proof</th><th></th></tr></thead><tbody>
+      {% for resolution in resolutions %}
+      {% set task = resolution.tasks[0] if resolution.tasks else None %}
+      {% set display_status = resolution.accountability_status %}
+      <tr>
+        <td><span class="acc-ref">{{ resolution.resolution_number }}</span><br><strong>{{ resolution.title }}</strong><span class="acc-muted">{{ resolution.resolution_text[:110] }}{% if resolution.resolution_text|length > 110 %}…{% endif %}</span></td>
+        <td><div class="acc-person"><strong>{{ resolution.responsible_user.fullname }}</strong><small>{{ resolution.responsible_role }}</small></div></td>
+        <td><a href="{{ url_for('meeting_detail', meeting_id=resolution.meeting_id) }}">{{ resolution.meeting.meeting_number }}</a><span class="acc-muted">{{ resolution.meeting.meeting_date.strftime('%d %b %Y') }}</span></td>
+        <td>{% if resolution.due_date %}{{ resolution.due_date.strftime('%d %b %Y') }}{% else %}—{% endif %}</td>
+        <td><span class="acc-badge {% if display_status=='Overdue' %}overdue{% elif display_status=='At Risk' %}waiting{% elif display_status=='Closed' %}closed{% elif display_status=='Awaiting Verification' %}waiting{% elif display_status=='In Progress' %}progress{% elif display_status=='Draft' %}draft{% endif %}">{{ display_status }}</span>{% if task %}<div class="acc-progress" title="{{ task.progress_percentage }}%"><span style="width:{{ task.progress_percentage }}%"></span></div>{% endif %}</td>
+        <td>{% if task %}<strong>{{ task.evidence_files|length }}</strong><span class="acc-muted">file{{ '' if task.evidence_files|length == 1 else 's' }}</span>{% else %}<span class="acc-muted">Not assigned yet</span>{% endif %}</td>
+        <td>{% if task %}<a class="acc-btn" href="{{ url_for('accountability_task_detail', task_id=task.id) }}">Open</a>{% else %}<a class="acc-btn" href="{{ url_for('resolution_detail', resolution_id=resolution.id) }}">Review</a>{% endif %}</td>
+      </tr>
+      {% else %}<tr><td colspan="7"><div class="acc-empty">No accountability records found. Confirm meeting evidence, then capture the decisions that require action.</div></td></tr>{% endfor %}
+    </tbody></table></div>
+  </section>
+</div>
+{% endblock %}

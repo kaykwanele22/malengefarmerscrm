@@ -3,7 +3,6 @@
 {% block title %}Dashboard | Malenge Farmers CRM{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/monitoring_dashboard.css') }}">
 <style>
     .dash-shell{display:flex;flex-direction:column;gap:22px}
     .dash-hero{padding:24px;background:linear-gradient(135deg,#123f29,#1e6943);border-radius:18px;color:#fff;display:flex;justify-content:space-between;gap:22px;align-items:flex-start;box-shadow:0 12px 34px rgba(18,63,41,.15)}
@@ -161,6 +160,45 @@
             {% endif %}
         </div>
     </header>
+
+    {% if not is_admin %}
+    <!-- =====================================================
+         PHASE 6 ACCOUNTABILITY COMMAND CENTRE
+    ====================================================== -->
+    <section class="dash-section">
+        <div class="dash-section-head">
+            <div><p class="eyebrow">Accountability Command Centre</p><h2>Decisions → Responsibility → Proof → Verification</h2></div>
+            <a href="{{ url_for('accountability_register') }}">Open Register →</a>
+        </div>
+        <div class="dash-section-body">
+            <div class="dash-stat-grid">
+                <div class="dash-stat"><span>Open Responsibilities</span><strong>{{ accountability_open_count }}</strong><small>Cooperative resolutions still requiring action</small></div>
+                <div class="dash-stat {% if accountability_overdue_count > 0 %}attention{% endif %}"><span>Overdue</span><strong>{{ accountability_overdue_count }}</strong><small>Deadlines passed without verified closure</small></div>
+                <div class="dash-stat {% if accountability_awaiting_verification_count > 0 %}attention{% endif %}"><span>Awaiting Verification</span><strong>{{ accountability_awaiting_verification_count }}</strong><small>Completed work awaiting independent review</small></div>
+                <div class="dash-stat {% if my_overdue_accountability_count > 0 %}attention{% endif %}"><span>My Responsibilities</span><strong>{{ my_accountability_task_count }}</strong><small>{{ my_overdue_accountability_count }} of yours overdue</small></div>
+            </div>
+        </div>
+    </section>
+
+    <section class="dash-two">
+        <div class="dash-section">
+            <div class="dash-section-head"><div><p class="eyebrow">Latest Decisions</p><h2>Recent Resolutions</h2></div><a href="{{ url_for('accountability_register') }}">View all →</a></div>
+            <div class="dash-section-body"><div class="dash-list">
+                {% for resolution in recent_resolutions %}
+                <div class="dash-row"><div><strong>{{ resolution.title }}</strong><small>{{ resolution.resolution_number }} · {{ resolution.responsible_role }}</small></div><div class="value"><span class="dash-badge {% if resolution.accountability_status == 'Overdue' %}rejected{% elif resolution.status == 'Awaiting Verification' %}pending{% endif %}">{{ resolution.accountability_status }}</span></div></div>
+                {% else %}<div class="dash-empty">No resolutions captured yet.</div>{% endfor %}
+            </div></div>
+        </div>
+        <div class="dash-section">
+            <div class="dash-section-head"><div><p class="eyebrow">Evidence</p><h2>Upcoming Meetings</h2></div><a href="{{ url_for('meetings_list') }}">Meeting register →</a></div>
+            <div class="dash-section-body"><div class="dash-list">
+                {% for meeting in upcoming_meetings %}
+                <div class="dash-row"><div><strong>{{ meeting.title }}</strong><small>{{ meeting.meeting_number }} · {{ meeting.venue or 'Venue not set' }}</small></div><div class="value">{{ meeting.meeting_date.strftime('%d %b') }}</div></div>
+                {% else %}<div class="dash-empty">No upcoming meetings registered.</div>{% endfor %}
+            </div></div>
+        </div>
+    </section>
+    {% endif %}
 
     <!-- =====================================================
          STRICT ADMIN DASHBOARD
@@ -322,7 +360,7 @@
             <div class="dash-stat-grid">
                 <div class="dash-stat"><span>Total Members</span><strong>{{ own_member_count }}</strong><small>Membership records</small></div>
                 <div class="dash-stat good"><span>Active Members</span><strong>{{ own_active_member_count }}</strong><small>Currently active</small></div>
-                <div class="dash-stat {% if own_membership_fee_due > 0 %}attention{% endif %}"><span>Membership Fees Due</span><strong>R {{ "{:,.0f}".format(own_membership_fee_due|float) }}</strong><small>Expected less confirmed payments</small></div>
+                <div class="dash-stat {% if own_membership_fee_due > 0 %}attention{% endif %}"><span>Membership Fees Due</span><strong>R {{ "{:,.0f}".format(own_membership_fee_due|float) }}</strong><small>Still to pay after confirmed + pending fee receipts</small></div>
                 <div class="dash-stat"><span>Farmers</span><strong>{{ own_farmer_count }}</strong><small>People available for membership records</small></div>
             </div>
 
@@ -513,7 +551,7 @@
         <div class="dash-section">
             <div class="dash-section-head"><div><p class="eyebrow">Attention</p><h2>Current Alerts</h2></div></div>
             <div class="dash-section-body"><div class="dash-list">
-                <div class="dash-row"><div><strong>Membership fees due</strong><small>Active members with outstanding expected fees</small></div><div class="value">{{ unpaid_membership_count }}</div></div>
+                <div class="dash-row"><div><strong>Membership fees due</strong><small>Active members who still have an unpaid fee balance</small></div><div class="value">{{ unpaid_membership_count }}</div></div>
                 <div class="dash-row"><div><strong>Overdue tasks</strong><small>Visible tasks past their due date</small></div><div class="value">{{ overdue_task_count }}</div></div>
                 <div class="dash-row"><div><strong>Low stock items</strong><small>Inventory at or below reorder level</small></div><div class="value">{{ low_stock_count }}</div></div>
                 <div class="dash-row"><div><strong>Equipment service due</strong><small>Visible equipment due for service</small></div><div class="value">{{ service_due_count }}</div></div>

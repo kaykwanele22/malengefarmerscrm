@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}Member History | Malenge Farmers CRM{% endblock %}
+
+{% block extra_css %}
+<style>
+    .history-page{display:flex;flex-direction:column;gap:20px}.history-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap}.history-head h1{margin:0;color:#173b2b;font-size:29px}.history-head p{margin:7px 0 0;color:#6b7280;font-size:13px}.back-btn{display:inline-flex;min-height:40px;padding:0 14px;align-items:center;border:1px solid #dce7df;border-radius:9px;color:#315441;background:#fff;text-decoration:none;font-size:12px;font-weight:700}
+    .member-card{padding:20px;background:#fff;border:1px solid #e1e9e3;border-radius:14px;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:16px}.datum span{display:block;color:#87958d;font-size:10px;text-transform:uppercase;font-weight:800;letter-spacing:.35px}.datum strong{display:block;margin-top:6px;color:#234532;font-size:13px}.status{display:inline-flex!important;width:max-content;padding:5px 9px;border-radius:999px;background:#e9f7ee;color:#237044}.section{background:#fff;border:1px solid #e1e9e3;border-radius:14px;overflow:hidden}.section-head{padding:17px 19px;border-bottom:1px solid #edf2ee}.section-head h2{margin:0;color:#234532;font-size:18px}.section-head p{margin:5px 0 0;color:#7a8981;font-size:11px}.timeline{padding:0 19px}.event{padding:17px 0;border-bottom:1px solid #edf2ee;display:grid;grid-template-columns:145px 180px 1fr;gap:16px}.event:last-child{border-bottom:0}.date{color:#7c8982;font-size:11px;line-height:1.5}.event-type{font-size:11px;font-weight:850;color:#315441}.desc{color:#53665b;font-size:12px;line-height:1.55}.meta{display:block;margin-top:5px;color:#8a958f;font-size:10px}.empty{padding:36px 20px;text-align:center;color:#7c8982}.table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;min-width:780px}th{padding:12px 14px;background:#f6f9f7;color:#718078;font-size:10px;text-align:left;text-transform:uppercase}td{padding:14px;border-top:1px solid #edf2ee;color:#35483c;font-size:11px}.amount{font-weight:800;color:#1d422d}
+    @media(max-width:900px){.member-card{grid-template-columns:repeat(2,minmax(0,1fr))}.event{grid-template-columns:1fr}.date{font-weight:700}}@media(max-width:600px){.member-card{grid-template-columns:1fr}}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="history-page">
+    <div class="history-head">
+        <div><h1>Membership History</h1><p>Permanent lifecycle and membership-fee history for {{ membership.farmer.fullname }}.</p></div>
+        <a href="{{ url_for('memberships_list') }}" class="back-btn">← Back to Members</a>
+    </div>
+
+    <section class="member-card">
+        <div class="datum"><span>Member Number</span><strong>{{ membership.member_number }}</strong></div>
+        <div class="datum"><span>Member</span><strong>{{ membership.farmer.fullname }}</strong></div>
+        <div class="datum"><span>Primary Cooperative</span><strong>{{ membership.cooperative.name }}</strong></div>
+        <div class="datum"><span>Status</span><strong class="status">{{ membership.status }}</strong></div>
+        <div class="datum"><span>Fee Expected</span><strong>R {{ "{:,.2f}".format(membership.fee_amount|float) }}</strong></div>
+        <div class="datum"><span>Confirmed</span><strong>R {{ "{:,.2f}".format(membership.fee_paid|float) }}</strong></div>
+        <div class="datum"><span>Pending</span><strong>R {{ "{:,.2f}".format(membership.fee_pending) }}</strong></div>
+        <div class="datum"><span>Still to Pay</span><strong>R {{ "{:,.2f}".format(membership.fee_outstanding) }}</strong></div>
+    </section>
+
+    <section class="section">
+        <div class="section-head"><h2>Lifecycle Events</h2><p>Registration, administrative changes, status changes and membership-fee events.</p></div>
+        {% if history %}
+        <div class="timeline">
+            {% for entry in history %}
+            <div class="event">
+                <div class="date">{{ format_sast(entry.created_at, '%d %b %Y') }}<br>{{ format_sast(entry.created_at, '%H:%M:%S') }} SAST</div>
+                <div class="event-type">{{ entry.event_type|replace('_',' ') }}{% if entry.from_status or entry.to_status %}<span class="meta">{{ entry.from_status or '—' }} → {{ entry.to_status or '—' }}</span>{% endif %}</div>
+                <div class="desc">{{ entry.description or 'No additional description.' }}<span class="meta">Recorded by {{ entry.user.fullname if entry.user else 'System / migration' }}</span></div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}<div class="empty">No lifecycle history has been recorded yet.</div>{% endif %}
+    </section>
+
+    <section class="section">
+        <div class="section-head"><h2>Membership Fee Transactions</h2><p>Treasurer entries linked specifically to this membership.</p></div>
+        {% if fee_contributions %}
+        <div class="table-wrap"><table><thead><tr><th>Date</th><th>Amount</th><th>Method</th><th>Reference</th><th>Status</th></tr></thead><tbody>
+        {% for contribution in fee_contributions %}<tr><td>{{ contribution.contribution_date.strftime('%d %b %Y') if contribution.contribution_date else '—' }}</td><td class="amount">R {{ "{:,.2f}".format(contribution.amount|float) }}</td><td>{{ contribution.method or '—' }}</td><td>{{ contribution.reference or '—' }}</td><td>{{ contribution.status }}</td></tr>{% endfor %}
+        </tbody></table></div>
+        {% else %}<div class="empty">No membership-fee transactions are linked to this member yet.</div>{% endif %}
+    </section>
+</div>
+{% endblock %}

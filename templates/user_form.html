@@ -38,6 +38,7 @@
     </div>
 
     <form method="POST" class="admin-form-card">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="form-grid">
             <div class="form-field">
                 <label for="fullname">Full Name *</label>

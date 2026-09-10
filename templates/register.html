@@ -28,6 +28,7 @@
 
             <!-- FORM -->
             <form action="{{ url_for('register') }}" method="POST" class="login-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <!-- FULL NAME -->
                 <div class="form-group">
                     <label for="fullname">Full Name</label>

@@ -88,10 +88,12 @@
                         <div class="actions">
                             {% if can_approve_finance and current_access and expense.cooperative_id == current_access.cooperative_id and expense.status == 'Pending Confirmation' %}
                             <form method="POST" action="{{ url_for('decide_expense', expense_id=expense.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <input type="hidden" name="decision" value="approve">
                                 <button type="submit" class="approve">Approve</button>
                             </form>
                             <form method="POST" action="{{ url_for('decide_expense', expense_id=expense.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <input type="hidden" name="decision" value="reject">
                                 <button type="submit" class="reject">Reject</button>
                             </form>
@@ -100,6 +102,7 @@
                             {% if can_record_finance and current_access and expense.cooperative_id == current_access.cooperative_id and expense.status in ['Pending Confirmation','Rejected'] %}
                             <a href="{{ url_for('edit_expense', expense_id=expense.id) }}" class="edit-action">Edit</a>
                             <form method="POST" action="{{ url_for('delete_expense', expense_id=expense.id) }}" onsubmit="return confirm('Delete this unconfirmed expense record?');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <button type="submit" class="delete-btn">Delete</button>
                             </form>
                             {% endif %}

@@ -25,6 +25,7 @@
 
 <div class="farm-form-card">
     <form method="POST" id="farm-form" novalidate>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <!-- Form Introduction -->
         <div class="form-section">
             <h3>Farm Information</h3>

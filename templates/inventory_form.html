@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}{% if item %}Edit Inventory Item{% else %}Add Inventory Item{% endif %} | Malenge Farmers CRM{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{{ url_for('static', filename='css/extended_modules.css') }}">{% endblock %}
+{% block content %}
+<div class="ext-page"><div class="ext-head"><div><span class="ext-eyebrow">Operations</span><h1>{% if item %}Edit Inventory Item{% else %}Add Inventory Item{% endif %}</h1><p>Maintain stock-control details for your cooperative.</p></div><a class="ext-btn" href="{{ url_for('inventory_list') }}">← Inventory</a></div>
+<section class="ext-card"><form method="POST" class="ext-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="ext-grid">
+<div class="ext-field"><label>Name *</label><input name="name" maxlength="150" required value="{{ item.name if item else '' }}"></div><div class="ext-field"><label>Category</label><input name="category" maxlength="100" value="{{ item.category if item else '' }}"></div>
+<div class="ext-field"><label>Unit</label><input name="unit" maxlength="30" value="{{ item.unit if item else 'units' }}"></div>{% if not item %}<div class="ext-field"><label>Opening Quantity</label><input name="quantity_on_hand" type="number" min="0" step="0.01" value="0"></div>{% endif %}
+<div class="ext-field"><label>Reorder Level</label><input name="reorder_level" type="number" min="0" step="0.01" value="{{ item.reorder_level if item else 0 }}"></div><div class="ext-field"><label>Unit Cost (R)</label><input name="unit_cost" type="number" min="0" step="0.01" value="{{ item.unit_cost if item else 0 }}"></div>
+<div class="ext-field"><label>Supplier</label><select name="supplier_id"><option value="">No supplier</option>{% for supplier in suppliers %}<option value="{{ supplier.id }}" {% if item and item.supplier_id==supplier.id %}selected{% endif %}>{{ supplier.name }}</option>{% endfor %}</select></div><div class="ext-field"><label>Storage Location</label><input name="storage_location" maxlength="200" value="{{ item.storage_location if item else '' }}"></div>
+<div class="ext-field"><label>Status</label><select name="status"><option value="Active" {% if not item or item.status=='Active' %}selected{% endif %}>Active</option><option value="Inactive" {% if item and item.status=='Inactive' %}selected{% endif %}>Inactive</option></select></div><div class="ext-field full"><label>Notes</label><textarea name="notes">{{ item.notes if item else '' }}</textarea></div>
+<div class="ext-form-actions"><a class="ext-btn" href="{{ url_for('inventory_list') }}">Cancel</a><button class="ext-btn primary" type="submit">Save Item</button></div></div></form></section></div>
+{% endblock %}

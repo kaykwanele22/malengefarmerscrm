@@ -3,13 +3,16 @@ __pycache__/
 *.py[cod]
 *.pyo
 *.pyd
+.pytest_cache/
+.coverage
+htmlcov/
 
-# Virtual environment
+# Virtual environments
 .venv/
 venv/
 env/
 
-# Flask / local database
+# Flask / local database / runtime state
 instance/
 *.db
 *.sqlite
@@ -28,9 +31,12 @@ instance/
 .DS_Store
 Thumbs.db
 
-# Temporary / backup files
-*_backup*
+# Local source-code backups and generated backup folders
+app_backup_*.py
 app_before_*.py
+*_before_table_fix.py
+*_before_cooperative_fix.py
+templates_backup_*/
 
 # Local test seed/setup scripts
 seed_cooperative_test_data.py

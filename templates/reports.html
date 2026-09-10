@@ -7,7 +7,7 @@
 <div class="page-header">
     <div>
         <h1>Reports</h1>
-        <p>Overview of farming activity, sales and payments.</p>
+        <p>Overview of membership, farming activity, sales and payments.</p>
     </div>
 </div>
 
@@ -56,6 +56,24 @@
         </div>
     </div>
 </div>
+
+<!-- MEMBERSHIP SUMMARY -->
+<section class="dashboard-section">
+    <div class="section-header">
+        <div>
+            <h2>Membership Summary</h2>
+            <p>Primary cooperative membership with confirmed, pending and outstanding fee position.</p>
+        </div>
+        <a href="{{ url_for('memberships_list') }}" class="view-all-link">View Members</a>
+    </div>
+    <div class="stats-grid">
+        <div class="stat-card"><div class="stat-icon">👥</div><div class="stat-info"><p>Members</p><h2>{{ membership_count|default(0) }}</h2></div></div>
+        <div class="stat-card"><div class="stat-icon">✅</div><div class="stat-info"><p>Active Members</p><h2>{{ active_membership_count|default(0) }}</h2></div></div>
+        <div class="stat-card"><div class="stat-icon">💳</div><div class="stat-info"><p>Fees Confirmed</p><h2>R {{ "{:,.2f}".format(membership_fees_paid|default(0)) }}</h2></div></div>
+        <div class="stat-card"><div class="stat-icon">🕒</div><div class="stat-info"><p>Fees Pending</p><h2>R {{ "{:,.2f}".format(membership_fees_pending|default(0)) }}</h2></div></div>
+        <div class="stat-card"><div class="stat-icon">⏳</div><div class="stat-info"><p>Still To Pay</p><h2>R {{ "{:,.2f}".format(membership_fees_outstanding|default(0)) }}</h2></div></div>
+    </div>
+</section>
 
 <!-- FINANCIAL SUMMARY -->
 <section class="dashboard-section">

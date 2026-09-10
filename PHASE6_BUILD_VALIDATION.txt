@@ -1,0 +1,34 @@
+MALENGE FARMERS CRM - PHASE 6 BUILD VALIDATION
+10 September 2026
+
+PASSED IN BUILD ENVIRONMENT
+---------------------------
+- Python syntax/compile check across project.
+- All Jinja HTML templates parsed successfully.
+- 119 template url_for() endpoint references resolved to defined Flask route functions.
+- No duplicate route paths were introduced.
+- No merge-conflict markers found in modified core files.
+- Complete Alembic migration chain was executed programmatically against a temporary SQLite database:
+  baseline -> security -> 2FA -> executives -> Phase 5 membership -> legacy fee reconciliation -> Phase 6 accountability.
+- Confirmed Phase 6 tables exist after migration:
+  meeting, meeting_document, resolution, task_update, task_evidence.
+- Confirmed Phase 6 task columns exist after migration.
+- Confirmed a basic cooperative -> meeting -> resolution SQL insert path after migration.
+
+REGRESSION SUITE INCLUDED
+-------------------------
+A new phase6_accountability_tests.py suite was added and run_regression_tests.py now includes it.
+It covers meeting evidence upload/locking, resolution certification, automatic task creation,
+progress, evidence, self-verification blocking, independent closure, role restrictions and
+fake-file signature rejection.
+
+ENVIRONMENT LIMITATION
+----------------------
+The artifact build container did not have Flask / Flask-SQLAlchemy / Flask-Migrate installed,
+and outbound package installation was unavailable. Therefore the Flask HTTP regression suites
+could not be executed in this build container. Run the included suites in your project .venv
+after `pip install -r requirements.txt`:
+
+    python run_regression_tests.py
+
+No new third-party dependency was added by Phase 6.

@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Add Farmer Interaction | Malenge Farmers CRM{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{{ url_for('static', filename='css/extended_modules.css') }}">{% endblock %}
+{% block content %}
+<div class="ext-page"><div class="ext-head"><div><span class="ext-eyebrow">Farmer Records</span><h1>Add Farmer Interaction</h1><p>Record a contact, visit, call or follow-up for a farmer in your cooperative.</p></div><a class="ext-btn" href="{{ url_for('interactions_list') }}">← Interactions</a></div>
+<section class="ext-card"><form method="POST" class="ext-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="ext-grid">
+<div class="ext-field"><label>Farmer *</label><select name="farmer_id" required><option value="">Select farmer...</option>{% for farmer in farmers %}<option value="{{ farmer.id }}">{{ farmer.fullname }}</option>{% endfor %}</select></div><div class="ext-field"><label>Interaction Date *</label><input name="interaction_date" type="date" required></div>
+<div class="ext-field"><label>Interaction Type *</label><select name="interaction_type" required><option value="">Select...</option>{% for value in ['Visit','Phone Call','Meeting','Email','Message','Follow-up','Other'] %}<option value="{{ value }}">{{ value }}</option>{% endfor %}</select></div><div class="ext-field"><label>Follow-up Date</label><input name="follow_up_date" type="date"></div>
+<div class="ext-field full"><label>Subject</label><input name="subject" maxlength="180"></div><div class="ext-field full"><label>Notes</label><textarea name="notes"></textarea></div>
+<div class="ext-form-actions"><a class="ext-btn" href="{{ url_for('interactions_list') }}">Cancel</a><button class="ext-btn primary" type="submit">Save Interaction</button></div></div></form></section></div>
+{% endblock %}

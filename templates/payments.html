@@ -51,6 +51,7 @@
                 <td class="actions-cell">
                     <a href="{{ url_for('edit_payment', payment_id=payment.id) }}" class="edit-button">Edit</a>
                     <form method="POST" action="{{ url_for('delete_payment', payment_id=payment.id) }}" class="delete-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <button type="submit" class="delete-button" onclick="return confirm('Delete this payment?');">Delete</button>
                     </form>
                 </td>

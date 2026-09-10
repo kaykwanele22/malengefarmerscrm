@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Backup & Restore | Malenge Farmers CRM{% endblock %}
+{% block extra_css %}
+<style>
+.admin-page{display:flex;flex-direction:column;gap:22px}
+.admin-page-header{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;flex-wrap:wrap}
+.admin-page-header h1{margin:4px 0 8px;color:#123f29;font-size:32px;line-height:1.15}
+.admin-page-header p{margin:0;color:#68766d;font-size:14px;line-height:1.55}
+.admin-eyebrow{color:#26834f;font-size:11px;font-weight:800;letter-spacing:1.4px}
+.admin-card{background:#fff;border:1px solid #e1e9e3;border-radius:16px;box-shadow:0 8px 24px rgba(18,63,41,.04)}
+.admin-card-pad{padding:22px}
+.admin-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+.admin-stat{padding:20px;background:#fff;border:1px solid #e1e9e3;border-radius:14px}
+.admin-stat span{display:block;margin-bottom:7px;color:#738077;font-size:11px}
+.admin-stat strong{color:#123f29;font-size:25px}
+.admin-section-title{margin:0 0 15px;color:#173e29;font-size:20px}
+.admin-note{padding:14px 16px;background:#f4f9f5;border:1px solid #d9e7dd;border-radius:11px;color:#4a6154;font-size:12px;line-height:1.6}
+.admin-warning{padding:14px 16px;background:#fff8ea;border:1px solid #ead8ad;border-radius:11px;color:#725b21;font-size:12px;line-height:1.6}
+.admin-danger{padding:14px 16px;background:#fff3f3;border:1px solid #efcaca;border-radius:11px;color:#8c3434;font-size:12px;line-height:1.6}
+.admin-table-wrap{overflow-x:auto}
+.admin-table{width:100%;border-collapse:collapse;min-width:820px}
+.admin-table th{padding:12px 14px;background:#f6f9f7;border-bottom:1px solid #e4ebe6;color:#748179;font-size:10px;text-align:left;text-transform:uppercase;letter-spacing:.5px}
+.admin-table td{padding:14px;border-bottom:1px solid #edf2ee;color:#35483c;font-size:12px;vertical-align:top}
+.admin-table tr:last-child td{border-bottom:0}
+.status-pill{display:inline-flex;align-items:center;min-height:26px;padding:0 9px;border-radius:999px;background:#eaf6ee;color:#247347;font-size:10px;font-weight:800}
+.status-pill.warning{background:#fff1cc;color:#8c631c}
+.status-pill.problem{background:#fde2e2;color:#a03434}
+.admin-button,.admin-button-secondary,.admin-button-danger{min-height:42px;padding:0 15px;display:inline-flex;align-items:center;justify-content:center;border-radius:9px;text-decoration:none;font-size:12px;font-weight:800;cursor:pointer}
+.admin-button{border:0;background:#23794a;color:#fff}
+.admin-button-secondary{border:1px solid #d7e3db;background:#f6f9f7;color:#315441}
+.admin-button-danger{border:1px solid #efcaca;background:#fff5f5;color:#9b3434}
+.admin-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.admin-action-card{padding:20px;background:#fff;border:1px solid #e1e9e3;border-radius:14px;text-decoration:none;color:#173b2b;box-shadow:0 8px 24px rgba(18,63,41,.04)}
+.admin-action-card span{font-size:24px}
+.admin-action-card strong{display:block;margin:12px 0 5px;font-size:14px}
+.admin-action-card small{color:#748179;font-size:11px;line-height:1.5}
+.admin-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+.admin-field{display:flex;flex-direction:column;gap:7px}
+.admin-field.full{grid-column:1/-1}
+.admin-field label{color:#42564a;font-size:11px;font-weight:800}
+.admin-field input,.admin-field select,.admin-field textarea{width:100%;padding:11px 12px;border:1px solid #cad6ce;border-radius:9px;background:#fff;color:#27382e;font:inherit;font-size:13px;box-sizing:border-box}
+.admin-field textarea{min-height:110px;resize:vertical}
+.admin-form-actions{grid-column:1/-1;padding-top:18px;display:flex;justify-content:flex-end;gap:10px;border-top:1px solid #edf2ee}
+@media(max-width:1050px){.admin-stats{grid-template-columns:repeat(2,1fr)}.admin-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:700px){.admin-stats,.admin-grid,.admin-form-grid{grid-template-columns:1fr}}
+</style>
+{% endblock %}
+{% block content %}
+<div class="admin-page">
+    <div class="admin-page-header">
+        <div>
+            <span class="admin-eyebrow">SYSTEM ADMINISTRATION</span>
+            <h1>Backup &amp; Restore</h1>
+            <p>Create, download and restore verified CRM database backups.</p>
+        </div>
+        {% if database_backend == 'sqlite' %}
+        <form method="POST" action="{{ url_for('admin_backup_create') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="admin-button">💾 Create Backup</button>
+        </form>
+        {% endif %}
+    </div>
+
+    {% if database_backend != 'sqlite' %}
+    <div class="admin-warning">
+        Built-in file backup and restore currently supports SQLite only. When the CRM moves to PostgreSQL,
+        production backups should use the database provider's backup/snapshot system.
+    </div>
+    {% else %}
+    <div class="admin-warning">
+        Restore replaces the current local database. The CRM automatically creates a safety backup first,
+        then signs you out. Only restore a backup you trust.
+    </div>
+    {% endif %}
+
+    <div class="admin-warning">
+        <strong>Phase 6 evidence backup:</strong> the database backup below does not include uploaded meeting/task evidence files.
+        A complete accountability backup must also preserve the configured <code>ACCOUNTABILITY_UPLOAD_DIR</code> folder.
+    </div>
+
+    <section class="admin-card">
+        <div class="admin-card-pad">
+            <h2 class="admin-section-title">Saved Backups</h2>
+        </div>
+        <div class="admin-table-wrap">
+            <table class="admin-table">
+                <thead><tr><th>Backup</th><th>Created</th><th>Size</th><th>Actions</th></tr></thead>
+                <tbody>
+                {% for backup in backups %}
+                <tr>
+                    <td><strong>{{ backup.name }}</strong></td>
+                    <td>{{ backup.created_at.strftime('%d %b %Y %H:%M:%S') }}</td>
+                    <td>{{ backup.size_mb }} MB</td>
+                    <td>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap">
+                            <a href="{{ url_for('admin_backup_download', backup_name=backup.name) }}" class="admin-button-secondary">Download</a>
+
+                            <form method="POST" action="{{ url_for('admin_backup_restore_file', backup_name=backup.name) }}" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input name="confirmation" placeholder="Type RESTORE" style="height:42px;padding:0 10px;border:1px solid #d8dfda;border-radius:8px;width:120px">
+                                <button type="submit" class="admin-button-danger" onclick="return confirm('Restore this backup and replace the current database?');">Restore</button>
+                            </form>
+
+                            <form method="POST" action="{{ url_for('admin_backup_delete', backup_name=backup.name) }}" onsubmit="return confirm('Delete this stored backup file?');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="admin-button-danger">Delete</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4">No saved backups yet. Create your first backup above.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+</div>
+{% endblock %}

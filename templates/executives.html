@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+
+{% block title %}Executives | Malenge Farmers CRM{% endblock %}
+
+{% block extra_css %}
+<style>
+.executives-page{max-width:1280px;margin:0 auto;padding-bottom:50px}
+.executives-hero{display:flex;justify-content:space-between;gap:24px;align-items:flex-start;margin-bottom:24px}
+.executives-eyebrow{display:block;margin-bottom:6px;color:#26834f;font-size:11px;font-weight:800;letter-spacing:1.4px}
+.executives-hero h1{margin:0 0 8px;color:#123f29;font-size:34px}
+.executives-hero p{margin:0;max-width:760px;color:#68766d;font-size:14px;line-height:1.6}
+.executives-actions{display:flex;gap:10px;flex-wrap:wrap}
+.exec-button{min-height:43px;padding:0 16px;display:inline-flex;align-items:center;justify-content:center;border-radius:9px;text-decoration:none;font-size:12px;font-weight:800;white-space:nowrap}
+.exec-button.primary{background:#23794a;color:#fff;border:1px solid #23794a}
+.exec-button.secondary{background:#fff;color:#315441;border:1px solid #d7e3db}
+.exec-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-bottom:24px}
+.exec-stat{padding:20px;background:#fff;border:1px solid #e1e9e3;border-radius:15px;box-shadow:0 6px 20px rgba(18,63,41,.035)}
+.exec-stat span{display:block;margin-bottom:8px;color:#6d7c72;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.7px}
+.exec-stat strong{color:#153e2b;font-size:28px}
+.coop-exec-card{margin-bottom:22px;background:#fff;border:1px solid #dde7df;border-radius:18px;overflow:hidden;box-shadow:0 8px 26px rgba(18,63,41,.04)}
+.coop-exec-head{display:flex;justify-content:space-between;gap:16px;align-items:center;padding:20px 22px;background:#f7faf8;border-bottom:1px solid #e6eee8}
+.coop-exec-head h2{margin:0 0 4px;color:#173f2d;font-size:21px}
+.coop-meta{margin:0;color:#748178;font-size:12px}
+.type-pill,.status-pill{display:inline-flex;padding:6px 10px;border-radius:999px;font-size:10px;font-weight:800}
+.type-pill{background:#e6f3ea;color:#257149}.status-pill.active{background:#e7f5eb;color:#23784a}.status-pill.inactive{background:#f2eeee;color:#8c4b4b}
+.exec-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:0}
+.exec-slot{min-height:230px;padding:20px;border-right:1px solid #edf1ee;display:flex;flex-direction:column}
+.exec-slot:last-child{border-right:0}
+.exec-position{margin-bottom:14px;color:#52675b;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.7px}
+.exec-holder{display:flex;gap:11px;align-items:center;margin-bottom:12px}
+.exec-avatar{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#e8f3ec;color:#1d6a43;font-weight:900;font-size:13px;flex:0 0 auto}
+.exec-name{margin:0;color:#173e2c;font-size:14px;font-weight:800;line-height:1.3}
+.exec-email{margin:3px 0 0;color:#849087;font-size:10px;overflow-wrap:anywhere}
+.exec-date{margin:0 0 14px;color:#718078;font-size:11px;line-height:1.5}
+.exec-slot-actions{margin-top:auto;display:flex;gap:7px;flex-wrap:wrap}
+.exec-mini{min-height:34px;padding:0 10px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;border:1px solid #d7e3db;background:#fff;color:#315441;font:inherit;font-size:10px;font-weight:800;text-decoration:none;cursor:pointer}
+.exec-mini.replace{border-color:#b9dcc6;color:#176f41;background:#f4fbf6}
+.exec-mini.danger{border-color:#edcccc;color:#9a3939;background:#fff8f8}
+.vacant-box{flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:20px 5px;color:#87938b}
+.vacant-icon{width:46px;height:46px;border:1px dashed #bfcfc4;border-radius:50%;display:flex;align-items:center;justify-content:center;margin-bottom:10px;font-size:20px;background:#fafcfb}
+.vacant-box strong{display:block;margin-bottom:5px;color:#52665a;font-size:13px}.vacant-box span{font-size:10px;line-height:1.5}
+.coop-exec-foot{padding:11px 22px;border-top:1px solid #edf1ee;color:#7d8a82;font-size:10px;background:#fcfdfc}
+.empty-coops{padding:50px 24px;text-align:center;background:#fff;border:1px solid #e1e9e3;border-radius:16px;color:#718078}
+@media(max-width:1150px){.exec-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.exec-slot{border-bottom:1px solid #edf1ee}.exec-slot:nth-child(2n){border-right:0}}
+@media(max-width:760px){.executives-hero{flex-direction:column}.exec-stats{grid-template-columns:1fr}.exec-grid{grid-template-columns:1fr}.exec-slot{border-right:0}.coop-exec-head{align-items:flex-start;flex-direction:column}}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="executives-page">
+    <header class="executives-hero">
+        <div>
+            <span class="executives-eyebrow">PHASE 4 · GOVERNANCE & ACCESS</span>
+            <h1>Executive Management</h1>
+            <p>Manage the five executive positions for each registered cooperative. Active office holders control CRM permissions; former holders remain in Executive History for governance and audit purposes.</p>
+        </div>
+        <div class="executives-actions">
+            <a class="exec-button secondary" href="{{ url_for('executive_history') }}">Executive History</a>
+            <a class="exec-button primary" href="{{ url_for('assign_executive') }}">＋ Assign Executive</a>
+        </div>
+    </header>
+
+    <section class="exec-stats">
+        <article class="exec-stat"><span>Total Executive Positions</span><strong>{{ total_positions }}</strong></article>
+        <article class="exec-stat"><span>Filled Positions</span><strong>{{ filled_positions }}</strong></article>
+        <article class="exec-stat"><span>Vacant Positions</span><strong>{{ vacant_positions }}</strong></article>
+    </section>
+
+    {% if cooperative_rows %}
+        {% for row in cooperative_rows %}
+        {% set cooperative = row.cooperative %}
+        <section class="coop-exec-card">
+            <div class="coop-exec-head">
+                <div>
+                    <h2>{{ cooperative.name }}</h2>
+                    <p class="coop-meta">
+                        <span class="type-pill">{{ cooperative.cooperative_type }}</span>
+                        {% if cooperative.registration_number %} · CIPC {{ cooperative.registration_number }}{% endif %}
+                        {% if cooperative.location %} · {{ cooperative.location }}{% endif %}
+                    </p>
+                </div>
+                <span class="status-pill {{ cooperative.status|lower }}">{{ cooperative.status }}</span>
+            </div>
+
+            <div class="exec-grid">
+                {% for slot in row.slots %}
+                <article class="exec-slot">
+                    <div class="exec-position">{{ slot.position }}</div>
+                    {% if slot.appointment %}
+                        {% set appointment = slot.appointment %}
+                        {% set executive = appointment.user %}
+                        <div class="exec-holder">
+                            <div class="exec-avatar">
+                                {% set parts = executive.fullname.split() %}
+                                {% if parts|length > 1 %}{{ parts[0][0]|upper }}{{ parts[-1][0]|upper }}{% else %}{{ executive.fullname[:2]|upper }}{% endif %}
+                            </div>
+                            <div>
+                                <p class="exec-name">{{ executive.fullname }}</p>
+                                <p class="exec-email">{{ executive.email }}</p>
+                            </div>
+                        </div>
+                        <p class="exec-date">Serving since <strong>{{ appointment.start_date.strftime('%d %b %Y') }}</strong><br>Google 2FA: {{ 'Globally paused' if not two_factor_policy_enabled() else ('Enabled' if executive.two_factor_enabled else 'Enrollment required') }}</p>
+                        <div class="exec-slot-actions">
+                            <a class="exec-mini replace" href="{{ url_for('replace_executive', appointment_id=appointment.id) }}">Replace</a>
+                            <form method="POST" action="{{ url_for('deactivate_executive', appointment_id=appointment.id) }}" onsubmit="return confirm('Deactivate {{ executive.fullname|e }} as {{ slot.position|e }}? The historical appointment will be retained.')">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="end_date" value="{{ today if today is defined else '' }}">
+                                <button class="exec-mini danger" type="submit">Deactivate</button>
+                            </form>
+                        </div>
+                    {% else %}
+                        <div class="vacant-box">
+                            <div class="vacant-icon">＋</div>
+                            <strong>Vacant</strong>
+                            <span>No active office holder is assigned.</span>
+                        </div>
+                        {% if cooperative.status == 'Active' %}
+                        <a class="exec-mini replace" href="{{ url_for('assign_executive', cooperative_id=cooperative.id, role=slot.role) }}">Assign {{ slot.position }}</a>
+                        {% endif %}
+                    {% endif %}
+                </article>
+                {% endfor %}
+            </div>
+            <div class="coop-exec-foot">Exactly five executive positions are maintained per cooperative: Chairperson, Vice Chairperson, Secretary, Vice Secretary and Treasurer.</div>
+        </section>
+        {% endfor %}
+    {% else %}
+        <div class="empty-coops"><strong>No cooperatives found.</strong><br>Create the cooperative structure before assigning executives.</div>
+    {% endif %}
+</div>
+{% endblock %}

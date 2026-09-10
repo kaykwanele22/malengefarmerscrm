@@ -4,124 +4,169 @@
 
 {% block extra_css %}
 <style>
-    .module-page{display:flex;flex-direction:column;gap:20px}
-    .page-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap}
-    .page-head h1{margin:0;color:#173b2b;font-size:30px}
-    .page-head p{margin:7px 0 0;color:#6b7280;font-size:13px}
-    .primary-action,.secondary-action,.edit-action{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:0 15px;border-radius:9px;text-decoration:none;font-size:12px;font-weight:700}
-    .primary-action{background:#2e7d4f;color:#fff}
-    .secondary-action,.edit-action{background:#f3f7f4;border:1px solid #dbe6df;color:#315441}
-    .search-card,.table-card,.info-card{background:#fff;border:1px solid #e2eae4;border-radius:14px}
-    .info-card{padding:14px 16px;background:#f7faf8;color:#53665b;font-size:12px;line-height:1.55}
-    .search-card{padding:15px}
-    .search-form{display:flex;gap:10px}
-    .search-form input{flex:1;min-width:0;height:42px;padding:0 13px;border:1px solid #d6e1d9;border-radius:9px;font:inherit}
-    .search-form button{padding:0 17px;border:0;border-radius:9px;background:#2e7d4f;color:#fff;font-weight:700;cursor:pointer}
+    .member-page{display:flex;flex-direction:column;gap:20px}
+    .member-head{display:flex;justify-content:space-between;align-items:flex-start;gap:18px;flex-wrap:wrap}
+    .member-head h1{margin:0;color:#173b2b;font-size:30px}
+    .member-head p{margin:7px 0 0;color:#6b7280;font-size:13px;max-width:720px;line-height:1.55}
+    .head-actions{display:flex;gap:10px;flex-wrap:wrap}
+    .primary-action,.secondary-action,.small-action{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:0 15px;border-radius:9px;text-decoration:none;font-size:12px;font-weight:800;box-sizing:border-box}
+    .primary-action{background:#2e7d4f;color:#fff;border:1px solid #2e7d4f}
+    .secondary-action,.small-action{background:#fff;border:1px solid #dbe6df;color:#315441}
+    .small-action{min-height:34px;padding:0 10px;font-size:10px}
+    .info-card{padding:14px 16px;background:#f7faf8;border:1px solid #e0e9e3;border-radius:13px;color:#53665b;font-size:12px;line-height:1.6}
+    .stats-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:14px}
+    .stat-card{padding:18px;background:#fff;border:1px solid #e2eae4;border-radius:14px}
+    .stat-label{display:block;color:#738179;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.45px}
+    .stat-value{display:block;margin-top:8px;color:#173b2b;font-size:24px;font-weight:850}
+    .stat-note{display:block;margin-top:6px;color:#8a978f;font-size:10px;line-height:1.4}
+    .filter-card,.table-card{background:#fff;border:1px solid #e2eae4;border-radius:14px;overflow:hidden}
+    .filter-card{padding:16px}
+    .filter-form{display:grid;grid-template-columns:minmax(220px,2fr) 1fr 1fr 1fr auto;gap:10px;align-items:end}
+    .field{display:flex;flex-direction:column;gap:6px}
+    .field label{color:#5c6e63;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.35px}
+    .field input,.field select{width:100%;height:42px;padding:0 12px;border:1px solid #d6e1d9;border-radius:9px;background:#fff;color:#31483a;font:inherit;font-size:12px;box-sizing:border-box}
+    .filter-button{height:42px;padding:0 17px;border:0;border-radius:9px;background:#2e7d4f;color:#fff;font-weight:800;cursor:pointer}
+    .table-toolbar{padding:15px 17px;border-bottom:1px solid #e9efeb;display:flex;justify-content:space-between;gap:14px;align-items:center;flex-wrap:wrap}
+    .table-toolbar strong{color:#274638;font-size:13px}
+    .table-toolbar span{color:#7b8981;font-size:11px}
     .table-wrap{overflow-x:auto}
-    table{width:100%;border-collapse:collapse;min-width:920px}
-    th{padding:13px 15px;background:#f6f9f7;border-bottom:1px solid #e5ece7;color:#718078;font-size:10px;text-align:left;text-transform:uppercase}
-    td{padding:15px;border-bottom:1px solid #edf2ee;color:#35483c;font-size:12px;vertical-align:top}
+    table{width:100%;border-collapse:collapse;min-width:1120px}
+    th{padding:13px 14px;background:#f6f9f7;border-bottom:1px solid #e5ece7;color:#718078;font-size:10px;text-align:left;text-transform:uppercase;letter-spacing:.35px}
+    td{padding:15px 14px;border-bottom:1px solid #edf2ee;color:#35483c;font-size:12px;vertical-align:top}
     tr:last-child td{border-bottom:0}
-    .name{display:block;color:#1d422d;font-size:13px}
+    tr:hover td{background:#fbfdfb}
+    .member-number{color:#173b2b;font-weight:850;white-space:nowrap}
+    .name{display:block;color:#1d422d;font-size:13px;font-weight:800}
     .meta{display:block;margin-top:4px;color:#89938d;font-size:10px}
-    .badge{display:inline-flex;padding:5px 9px;border-radius:999px;background:#eef6f0;color:#2e7d4f;font-size:10px;font-weight:800}
-    .fee-good{color:#2e7d4f;font-weight:700}
-    .fee-due{color:#a45a23;font-weight:700}
-    .actions{display:flex;gap:7px;align-items:center}
-    .actions form{margin:0}
-    .delete-btn{min-height:40px;padding:0 12px;border:1px solid #efd3d3;border-radius:9px;background:#fff7f7;color:#a43b3b;font-size:11px;font-weight:700;cursor:pointer}
-    .empty{padding:42px 20px;text-align:center;color:#7d8981}
-    @media(max-width:700px){.search-form{flex-direction:column}.page-head{flex-direction:column}}
+    .status{display:inline-flex;padding:5px 9px;border-radius:999px;font-size:10px;font-weight:850;background:#eef2ef;color:#52645a}
+    .status.active{background:#e9f7ee;color:#237044}.status.pending{background:#fff6df;color:#946414}.status.suspended{background:#fff0e6;color:#a45521}.status.resigned,.status.inactive{background:#f0f2f1;color:#5c6962}.status.deceased{background:#f1eef5;color:#665777}
+    .fee-row{display:flex;justify-content:space-between;gap:12px;white-space:nowrap;margin-bottom:4px}.fee-row:last-child{margin-bottom:0}
+    .fee-label{color:#89938d}.fee-value{font-weight:800;color:#315441}.fee-due{color:#a45a23}.fee-paid{color:#237044}
+    .row-actions{display:flex;gap:7px;align-items:center;flex-wrap:wrap}.row-actions form{margin:0}
+    .edit-action,.history-action,.fee-action,.delete-btn{min-height:34px;padding:0 10px;border-radius:8px;font-size:10px;font-weight:800;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box}
+    .edit-action,.history-action{border:1px solid #dbe6df;background:#fff;color:#315441}.fee-action{border:1px solid #bcdcc7;background:#eef8f1;color:#237044}
+    .delete-btn{border:1px solid #efd3d3;background:#fff7f7;color:#a43b3b;cursor:pointer}
+    .empty{padding:50px 20px;text-align:center;color:#7d8981}.empty strong{display:block;color:#315441;font-size:15px;margin-bottom:6px}
+    @media(max-width:1150px){.stats-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.filter-form{grid-template-columns:1fr 1fr}}
+    @media(max-width:700px){.stats-grid,.filter-form{grid-template-columns:1fr}.member-head{flex-direction:column}.head-actions{width:100%}.head-actions a{flex:1}.filter-button{width:100%}}
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="module-page">
-    <div class="page-head">
+<div class="member-page">
+    <div class="member-head">
         <div>
-            <h1>Members</h1>
-            <p>Cooperative membership register and membership fee status.</p>
+            <h1>Membership Register</h1>
+            <p>Primary cooperative member records, lifecycle status and membership-fee position, including partial and pending payments.</p>
         </div>
-
-        {% if can_manage_memberships %}
-        <a href="{{ url_for('add_membership') }}" class="primary-action">+ Register Member</a>
-        {% endif %}
+        <div class="head-actions">
+            <a class="secondary-action" href="{{ url_for('export_memberships', search=search, status=status_filter, fee=fee_filter, cooperative_id=cooperative_filter or '') }}">Export CSV</a>
+            {% if can_manage_memberships %}
+            <a class="primary-action" href="{{ url_for('add_membership') }}">+ Register Member</a>
+            {% endif %}
+        </div>
     </div>
 
     <div class="info-card">
-        Membership administration belongs to the Secretary / Vice Secretary.
-        Confirmed membership-fee money is recorded by the Treasurer and confirmed by the Chairperson.
+        Individual members belong to a <strong>Primary cooperative</strong>. The Primary Secretary / Vice Secretary maintains the register. The Treasurer records membership-fee money and the Chairperson confirms it. Secondary executives have oversight visibility across the two Primary cooperatives but do not edit their member records.
     </div>
 
-    <section class="search-card">
-        <form method="GET" action="{{ url_for('memberships_list') }}" class="search-form">
-            <input type="search" name="search" value="{{ search or '' }}" placeholder="Search member number, name, type or status">
-            <button type="submit">Search</button>
-            {% if search %}
-            <a href="{{ url_for('memberships_list') }}" class="secondary-action">Clear</a>
-            {% endif %}
+    <section class="stats-grid">
+        <article class="stat-card"><span class="stat-label">Members</span><span class="stat-value">{{ total_members }}</span><span class="stat-note">Visible Primary memberships</span></article>
+        <article class="stat-card"><span class="stat-label">Active</span><span class="stat-value">{{ active_members }}</span><span class="stat-note">Currently active members</span></article>
+        <article class="stat-card"><span class="stat-label">Needs Attention</span><span class="stat-value">{{ attention_members }}</span><span class="stat-note">Pending or suspended</span></article>
+        <article class="stat-card"><span class="stat-label">Fees Confirmed</span><span class="stat-value">R {{ "{:,.2f}".format(total_paid) }}</span><span class="stat-note">Chairperson-confirmed fee money</span></article>
+        <article class="stat-card"><span class="stat-label">Fees Pending</span><span class="stat-value">R {{ "{:,.2f}".format(total_pending) }}</span><span class="stat-note">Recorded by Treasurer, awaiting confirmation</span></article>
+        <article class="stat-card"><span class="stat-label">Fees Outstanding</span><span class="stat-value">R {{ "{:,.2f}".format(total_outstanding) }}</span><span class="stat-note">Still to be paid after confirmed + pending receipts</span></article>
+    </section>
+
+    <section class="filter-card">
+        <form method="GET" action="{{ url_for('memberships_list') }}" class="filter-form">
+            <div class="field">
+                <label for="search">Search</label>
+                <input id="search" type="search" name="search" value="{{ search or '' }}" placeholder="Member no., name or phone">
+            </div>
+            <div class="field">
+                <label for="cooperative_id">Primary Cooperative</label>
+                <select id="cooperative_id" name="cooperative_id">
+                    <option value="">All visible</option>
+                    {% for cooperative in primary_cooperatives %}
+                    <option value="{{ cooperative.id }}" {% if cooperative_filter == cooperative.id %}selected{% endif %}>{{ cooperative.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="field">
+                <label for="status">Status</label>
+                <select id="status" name="status">
+                    <option value="">All statuses</option>
+                    {% for option in membership_statuses %}
+                    <option value="{{ option }}" {% if status_filter == option %}selected{% endif %}>{{ option }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="field">
+                <label for="fee">Fee Position</label>
+                <select id="fee" name="fee">
+                    <option value="">All</option>
+                    <option value="due" {% if fee_filter == 'due' %}selected{% endif %}>Still To Pay</option>
+                    <option value="pending" {% if fee_filter == 'pending' %}selected{% endif %}>Pending Confirmation</option>
+                    <option value="paid" {% if fee_filter == 'paid' %}selected{% endif %}>Paid (Confirmed)</option>
+                </select>
+            </div>
+            <button type="submit" class="filter-button">Apply</button>
         </form>
     </section>
 
     <section class="table-card">
+        <div class="table-toolbar">
+            <strong>{{ memberships|length }} record{% if memberships|length != 1 %}s{% endif %} shown</strong>
+            {% if search or status_filter or fee_filter or cooperative_filter %}<a href="{{ url_for('memberships_list') }}" class="small-action">Clear Filters</a>{% else %}<span>Member numbers are permanent after registration.</span>{% endif %}
+        </div>
         {% if memberships %}
         <div class="table-wrap">
             <table>
                 <thead>
-                <tr>
-                    <th>Member No.</th>
-                    <th>Member</th>
-                    <th>Cooperative</th>
-                    <th>Join Date</th>
-                    <th>Membership Fee</th>
-                    <th>Status</th>
-                    {% if can_manage_memberships %}<th>Actions</th>{% endif %}
-                </tr>
+                <tr><th>Member No.</th><th>Member</th><th>Primary Cooperative</th><th>Join Date</th><th>Fee Position</th><th>Status</th><th>Actions</th></tr>
                 </thead>
                 <tbody>
                 {% for membership in memberships %}
-                {% set expected = membership.fee_amount|default(0)|float %}
-                {% set paid = membership.fee_paid|default(0)|float %}
-                {% set owing = expected - paid if expected > paid else 0 %}
                 <tr>
-                    <td>
-                        <strong>{{ membership.member_number }}</strong>
-                        <span class="meta">{{ membership.membership_type or 'Primary' }}</span>
-                    </td>
-                    <td>
-                        <strong class="name">{{ membership.farmer.fullname }}</strong>
-                        <span class="meta">{{ membership.farmer.phone }}</span>
-                    </td>
-                    <td>{{ membership.cooperative.name if membership.cooperative else 'Unassigned' }}</td>
+                    <td><span class="member-number">{{ membership.member_number }}</span><span class="meta">Primary membership</span></td>
+                    <td><span class="name">{{ membership.farmer.fullname }}</span><span class="meta">{{ membership.farmer.phone }}</span></td>
+                    <td>{{ membership.cooperative.name }}</td>
                     <td>{{ membership.join_date.strftime('%d %b %Y') if membership.join_date else '—' }}</td>
                     <td>
-                        <span class="meta">Expected: R {{ "{:,.2f}".format(expected) }}</span>
-                        <span class="fee-good">Paid: R {{ "{:,.2f}".format(paid) }}</span>
-                        {% if owing > 0 %}
-                        <span class="meta fee-due">Owing: R {{ "{:,.2f}".format(owing) }}</span>
-                        {% else %}
-                        <span class="meta fee-good">Fully paid</span>
-                        {% endif %}
+                        <div class="fee-row"><span class="fee-label">Expected</span><span class="fee-value">R {{ "{:,.2f}".format(membership.fee_amount|float) }}</span></div>
+                        <div class="fee-row"><span class="fee-label">Confirmed</span><span class="fee-value fee-paid">R {{ "{:,.2f}".format(membership.fee_paid|float) }}</span></div>
+                        <div class="fee-row"><span class="fee-label">Pending</span><span class="fee-value {% if membership.fee_pending > 0 %}fee-due{% endif %}">R {{ "{:,.2f}".format(membership.fee_pending) }}</span></div>
+                        <div class="fee-row"><span class="fee-label">Outstanding</span><span class="fee-value {% if membership.fee_outstanding > 0 %}fee-due{% else %}fee-paid{% endif %}">R {{ "{:,.2f}".format(membership.fee_outstanding) }}</span></div>
+                        <span class="meta">{{ membership.fee_status }}</span>
                     </td>
-                    <td><span class="badge">{{ membership.status or 'Active' }}</span></td>
-
-                    {% if can_manage_memberships %}
+                    <td><span class="status {{ (membership.status or 'inactive')|lower }}">{{ membership.status }}</span></td>
                     <td>
-                        <div class="actions">
-                            <a href="{{ url_for('edit_membership', membership_id=membership.id) }}" class="edit-action">Edit</a>
-                            <form method="POST" action="{{ url_for('delete_membership', membership_id=membership.id) }}" onsubmit="return confirm('Delete this membership record?');">
+                        <div class="row-actions">
+                            <a class="history-action" href="{{ url_for('membership_history', membership_id=membership.id) }}">History</a>
+                            {% if can_manage_memberships and current_access and membership.cooperative_id == current_access.cooperative_id %}
+                            <a class="edit-action" href="{{ url_for('edit_membership', membership_id=membership.id) }}">Edit</a>
+                            {% endif %}
+                            {% if can_record_finance and current_access and membership.cooperative_id == current_access.cooperative_id and membership.fee_outstanding > 0 and membership.status not in ['Resigned','Deceased','Inactive'] %}
+                            <a class="fee-action" href="{{ url_for('add_contribution', membership_id=membership.id) }}">Record Fee</a>
+                            {% endif %}
+                            {% if can_manage_memberships and current_access and membership.cooperative_id == current_access.cooperative_id and membership.fee_paid|float <= 0 %}
+                            <form method="POST" action="{{ url_for('delete_membership', membership_id=membership.id) }}" onsubmit="return confirm('Delete this membership only if it was created by mistake?');">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <button type="submit" class="delete-btn">Delete</button>
                             </form>
+                            {% endif %}
                         </div>
                     </td>
-                    {% endif %}
                 </tr>
                 {% endfor %}
                 </tbody>
             </table>
         </div>
         {% else %}
-        <div class="empty">No membership records found.</div>
+        <div class="empty"><strong>No membership records found.</strong>Change the filters or register a member if your role allows it.</div>
         {% endif %}
     </section>
 </div>

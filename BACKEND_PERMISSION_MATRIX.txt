@@ -1,45 +1,70 @@
-Malenge Farmers CRM — Backend Permission Audit
+MALENGE FARMERS CRM - BACKEND PERMISSION MATRIX
+Phase 6 Accountability Core - 10 September 2026
 
 SYSTEM ADMIN
-- Users & Access: manage
-- Cooperative Structure: manage
-- Audit Logs: view
-- Security / Backup / Health / Exports / Role Permissions / System Settings: manage/view
-- Cooperative operational routes: blocked
+- System-wide technical administration only.
+- Users/access, executive appointments/history, cooperative structure, security,
+  audit logs, system health, exports/settings and recovery operations.
+- Does NOT perform cooperative Secretary, Treasurer or Chairperson governance duties.
+- Does not become a cooperative executive merely because Admin can inspect system audit logs.
+
+ALL COOPERATIVE EXECUTIVES
+- May view the Accountability Register and Meetings & Evidence for their OWN cooperative.
+- May view official evidence, resolutions, responsible offices, deadlines, progress and verification history.
+- May not mutate another cooperative's accountability records.
+
+SECONDARY / PRIMARY CHAIRPERSON
+- Confirms and locks official meeting evidence for own cooperative.
+- Certifies structured resolutions captured from confirmed meeting evidence.
+- Certification creates the accountability task for the named responsible executive.
+- May independently verify completed accountability work when not the responsible person.
+- Confirms/rejects Treasurer finance belonging to own cooperative only.
+- Cannot self-verify an accountability task assigned to the Chairperson.
+
+SECONDARY / PRIMARY VICE CHAIRPERSON
+- Leadership/operational oversight.
+- Carries out accountability tasks assigned to the Vice Chairperson office.
+- Only the responsible executive may report progress/upload proof for that assigned task.
+- May independently verify another executive's completed work when not self-verifying.
+- No finance confirmation unless a future delegation policy explicitly grants it.
+
+SECONDARY SECRETARY / VICE SECRETARY
+- Registers Secondary meeting indexes and uploads handwritten/signed evidence.
+- May edit meeting metadata only while the meeting is Draft.
+- Captures actionable resolutions from confirmed meeting evidence.
+- May edit resolutions only while they are Draft.
+- Secretary may independently verify another executive's completed accountability work.
+- Vice Secretary does not independently close accountability work in this Phase 6 core.
+- Existing network membership oversight rules remain unchanged.
 
 PRIMARY SECRETARY / VICE SECRETARY
-- Farmers: view + create/edit/delete within own cooperative
-- Memberships: view + create/edit/delete within own cooperative
-- Farms/Crops/Harvests: blocked
-- Sales/Payments/Contributions/Expenses: blocked
-- Reports: view own cooperative
+- Registers and maintains members/farmer-person records for assigned Primary only.
+- Registers meeting indexes and uploads handwritten/signed evidence.
+- May edit meeting metadata only while the meeting is Draft.
+- Captures actionable resolutions from confirmed meeting evidence.
+- May edit resolutions only while they are Draft.
+- Secretary may independently verify another executive's completed accountability work.
+- Vice Secretary assists but does not independently close accountability work in this Phase 6 core.
+- Cannot record actual membership-fee money.
 
-PRIMARY CHAIRPERSON / VICE CHAIRPERSON
-- Farmers/Members: view
-- Farms/Crops/Harvests: view + create/edit/delete within own cooperative
-- Sales/Payments: view
-- Contributions/Expenses: view
-- Chairperson only: approve/reject pending contributions and expenses
-- Vice Chairperson: oversight only, no approval
-- Reports: view own cooperative
+SECONDARY / PRIMARY TREASURER
+- Existing finance recording rules remain in force for the Treasurer's own cooperative.
+- Can view governance evidence and accountability records for own cooperative.
+- Carries out accountability tasks assigned to the Treasurer office and uploads proof.
+- Cannot verify their own accountability work.
+- Cannot confirm their own financial entries.
 
-PRIMARY TREASURER
-- Members: view
-- Sales/Payments: view + record/edit within own cooperative
-- Contributions/Expenses: view + record/edit within own cooperative
-- Cannot approve own financial entries
-- Farmers/Farms/Crops/Harvests direct routes: blocked
-- Reports: view own cooperative
-
-SECONDARY EXECUTIVES
-- Can see permitted oversight data across child Primary Cooperatives
-- Cannot mutate Primary Cooperative operational/financial records
-- Secondary Treasurer records only Secondary Cooperative financial/business records
-- Secondary Chairperson approves only Secondary Cooperative pending finance
-- Secondary Secretary/Vice Secretary manage only their assigned Secondary Cooperative records
-
-FINANCIAL RECORD SAFETY
-- Confirmed contributions/expenses cannot be deleted
-- Received payments cannot be deleted; they must be reversed
-- Cross-cooperative mutation is blocked with own-cooperative checks
-- Operational create/update/delete activity is audit logged
+ACCOUNTABILITY PROTECTION RULES
+- Official handwritten/printed/signed meeting pages are uploaded; full minutes do not need to be retyped.
+- Confirmed meeting evidence has no silent replace/delete route.
+- Uploaded files are stored outside /static, file-signature checked and SHA-256 fingerprinted.
+- A meeting recorded as Quorum Not Met cannot produce a certified action resolution.
+- Certified resolutions cannot be edited through the draft resolution editor.
+- Resolution-linked tasks cannot be edited/deleted through the legacy Operations Tasks module.
+- The responsible executive is the only executive allowed to report progress/upload proof for their task.
+- Completed work becomes Awaiting Verification instead of immediately closing.
+- Self-verification is blocked.
+- Verification requires at least one evidence file and a verification note.
+- Returned work reopens In Progress and preserves the verifier's reason in permanent progress history.
+- Verified work closes the task and source resolution.
+- State changes create Audit Log events and remain cooperative-scoped.
