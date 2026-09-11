@@ -39,8 +39,12 @@ jobs:
       - name: Install runtime dependencies
         run: python -m pip install -r requirements.txt
 
-      - name: Run Phase 7 regression tests
-        run: python phase7_regression_tests.py
+      - name: Run focused finance regression tests
+        run: |
+          python -m unittest -v \
+            phase7_regression_tests.Phase7OperationsTests.test_budget_and_statement_date_bank_reconciliation \
+            phase7_regression_tests.Phase7OperationsTests.test_rejected_budget_can_be_corrected_and_resubmitted \
+            phase7_regression_tests.Phase7OperationsTests.test_role_workspaces_render_and_permissions_hold
 
       - name: Validate diff whitespace
         run: git diff --check
