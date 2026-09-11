@@ -146,6 +146,7 @@
                     <td>
                         <div class="row-actions">
                             <a class="history-action" href="{{ url_for('membership_history', membership_id=membership.id) }}">History</a>
+                            <a class="history-action" href="{{ url_for('phase7.membership_certificate', membership_id=membership.id) }}">Certificate</a>
                             {% if can_manage_memberships and current_access and membership.cooperative_id == current_access.cooperative_id %}
                             <a class="edit-action" href="{{ url_for('edit_membership', membership_id=membership.id) }}">Edit</a>
                             {% endif %}

@@ -115,6 +115,54 @@
                     <span>Dashboard</span>
                 </a>
 
+                {% if current_access %}
+                <p class="nav-title">WORKSPACE</p>
+
+                <a href="{{ url_for('phase7.my_work') }}"
+                   class="nav-item {% if request.endpoint == 'phase7.my_work' %}active{% endif %}">
+                    <span>📥</span><span>My Work</span>
+                </a>
+
+                <a href="{{ url_for('phase7.notifications') }}"
+                   class="nav-item {% if request.endpoint in ['phase7.notifications','phase7.notification_read','phase7.notification_read_all'] %}active{% endif %}">
+                    <span>🔔</span><span>Notifications</span>
+                </a>
+
+                <a href="{{ url_for('phase7.global_search') }}"
+                   class="nav-item {% if request.endpoint == 'phase7.global_search' %}active{% endif %}">
+                    <span>🔎</span><span>Search CRM</span>
+                </a>
+
+                <a href="{{ url_for('phase7.documents') }}"
+                   class="nav-item {% if request.endpoint in ['phase7.documents','phase7.document_upload','phase7.document_download'] %}active{% endif %}">
+                    <span>📁</span><span>Documents</span>
+                </a>
+
+                <a href="{{ url_for('phase7.reports_command_centre') }}"
+                   class="nav-item {% if request.endpoint == 'phase7.reports_command_centre' %}active{% endif %}">
+                    <span>📊</span><span>Reports Centre</span>
+                </a>
+
+                {% if is_leadership or is_treasurer %}
+                <a href="{{ url_for('phase7.finance_control') }}"
+                   class="nav-item {% if request.endpoint and request.endpoint.startswith('phase7.') and request.endpoint in ['phase7.finance_control','phase7.budget_create','phase7.budget_decision','phase7.reconciliation_create','phase7.reconciliation_review'] %}active{% endif %}">
+                    <span>🏦</span><span>Finance Control</span>
+                </a>
+                {% endif %}
+
+                {% if is_leadership %}
+                <a href="{{ url_for('phase7.production_control') }}"
+                   class="nav-item {% if request.endpoint in ['phase7.production_control','phase7.production_input_add','phase7.equipment_usage_add'] %}active{% endif %}">
+                    <span>🚜</span><span>Production Control</span>
+                </a>
+                {% endif %}
+
+                <a href="{{ url_for('phase7.api_tokens') }}"
+                   class="nav-item {% if request.endpoint in ['phase7.api_tokens','phase7.api_token_revoke'] %}active{% endif %}">
+                    <span>🔌</span><span>API Access</span>
+                </a>
+                {% endif %}
+
                 {% if can_view_governance and not is_admin %}
                 <p class="nav-title">ACCOUNTABILITY</p>
 

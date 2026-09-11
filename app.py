@@ -9024,6 +9024,15 @@ def internal_error(_error):
 
 
 # =========================================================
+# PHASE 7 COOPERATIVE OPERATIONS SUITE
+# =========================================================
+# Imported after the core models/helpers/routes are defined so Phase 7 can
+# extend the CRM without creating circular initialization problems.
+from phase7 import register_phase7
+register_phase7(app)
+
+
+# =========================================================
 # RUN APPLICATION
 # =========================================================
 if __name__ == "__main__":

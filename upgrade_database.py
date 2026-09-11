@@ -18,7 +18,7 @@ TWO_FACTOR_REVISION = "9c4a1f6e2b70"
 EXECUTIVE_REVISION = "b7e1f4a9c203"
 PHASE5_SCHEMA_REVISION = "e4c2d8f7a105"
 PHASE5_HEAD_REVISION = "f1a6c9d2e508"
-HEAD_REVISION = "a6b7c8d9e010"
+HEAD_REVISION = "c7d8e9f0a111"
 
 REQUIRED_BASELINE_TABLES = {
     "user", "user_access", "cooperative", "audit_log", "farmer", "farm",
