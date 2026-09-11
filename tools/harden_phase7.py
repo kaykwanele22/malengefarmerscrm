@@ -1,8 +1,7 @@
 """Idempotent Phase 7 hardening patch.
 
 Keeps Phase 7 safe when app.py is executed directly, tightens cross-cooperative
-references, and makes bank reconciliation calculate the book balance as of the
-statement date.
+references, keeps reconciliation date-correct, and completes global search coverage.
 """
 from pathlib import Path
 import re
@@ -158,6 +157,25 @@ def budget_actual'''
         crop_id=crop.id if crop else None, responsible_user_id=responsible_user_id,
 '''
     text = replace_once(text, equipment_old, equipment_new, "equipment responsibility cooperative validation")
+
+    # Global search must also find receipt/reference numbers without leaking other cooperatives.
+    search_anchor = '''        for item in memberships:
+            results.append({"type": "Member", "title": item.farmer.fullname if item.farmer else item.member_number, "detail": item.member_number, "url": url_for("memberships_list", search=item.member_number)})
+'''
+    search_expanded = search_anchor + '''        contributions = scoped_model_query(Contribution).filter(or_(Contribution.reference.ilike(f"%{q}%"), Contribution.category.ilike(f"%{q}%"))).limit(15).all()
+        for item in contributions:
+            results.append({"type": "Contribution", "title": item.reference or item.category or f"Contribution #{item.id}", "detail": f"R {float(item.amount or 0):,.2f} · {item.status}", "url": url_for("contributions_list")})
+        expenses = scoped_model_query(Expense).filter(or_(Expense.reference.ilike(f"%{q}%"), Expense.category.ilike(f"%{q}%"), Expense.description.ilike(f"%{q}%"))).limit(15).all()
+        for item in expenses:
+            results.append({"type": "Expense", "title": item.reference or item.description, "detail": f"R {float(item.amount or 0):,.2f} · {item.status}", "url": url_for("expenses_list")})
+        payments = scoped_model_query(Payment).filter(or_(Payment.reference.ilike(f"%{q}%"), Payment.method.ilike(f"%{q}%"))).limit(15).all()
+        for item in payments:
+            results.append({"type": "Sale Payment", "title": item.reference or f"Payment #{item.id}", "detail": f"R {float(item.amount or 0):,.2f} · {item.status}", "url": url_for("payments_list")})
+        sales = scoped_model_query(Sale).filter(or_(Sale.buyer_name.ilike(f"%{q}%"), Sale.buyer_phone.ilike(f"%{q}%"))).limit(15).all()
+        for item in sales:
+            results.append({"type": "Sale", "title": item.buyer_name, "detail": f"R {float(item.total_amount or 0):,.2f} · {item.status}", "url": url_for("sales_list")})
+'''
+    text = replace_once(text, search_anchor, search_expanded, "finance reference global search")
 
     PATH.write_text(text, encoding="utf-8")
     print("Phase 7 hardening complete")
