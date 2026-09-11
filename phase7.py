@@ -20,28 +20,31 @@ from flask import (
 from sqlalchemy import func, or_
 from werkzeug.utils import secure_filename
 
-from app import (
-    db, User, UserAccess, Cooperative, Farmer, Farm, Crop, Harvest, Sale, Payment,
-    Expense, Contribution, Membership, Meeting, Resolution, Task, InventoryItem,
-    Equipment, AuditLog,
-    COOPERATIVE_EXECUTIVE_ROLES, GOVERNANCE_VIEW_ROLES, MEETING_RECORD_ROLES,
-    FINANCE_RECORD_ROLES, FINANCE_APPROVAL_ROLES, FINANCE_VIEW_ROLES,
-    OPERATIONS_RECORD_ROLES, OPERATIONS_VIEW_ROLES, MEMBERSHIP_VIEW_ROLES,
-    ACCOUNTABILITY_VERIFY_ROLES,
-    CONFIRMED_EXPENSE_STATUSES, CONFIRMED_CONTRIBUTION_STATUSES,
-    PAYMENT_VALUE_STATUSES,
-    current_access, current_cooperative, current_user, accessible_cooperative_ids,
-    can_access_cooperative, scoped_model_query, scoped_get, scoped_get_or_404,
-    own_cooperative_query, own_cooperative_id, require_own_cooperative,
-    login_required, roles_required, add_audit_log, utc_now, crm_today,
-    parse_int, parse_float, parse_date, list_database_backups,
-    two_factor_policy_enabled,
+import importlib
+import sys
+
+_CORE_NAMES = (
+    "db", "User", "UserAccess", "Cooperative", "Farmer", "Farm", "Crop", "Harvest", "Sale", "Payment",
+    "Expense", "Contribution", "Membership", "Meeting", "Resolution", "Task", "InventoryItem",
+    "Equipment", "AuditLog", "COOPERATIVE_EXECUTIVE_ROLES", "GOVERNANCE_VIEW_ROLES", "MEETING_RECORD_ROLES",
+    "FINANCE_RECORD_ROLES", "FINANCE_APPROVAL_ROLES", "FINANCE_VIEW_ROLES", "OPERATIONS_RECORD_ROLES",
+    "OPERATIONS_VIEW_ROLES", "MEMBERSHIP_VIEW_ROLES", "ACCOUNTABILITY_VERIFY_ROLES",
+    "CONFIRMED_EXPENSE_STATUSES", "CONFIRMED_CONTRIBUTION_STATUSES", "PAYMENT_VALUE_STATUSES",
+    "current_access", "current_cooperative", "current_user", "accessible_cooperative_ids", "can_access_cooperative",
+    "scoped_model_query", "scoped_get", "scoped_get_or_404", "own_cooperative_query", "own_cooperative_id",
+    "require_own_cooperative", "login_required", "roles_required", "add_audit_log", "utc_now", "crm_today",
+    "parse_int", "parse_float", "parse_date", "list_database_backups", "two_factor_policy_enabled",
 )
+_core = sys.modules.get("__main__")
+if _core is None or not hasattr(_core, "db"):
+    _core = importlib.import_module("app")
+for _name in _CORE_NAMES:
+    globals()[_name] = getattr(_core, _name)
 
 bp = Blueprint("phase7", __name__)
 
 DOCUMENT_UPLOAD_DIR = Path(
-    os.getenv("DOCUMENT_UPLOAD_DIR", str(Path("instance") / "documents"))
+    os.getenv("DOCUMENT_UPLOAD_DIR", str(Path(_core.app.instance_path) / "documents"))
 ).expanduser().resolve()
 DOCUMENT_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 DOCUMENT_ALLOWED_EXTENSIONS = {"pdf", "png", "jpg", "jpeg", "webp", "docx", "xlsx", "csv", "txt"}
@@ -159,7 +162,7 @@ class MeetingAgendaItem(db.Model):
     created_by_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
 
-    meeting = db.relationship("Meeting", backref=db.backref("agenda_items", cascade="all, delete-orphan", order_by="MeetingAgendaItem.item_number.asc()"))
+    meeting = db.relationship("Meeting", backref=db.backref("agenda_items", cascade="all, delete-orphan", order_by="MeetingAgendaItem.item_number"))
     cooperative = db.relationship("Cooperative", foreign_keys=[cooperative_id])
     created_by = db.relationship("User", foreign_keys=[created_by_user_id])
 
@@ -178,7 +181,7 @@ class MeetingAttendance(db.Model):
     created_by_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
 
-    meeting = db.relationship("Meeting", backref=db.backref("attendance_entries", cascade="all, delete-orphan", order_by="MeetingAttendance.attendee_name.asc()"))
+    meeting = db.relationship("Meeting", backref=db.backref("attendance_entries", cascade="all, delete-orphan", order_by="MeetingAttendance.attendee_name"))
     cooperative = db.relationship("Cooperative", foreign_keys=[cooperative_id])
     user = db.relationship("User", foreign_keys=[user_id])
     created_by = db.relationship("User", foreign_keys=[created_by_user_id])
@@ -263,19 +266,26 @@ def _year_bounds(year):
     return date(year, 1, 1), date(year + 1, 1, 1)
 
 
-def _confirmed_book_balance(cooperative_id):
-    contributions = db.session.query(func.coalesce(func.sum(Contribution.amount), 0)).filter(
+def _confirmed_book_balance(cooperative_id, through_date=None):
+    contribution_query = db.session.query(func.coalesce(func.sum(Contribution.amount), 0)).filter(
         Contribution.cooperative_id == cooperative_id,
         Contribution.status.in_(CONFIRMED_CONTRIBUTION_STATUSES),
-    ).scalar() or 0
-    payments = db.session.query(func.coalesce(func.sum(Payment.amount), 0)).filter(
+    )
+    payment_query = db.session.query(func.coalesce(func.sum(Payment.amount), 0)).filter(
         Payment.cooperative_id == cooperative_id,
         Payment.status.in_(PAYMENT_VALUE_STATUSES),
-    ).scalar() or 0
-    expenses = db.session.query(func.coalesce(func.sum(Expense.amount), 0)).filter(
+    )
+    expense_query = db.session.query(func.coalesce(func.sum(Expense.amount), 0)).filter(
         Expense.cooperative_id == cooperative_id,
         Expense.status.in_(CONFIRMED_EXPENSE_STATUSES),
-    ).scalar() or 0
+    )
+    if through_date:
+        contribution_query = contribution_query.filter(Contribution.contribution_date <= through_date)
+        payment_query = payment_query.filter(Payment.payment_date <= through_date)
+        expense_query = expense_query.filter(Expense.expense_date <= through_date)
+    contributions = contribution_query.scalar() or 0
+    payments = payment_query.scalar() or 0
+    expenses = expense_query.scalar() or 0
     return float(contributions) + float(payments) - float(expenses)
 
 
@@ -761,7 +771,7 @@ def reconciliation_create():
     statement_balance = parse_float(request.form.get("statement_balance"))
     if not statement_date or statement_balance is None:
         return "Statement date and balance are required.", 400
-    book = _confirmed_book_balance(access.cooperative_id)
+    book = _confirmed_book_balance(access.cooperative_id, through_date=statement_date)
     item = BankReconciliation(
         cooperative_id=access.cooperative_id, statement_date=statement_date,
         statement_balance=statement_balance, book_balance=book,
@@ -842,9 +852,14 @@ def meeting_attendance_add(meeting_id):
     attendance_status = request.form.get("attendance_status", "").strip()
     if not name or attendance_status not in {"Present", "Apology", "Absent"}:
         return "Attendee name and attendance status are required.", 400
+    linked_user_id = parse_int(request.form.get("user_id"))
+    if linked_user_id:
+        linked_access = UserAccess.query.filter_by(user_id=linked_user_id, status="Active").first()
+        if not linked_access or linked_access.cooperative_id != meeting.cooperative_id:
+            return "The linked CRM user must be an active user of this cooperative.", 400
     entry = MeetingAttendance(
         meeting_id=meeting.id, cooperative_id=meeting.cooperative_id,
-        user_id=parse_int(request.form.get("user_id")), attendee_name=name,
+        user_id=linked_user_id, attendee_name=name,
         role_or_capacity=request.form.get("role_or_capacity", "").strip() or None,
         attendance_status=attendance_status, notes=request.form.get("notes", "").strip() or None,
         created_by_user_id=session["user_id"],
@@ -967,9 +982,14 @@ def equipment_usage_add():
     purpose = request.form.get("purpose", "").strip()
     if not purpose or fuel_cost < 0:
         return "Purpose is required and fuel cost cannot be negative.", 400
+    responsible_user_id = parse_int(request.form.get("responsible_user_id"))
+    if responsible_user_id:
+        responsible_access = UserAccess.query.filter_by(user_id=responsible_user_id, status="Active").first()
+        if not responsible_access or responsible_access.cooperative_id != access.cooperative_id:
+            return "The responsible CRM user must belong to your cooperative.", 400
     item = EquipmentUsage(
         cooperative_id=access.cooperative_id, equipment_id=equipment.id, farm_id=farm.id,
-        crop_id=crop.id if crop else None, responsible_user_id=parse_int(request.form.get("responsible_user_id")),
+        crop_id=crop.id if crop else None, responsible_user_id=responsible_user_id,
         purpose=purpose, start_date=start_date, end_date=end_date, fuel_cost=fuel_cost,
         notes=request.form.get("notes", "").strip() or None, created_by_user_id=session["user_id"],
     )
