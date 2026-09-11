@@ -1,8 +1,8 @@
 """Run Malenge CRM regression suites in isolated processes.
 
-Each legacy suite imports app.py with its own temporary DATABASE_URL. Running them
-in separate processes prevents Python module caching from leaking one test database
-into another.
+Each suite imports app.py with its own temporary DATABASE_URL. Running them in
+separate processes prevents Python module caching from leaking one test database
+into another, including the Phase 7 operations tests.
 """
 from pathlib import Path
 import subprocess
