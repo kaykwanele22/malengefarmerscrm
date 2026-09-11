@@ -1,0 +1,43 @@
+name: Integrate Phase 7
+
+on:
+  push:
+    branches:
+      - phase7-cooperative-operations-suite
+    paths:
+      - .github/workflows/phase7_integrate.yml
+      - tools/apply_phase7_integration.py
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Phase 7 branch
+        uses: actions/checkout@v4
+        with:
+          ref: phase7-cooperative-operations-suite
+          fetch-depth: 0
+
+      - name: Apply idempotent integration patch
+        run: python tools/apply_phase7_integration.py
+
+      - name: Check Python syntax
+        run: python -m py_compile app.py phase7.py upgrade_database.py
+
+      - name: Validate diff whitespace
+        run: git diff --check
+
+      - name: Commit integrated source
+        run: |
+          if git diff --quiet; then
+            echo "No integration changes required."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app.py templates/base.html templates/meeting_detail.html templates/memberships.html upgrade_database.py
+          git commit -m "Integrate Phase 7 operations suite [skip ci]"
+          git push origin HEAD:phase7-cooperative-operations-suite
