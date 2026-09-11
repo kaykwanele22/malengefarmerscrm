@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}{{ primary.name }} Summary | Malenge Farmers CRM{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{{ url_for('static', filename='css/phase7.css') }}">{% endblock %}
+{% block content %}
+<div class="p7-page">
+    <div class="p7-head">
+        <div><span class="p7-eyebrow">Secondary Oversight · Aggregate Only</span><h1>{{ primary.name }} Summary</h1><p>Read-only network summary for MFPSU. Individual member, farmer and farm records remain in the {{ primary.name }} Primary portal.</p></div>
+        <div class="p7-actions"><a class="p7-btn" href="{{ url_for('jointops.dashboard') }}">← Joint Operations</a><a class="p7-btn" href="{{ url_for('phase7.reports_command_centre') }}">Reports Centre</a></div>
+    </div>
+
+    <div class="p7-warning"><strong>Privacy and governance boundary:</strong> this page intentionally shows totals and joint allocations only. Secondary executives cannot edit or browse the Primary cooperative's individual records from here.</div>
+
+    <div class="p7-grid-4">
+        <div class="p7-stat"><span>Active Farmers</span><strong>{{ summary.active_members }}</strong><small>Aggregate count only</small></div>
+        <div class="p7-stat"><span>Active Farms</span><strong>{{ summary.farms }}</strong><small>{{ "{:,.2f}".format(summary.total_hectares|float) }} ha recorded</small></div>
+        <div class="p7-stat"><span>Crop Records</span><strong>{{ summary.crops }}</strong><small>Current/historic crop records</small></div>
+        <div class="p7-stat {% if summary.open_actions > 0 %}warning{% else %}good{% endif %}"><span>Open Accountability Actions</span><strong>{{ summary.open_actions }}</strong><small>Primary responsibilities not yet closed</small></div>
+    </div>
+
+    <div class="p7-grid-4">
+        <div class="p7-stat"><span>Normalised Harvest</span><strong>{{ "{:,.0f}".format(summary.harvest_kg|float) }} kg</strong><small>kg + tonnes normalised where possible</small></div>
+        <div class="p7-stat good"><span>Confirmed Member Contributions</span><strong>R {{ "{:,.2f}".format(summary.member_contributions|float) }}</strong></div>
+        <div class="p7-stat good"><span>Confirmed Sale Payments</span><strong>R {{ "{:,.2f}".format(summary.sale_payments|float) }}</strong></div>
+        <div class="p7-stat {% if summary.book_position < 0 %}warning{% endif %}"><span>Primary Book Position</span><strong>R {{ "{:,.2f}".format(summary.book_position|float) }}</strong><small>Aggregate income less confirmed expenses</small></div>
+    </div>
+
+    <section class="p7-card">
+        <div class="p7-card-head"><h2>Crop / Area Summary</h2><span class="p7-badge">No farmer names</span></div>
+        <div class="p7-table-wrap"><table class="p7-table"><thead><tr><th>Crop</th><th>Records</th><th>Recorded Area</th></tr></thead><tbody>{% for crop_name, row in crop_summary.items() %}<tr><td><strong>{{ crop_name }}</strong></td><td>{{ row.count }}</td><td>{{ "{:,.2f}".format(row.hectares|float) }} ha</td></tr>{% else %}<tr><td colspan="3"><div class="p7-empty">No crop records available.</div></td></tr>{% endfor %}</tbody></table></div>
+    </section>
+
+    <section class="p7-card">
+        <div class="p7-card-head"><h2>MFPSU Joint Project Allocations</h2></div>
+        <div class="p7-table-wrap"><table class="p7-table"><thead><tr><th>Project</th><th>Allocation</th><th>Hectares</th><th>Progress</th><th>Notes</th></tr></thead><tbody>{% for item in allocations %}<tr><td><strong>{{ item.project.title }}</strong><small>{{ item.project.project_type }}</small></td><td>R {{ "{:,.2f}".format(item.allocated_amount|float) }}</td><td>{{ "{:,.2f}".format(item.hectares|float) }} ha</td><td>{{ item.progress_percentage }}%</td><td>{{ item.notes or '—' }}</td></tr>{% else %}<tr><td colspan="5"><div class="p7-empty">No MFPSU project allocation has been recorded for this Primary cooperative.</div></td></tr>{% endfor %}</tbody></table></div>
+    </section>
+
+    <section class="p7-card">
+        <div class="p7-card-head"><h2>Shared Asset Usage</h2></div>
+        <div class="p7-table-wrap"><table class="p7-table"><thead><tr><th>Asset</th><th>Purpose</th><th>Dates</th><th>Cost</th><th>Status</th></tr></thead><tbody>{% for item in usages %}<tr><td><strong>{{ item.asset.name }}</strong><small>{{ item.asset.category }}</small></td><td>{{ item.purpose }}</td><td>{{ item.start_date.strftime('%d %b %Y') }}{% if item.end_date %} → {{ item.end_date.strftime('%d %b %Y') }}{% endif %}</td><td>R {{ "{:,.2f}".format(item.actual_cost|float) }}</td><td>{{ item.status }}</td></tr>{% else %}<tr><td colspan="5"><div class="p7-empty">No shared asset usage recorded for this Primary cooperative.</div></td></tr>{% endfor %}</tbody></table></div>
+    </section>
+
+    <section class="p7-card">
+        <div class="p7-card-head"><h2>Primary → MFPSU Contribution History</h2></div>
+        <div class="p7-table-wrap"><table class="p7-table"><thead><tr><th>Year</th><th>Expected</th><th>Confirmed</th><th>Pending</th><th>Outstanding</th></tr></thead><tbody>{% for account in contribution_accounts %}<tr><td>{{ account.fiscal_year }}</td><td>R {{ "{:,.2f}".format(account.expected_amount|float) }}</td><td>R {{ "{:,.2f}".format(account.confirmed_paid|float) }}</td><td>R {{ "{:,.2f}".format(account.pending_paid|float) }}</td><td>R {{ "{:,.2f}".format(account.outstanding_amount|float) }}</td></tr>{% else %}<tr><td colspan="5"><div class="p7-empty">No contribution accounts recorded yet.</div></td></tr>{% endfor %}</tbody></table></div>
+    </section>
+</div>
+{% endblock %}
