@@ -204,36 +204,47 @@
          STRICT ADMIN DASHBOARD
     ====================================================== -->
     {% if is_admin %}
+    {% set admin_2fa_required = system_settings.two_factor_required if system_settings and system_settings.two_factor_required is defined else true %}
 
     <section class="dash-section">
         <div class="dash-section-head">
-            <div><p class="eyebrow">Administration</p><h2>System Overview</h2></div>
+            <div>
+                <p class="eyebrow">Admin Command Centre</p>
+                <h2>System Control &amp; Oversight</h2>
+            </div>
+            <a href="{{ url_for('admin_system_health') }}">Open System Health →</a>
         </div>
         <div class="dash-section-body">
             <div class="dash-stat-grid">
-                <div class="dash-stat"><span>CRM Users</span><strong>{{ admin_user_count }}</strong><small>All login holders</small></div>
-                <div class="dash-stat"><span>Active Accounts</span><strong>{{ admin_active_access_count }}</strong><small>Currently authorized</small></div>
-                <div class="dash-stat"><span>Cooperatives</span><strong>{{ admin_cooperative_count }}</strong><small>System structure</small></div>
-                <div class="dash-stat"><span>Audit Entries</span><strong>{{ admin_audit_count }}</strong><small>Recorded system activity</small></div>
+                <div class="dash-stat"><span>CRM Users</span><strong>{{ admin_user_count }}</strong><small>All login holders in the CRM</small></div>
+                <div class="dash-stat good"><span>Active Access</span><strong>{{ admin_active_access_count }}</strong><small>Accounts currently authorized to sign in</small></div>
+                <div class="dash-stat {% if admin_inactive_access_count > 0 %}attention{% endif %}"><span>Inactive / Pending</span><strong>{{ admin_inactive_access_count }}</strong><small>Accounts currently without active access</small></div>
+                <div class="dash-stat"><span>Cooperatives</span><strong>{{ admin_cooperative_count }}</strong><small>Primary and Secondary structures in the system</small></div>
             </div>
-        </div>
-    </section>
 
-    <section class="dash-section">
-        <div class="dash-section-head"><div><p class="eyebrow">System Administration</p><h2>Admin Modules</h2></div></div>
-        <div class="dash-section-body">
-            <div class="admin-quick-grid">
-                <a href="{{ url_for('users_list') }}" class="admin-quick-card"><span>👤</span><strong>Users &amp; Access</strong><small>Create logins, assign roles, cooperatives and status.</small></a>
-                <a href="{{ url_for('cooperatives_list') }}" class="admin-quick-card"><span>🏢</span><strong>Cooperative Structure</strong><small>Maintain Secondary and Primary cooperative structure.</small></a>
-                <a href="{{ url_for('audit_logs') }}" class="admin-quick-card"><span>🧾</span><strong>Audit Logs</strong><small>Review recorded CRM activity.</small></a>
-                <a href="{{ url_for('admin_security') }}" class="admin-quick-card"><span>🛡️</span><strong>Security</strong><small>Review login and access events.</small></a>
-                <a href="{{ url_for('admin_backup_restore') }}" class="admin-quick-card"><span>💾</span><strong>Backup &amp; Restore</strong><small>Create and restore verified backups.</small></a>
-                <a href="{{ url_for('admin_system_health') }}" class="admin-quick-card"><span>❤️</span><strong>System Health</strong><small>Check database and runtime status.</small></a>
-                <a href="{{ url_for('admin_data_exports') }}" class="admin-quick-card"><span>📤</span><strong>Data Exports</strong><small>Download system-wide CSV datasets.</small></a>
-                <a href="{{ url_for('admin_role_permissions') }}" class="admin-quick-card"><span>🔐</span><strong>Role Permissions</strong><small>Review executive responsibilities and boundaries.</small></a>
-                <a href="{{ url_for('admin_system_settings') }}" class="admin-quick-card"><span>⚙️</span><strong>System Settings</strong><small>Manage safe global CRM settings.</small></a>
+            <div class="dash-stat-grid" style="margin-top:14px">
+                <div class="dash-stat {% if admin_backup_count == 0 %}attention{% else %}good{% endif %}"><span>Database Backups</span><strong>{{ admin_backup_count }}</strong><small>Verified backup files currently available</small></div>
+                <div class="dash-stat"><span>Audit Entries</span><strong>{{ admin_audit_count }}</strong><small>Recorded system activity and accountability history</small></div>
+                <div class="dash-stat"><span>Database Backend</span><strong style="font-size:17px">{{ admin_database_backend|upper }}</strong><small>Database engine serving this CRM instance</small></div>
+                <div class="dash-stat {% if not admin_2fa_required %}attention{% else %}good{% endif %}"><span>2FA Policy Setting</span><strong style="font-size:17px">{% if admin_2fa_required %}Required{% else %}Paused{% endif %}</strong><small>{% if admin_2fa_required %}Google Authenticator enforcement is enabled by Admin policy{% else %}2FA is temporarily paused for testing{% endif %}</small></div>
             </div>
-            <div class="dash-note" style="margin-top:14px">Admin remains strictly system-level. Secretary owns membership records, Treasurer records money, and Chairperson confirms financial entries.</div>
+
+            <div class="dash-workspace-grid" style="margin-top:16px">
+                <a href="{{ url_for('users_list') }}" class="dash-action"><span class="icon">👤</span><div><strong>Users &amp; Access</strong><small>Create login holders, assign roles and cooperatives, activate or deactivate access.</small></div></a>
+                <a href="{{ url_for('cooperatives_list') }}" class="dash-action"><span class="icon">🏢</span><div><strong>Cooperative Structure</strong><small>Maintain the Secondary and Primary cooperative hierarchy.</small></div></a>
+                <a href="{{ url_for('executives_list') }}" class="dash-action"><span class="icon">👥</span><div><strong>Executive Offices</strong><small>Assign, replace and review Chairperson, Vice Chairperson, Secretary, Vice Secretary and Treasurer appointments.</small></div></a>
+                <a href="{{ url_for('admin_security') }}" class="dash-action"><span class="icon">🛡️</span><div><strong>Security &amp; 2FA</strong><small>Review security events and temporarily pause or reactivate 2FA for testing.</small></div></a>
+                <a href="{{ url_for('admin_backup_restore') }}" class="dash-action"><span class="icon">💾</span><div><strong>Backup &amp; Restore</strong><small>Create verified backups and access recovery controls.</small></div></a>
+                <a href="{{ url_for('admin_system_health') }}" class="dash-action"><span class="icon">❤️</span><div><strong>System Health</strong><small>Check database connectivity, runtime status and deployment health.</small></div></a>
+                <a href="{{ url_for('audit_logs') }}" class="dash-action"><span class="icon">🧾</span><div><strong>Audit Logs</strong><small>Inspect permanent records of important CRM actions.</small></div></a>
+                <a href="{{ url_for('admin_data_exports') }}" class="dash-action"><span class="icon">📤</span><div><strong>Data Exports</strong><small>Download system-wide CSV datasets for reporting and safekeeping.</small></div></a>
+                <a href="{{ url_for('admin_role_permissions') }}" class="dash-action"><span class="icon">🔐</span><div><strong>Role Permissions</strong><small>Review what every executive role may view, record, approve and verify.</small></div></a>
+                <a href="{{ url_for('admin_system_settings') }}" class="dash-action"><span class="icon">⚙️</span><div><strong>System Settings</strong><small>Manage safe global CRM configuration and interface settings.</small></div></a>
+            </div>
+
+            <div class="dash-note" style="margin-top:16px">
+                <strong>Admin boundary:</strong> Admin controls the CRM system, access, security, structure, backups and configuration. Admin does not become a cooperative executive and does not approve Treasurer entries, certify resolutions, confirm meeting evidence or verify cooperative accountability work.
+            </div>
         </div>
     </section>
 
@@ -246,7 +257,7 @@
             <div class="dash-list">
                 {% for activity in admin_recent_activity %}
                 <div class="dash-row">
-                    <div><strong>{{ activity.action }} {{ activity.entity_type }}</strong><small>{% if activity.user %}{{ activity.user.fullname }}{% else %}System / Unknown user{% endif %}{% if activity.cooperative %} · {{ activity.cooperative.name }}{% endif %}</small></div>
+                    <div><strong>{{ activity.action }} {{ activity.entity_type }}</strong><small>{% if activity.user %}{{ activity.user.fullname }}{% else %}System / Unknown user{% endif %}{% if activity.cooperative %} · {{ activity.cooperative.name }}{% endif %}{% if activity.details %} · {{ activity.details }}{% endif %}</small></div>
                     <div class="value">{{ activity.created_at.strftime('%d %b %H:%M') if activity.created_at else '' }}</div>
                 </div>
                 {% else %}<div class="dash-empty">No administration activity recorded yet.</div>{% endfor %}
