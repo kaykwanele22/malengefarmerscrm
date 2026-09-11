@@ -270,6 +270,54 @@ class Phase7OperationsTests(unittest.TestCase):
         with c.app.app_context():
             self.assertEqual(c.db.session.get(p.BankReconciliation, recon_id).status, "Reviewed")
 
+    def test_rejected_budget_can_be_corrected_and_resubmitted(self):
+        c, p = self.crm, self.p7
+        today = c.crm_today()
+
+        self.login_as("treasurer_a")
+        response = self.client.post("/finance-control/budgets", data={
+            "fiscal_year": str(today.year), "budget_type": "Expense", "category": "Fuel",
+            "planned_amount": "5000", "notes": "Initial fuel plan",
+        })
+        self.assertEqual(response.status_code, 302)
+        with c.app.app_context():
+            budget_id = p.Budget.query.one().id
+
+        self.login_as("chair_a")
+        response = self.client.post(f"/finance-control/budgets/{budget_id}/decision", data={"decision": "reject"})
+        self.assertEqual(response.status_code, 302)
+        with c.app.app_context():
+            rejected = c.db.session.get(p.Budget, budget_id)
+            self.assertEqual(rejected.status, "Rejected")
+            self.assertIsNotNone(rejected.approved_by_user_id)
+
+        self.login_as("treasurer_a")
+        page = self.client.get(f"/finance-control?year={today.year}")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn(b"Edit &amp; Resubmit", page.data)
+        response = self.client.post(f"/finance-control/budgets/{budget_id}/resubmit", data={
+            "fiscal_year": str(today.year), "budget_type": "Expense", "category": "Fuel",
+            "planned_amount": "6500", "notes": "Corrected fuel plan",
+        })
+        self.assertEqual(response.status_code, 302)
+        with c.app.app_context():
+            corrected = c.db.session.get(p.Budget, budget_id)
+            self.assertEqual(corrected.status, "Pending Approval")
+            self.assertAlmostEqual(corrected.planned_amount, 6500.0)
+            self.assertEqual(corrected.notes, "Corrected fuel plan")
+            self.assertIsNone(corrected.approved_by_user_id)
+            self.assertIsNone(corrected.approved_at)
+            self.assertIsNotNone(c.AuditLog.query.filter_by(action="BUDGET_RESUBMITTED", entity_id=budget_id).first())
+
+        self.login_as("chair_a")
+        self.assertEqual(self.client.post(f"/finance-control/budgets/{budget_id}/resubmit", data={
+            "fiscal_year": str(today.year), "budget_type": "Expense", "category": "Fuel",
+            "planned_amount": "7000",
+        }).status_code, 403)
+        self.assertEqual(self.client.post(f"/finance-control/budgets/{budget_id}/decision", data={"decision": "approve"}).status_code, 302)
+        with c.app.app_context():
+            self.assertEqual(c.db.session.get(p.Budget, budget_id).status, "Approved")
+
     def test_document_fingerprint_and_cooperative_scope(self):
         c, p = self.crm, self.p7
         self.login_as("chair_a")
