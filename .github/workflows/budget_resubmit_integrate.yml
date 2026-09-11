@@ -7,6 +7,9 @@ on:
     paths:
       - .github/workflows/budget_resubmit_integrate.yml
       - tools/apply_budget_resubmit.py
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
