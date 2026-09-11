@@ -156,11 +156,6 @@
                     <span>🚜</span><span>Production Control</span>
                 </a>
                 {% endif %}
-
-                <a href="{{ url_for('phase7.api_tokens') }}"
-                   class="nav-item {% if request.endpoint in ['phase7.api_tokens','phase7.api_token_revoke'] %}active{% endif %}">
-                    <span>🔌</span><span>API Access</span>
-                </a>
                 {% endif %}
 
                 {% if can_view_governance and not is_admin %}
@@ -223,6 +218,11 @@
                 <a href="{{ url_for('admin_security') }}"
                    class="nav-item {% if request.endpoint == 'admin_security' %}active{% endif %}">
                     <span>🛡️</span><span>Security</span>
+                </a>
+
+                <a href="{{ url_for('phase7.api_tokens') }}"
+                   class="nav-item {% if request.endpoint in ['phase7.api_tokens','phase7.api_token_revoke'] %}active{% endif %}">
+                    <span>🔌</span><span>API Access</span>
                 </a>
 
                 <a href="{{ url_for('admin_backup_restore') }}"
