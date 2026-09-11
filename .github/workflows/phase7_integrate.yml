@@ -1,0 +1,123 @@
+name: Integrate Phase 7
+
+on:
+  push:
+    branches:
+      - phase7-cooperative-operations-suite
+    paths:
+      - .github/workflows/phase7_integrate.yml
+      - tools/apply_phase7_integration.py
+      - tools/harden_phase7.py
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: sqlite:////tmp/malenge_phase7_ci.db
+      SECRET_KEY: phase7-ci-secret-key-not-for-production
+      APP_ENV: development
+      TWO_FACTOR_REQUIRED: "false"
+      ALLOW_BOOTSTRAP_REGISTRATION: "true"
+    steps:
+      - name: Checkout Phase 7 branch
+        uses: actions/checkout@v4
+        with:
+          ref: phase7-cooperative-operations-suite
+          fetch-depth: 0
+
+      - name: Apply idempotent integration patch
+        run: python tools/apply_phase7_integration.py
+
+      - name: Apply Phase 7 hardening patch
+        run: python tools/harden_phase7.py
+
+      - name: Check Python syntax
+        run: python -m py_compile app.py phase7.py upgrade_database.py tools/apply_phase7_integration.py tools/harden_phase7.py
+
+      - name: Install runtime dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Apply full migration chain to fresh database
+        run: python upgrade_database.py
+
+      - name: Smoke-test Phase 7 registration, schema, mappers and templates
+        run: |
+          python - <<'PY'
+          from sqlalchemy import inspect
+          from sqlalchemy.orm import configure_mappers
+          from app import app, db
+
+          configure_mappers()
+          required_tables = {
+              "notification", "cooperative_document", "budget", "bank_reconciliation",
+              "meeting_agenda_item", "meeting_attendance", "production_input",
+              "equipment_usage", "api_access_token",
+          }
+          with app.app_context():
+              tables = set(inspect(db.engine).get_table_names())
+              missing = required_tables - tables
+              if missing:
+                  raise SystemExit("Missing Phase 7 tables: " + ", ".join(sorted(missing)))
+
+          rules = {rule.rule for rule in app.url_map.iter_rules()}
+          required_routes = {
+              "/work", "/notifications", "/documents", "/finance-control",
+              "/production-control", "/reports/command-centre", "/search",
+              "/api/tokens", "/api/v1/me", "/api/v1/accountability",
+          }
+          missing_routes = required_routes - rules
+          if missing_routes:
+              raise SystemExit("Missing Phase 7 routes: " + ", ".join(sorted(missing_routes)))
+
+          templates = [
+              "phase7/my_work.html", "phase7/notifications.html", "phase7/documents.html",
+              "phase7/document_form.html", "phase7/finance_control.html", "phase7/meeting_manage.html",
+              "phase7/membership_certificate.html", "phase7/production_control.html",
+              "phase7/reports_command.html", "phase7/global_search.html", "phase7/api_tokens.html",
+          ]
+          for template in templates:
+              app.jinja_env.get_template(template)
+          print("Phase 7 schema, routes, mappers and templates verified.")
+          PY
+
+      - name: Validate direct PyCharm-style app execution wiring
+        run: |
+          python - <<'PY'
+          import runpy
+          import sys
+          from flask import Flask
+
+          original_run = Flask.run
+          Flask.run = lambda self, *args, **kwargs: None
+          try:
+              namespace = runpy.run_path("app.py", run_name="__main__")
+              phase7 = sys.modules.get("phase7")
+              if phase7 is None:
+                  raise SystemExit("Phase 7 module was not registered during direct app execution.")
+              if namespace["db"] is not phase7.db:
+                  raise SystemExit("Direct app execution created a duplicate SQLAlchemy instance.")
+              if "phase7" not in namespace["app"].blueprints:
+                  raise SystemExit("Phase 7 blueprint missing during direct app execution.")
+              print("Direct app.py execution wiring verified.")
+          finally:
+              Flask.run = original_run
+          PY
+
+      - name: Validate diff whitespace
+        run: git diff --check
+
+      - name: Commit integrated source
+        run: |
+          if git diff --quiet; then
+            echo "No integration changes required."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app.py phase7.py templates/base.html templates/meeting_detail.html templates/memberships.html upgrade_database.py
+          git commit -m "Harden and validate Phase 7 operations suite [skip ci]"
+          git pull --rebase origin phase7-cooperative-operations-suite
+          git push origin HEAD:phase7-cooperative-operations-suite
