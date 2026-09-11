@@ -152,6 +152,13 @@
                 </a>
                 {% endif %}
 
+                {% if is_secondary %}
+                <a href="{{ url_for('jointops.dashboard') }}"
+                   class="nav-item {% if request.endpoint and request.endpoint.startswith('jointops.') %}active{% endif %}">
+                    <span>🤝</span><span>Joint Operations</span>
+                </a>
+                {% endif %}
+
                 {% if is_leadership and not is_secondary %}
                 <a href="{{ url_for('phase7.production_control') }}"
                    class="nav-item {% if request.endpoint in ['phase7.production_control','phase7.production_input_add','phase7.equipment_usage_add'] %}active{% endif %}">

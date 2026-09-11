@@ -9041,6 +9041,10 @@ def internal_error(_error):
 from phase7 import register_phase7
 register_phase7(app)
 
+# Secondary/MFPSU joint operations are isolated from Primary individual records.
+from joint_operations import register_joint_operations
+register_joint_operations(app)
+
 
 # =========================================================
 # RUN APPLICATION
