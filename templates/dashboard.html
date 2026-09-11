@@ -294,24 +294,73 @@
 
     <section class="dash-section">
         <div class="dash-section-head">
-            <div><p class="eyebrow">Leadership</p><h2>Chairperson Overview</h2></div>
+            <div>
+                <p class="eyebrow">Chairperson Command Centre</p>
+                <h2>What Needs Your Attention</h2>
+            </div>
+            <a href="{{ url_for('accountability_register') }}">Open Accountability Register →</a>
         </div>
         <div class="dash-section-body">
             <div class="dash-stat-grid">
-                <div class="dash-stat {% if own_pending_finance > 0 %}attention{% endif %}"><span>Pending Financial Approvals</span><strong>{{ own_pending_finance }}</strong><small>{{ own_pending_contributions }} contributions · {{ own_pending_expenses }} expenses</small></div>
-                <div class="dash-stat"><span>Farms</span><strong>{{ own_farm_count }}</strong><small>Registered under your cooperative</small></div>
-                <div class="dash-stat"><span>Crops</span><strong>{{ own_crop_count }}</strong><small>Crop records</small></div>
-                <div class="dash-stat"><span>Cash Position</span><strong>R {{ "{:,.0f}".format(own_cash_position|float) }}</strong><small>Payments + contributions − confirmed expenses</small></div>
+                <div class="dash-stat {% if own_pending_finance > 0 %}attention{% endif %}">
+                    <span>Financial Decisions</span>
+                    <strong>{{ own_pending_finance }}</strong>
+                    <small>{{ own_pending_contributions }} contributions · {{ own_pending_expenses }} expenses awaiting your decision</small>
+                </div>
+                <div class="dash-stat {% if accountability_awaiting_verification_count > 0 %}attention{% endif %}">
+                    <span>Awaiting Verification</span>
+                    <strong>{{ accountability_awaiting_verification_count }}</strong>
+                    <small>Completed accountability work awaiting independent review</small>
+                </div>
+                <div class="dash-stat {% if accountability_overdue_count > 0 %}attention{% endif %}">
+                    <span>Overdue Responsibilities</span>
+                    <strong>{{ accountability_overdue_count }}</strong>
+                    <small>Resolution-linked responsibilities past their deadlines</small>
+                </div>
+                <div class="dash-stat {% if own_positions_vacant > 0 %}attention{% else %}good{% endif %}">
+                    <span>Vacant Executive Offices</span>
+                    <strong>{{ own_positions_vacant }}</strong>
+                    <small>{{ own_positions_filled }}/5 executive positions currently filled</small>
+                </div>
             </div>
 
-            {% if own_pending_finance > 0 %}
-            <div class="dash-warning" style="margin-top:14px">
-                Treasurer entries are waiting for your decision. You may approve or reject records belonging to <strong>your cooperative only</strong>.
+            <div class="dash-workspace-grid" style="margin-top:16px">
+                <a href="{{ url_for('meetings_list') }}" class="dash-action">
+                    <span class="icon">📎</span><div><strong>Meetings &amp; Evidence</strong><small>Review meeting records and confirm or lock official evidence for your cooperative.</small></div>
+                </a>
+                <a href="{{ url_for('accountability_register') }}" class="dash-action">
+                    <span class="icon">✅</span><div><strong>Resolutions &amp; Accountability</strong><small>Review decisions, certify resolutions and independently verify completed work.</small></div>
+                </a>
+                <a href="{{ url_for('contributions_list') }}" class="dash-action">
+                    <span class="icon">🏦</span><div><strong>Contribution Approvals</strong><small>{{ own_pending_contributions }} Treasurer contribution entries awaiting confirmation.</small></div>
+                </a>
+                <a href="{{ url_for('expenses_list') }}" class="dash-action">
+                    <span class="icon">🧾</span><div><strong>Expense Approvals</strong><small>{{ own_pending_expenses }} Treasurer expense entries awaiting confirmation.</small></div>
+                </a>
+                <a href="{{ url_for('memberships_list') }}" class="dash-action">
+                    <span class="icon">🪪</span><div><strong>Membership Register</strong><small>Monitor membership status and fee position without replacing the Secretary's recordkeeping role.</small></div>
+                </a>
+                <a href="{{ url_for('farms_list') }}" class="dash-action">
+                    <span class="icon">🌾</span><div><strong>Farms</strong><small>Monitor farms and agricultural activity visible to your cooperative leadership role.</small></div>
+                </a>
+                <a href="{{ url_for('crops_list') }}" class="dash-action">
+                    <span class="icon">🌱</span><div><strong>Crops</strong><small>Review crop progress, planting records and current production activity.</small></div>
+                </a>
+                <a href="{{ url_for('harvests_list') }}" class="dash-action">
+                    <span class="icon">📦</span><div><strong>Harvests</strong><small>Review harvest records and production outcomes.</small></div>
+                </a>
+                <a href="{{ url_for('reports') }}" class="dash-action">
+                    <span class="icon">📈</span><div><strong>Reports</strong><small>Open financial, membership, production and accountability reporting.</small></div>
+                </a>
             </div>
-            <div class="dash-workspace-grid" style="margin-top:14px">
-                <a href="{{ url_for('contributions_list') }}" class="dash-action"><span class="icon">🏦</span><div><strong>Review Contributions</strong><small>{{ own_pending_contributions }} awaiting confirmation.</small></div></a>
-                <a href="{{ url_for('expenses_list') }}" class="dash-action"><span class="icon">🧾</span><div><strong>Review Expenses</strong><small>{{ own_pending_expenses }} awaiting confirmation.</small></div></a>
-                <a href="{{ url_for('reports') }}" class="dash-action"><span class="icon">📈</span><div><strong>Review Reports</strong><small>Open the cooperative financial and operational report.</small></div></a>
+
+            {% if is_secondary %}
+            <div class="dash-note" style="margin-top:16px">
+                <strong>Secondary Chairperson scope:</strong> you lead and approve governance and finance for {{ current_cooperative.name }}. Primary Cooperative figures are visible for network oversight, but each Primary Chairperson remains responsible for approving that Primary's Treasurer entries and governance actions.
+            </div>
+            {% else %}
+            <div class="dash-note" style="margin-top:16px">
+                <strong>Primary Chairperson scope:</strong> your leadership, approvals and governance actions are limited to {{ current_cooperative.name }}. The Secretary maintains membership records, the Treasurer records money, and important accountability work still requires independent verification.
             </div>
             {% endif %}
         </div>
