@@ -444,16 +444,23 @@ def refresh_notifications(user_id=None):
         if access.role in FINANCE_APPROVAL_ROLES:
             pending_c = Contribution.query.filter_by(cooperative_id=coop_id, status="Pending Confirmation").count()
             pending_e = Expense.query.filter_by(cooperative_id=coop_id, status="Pending Confirmation").count()
+            pending_b = Budget.query.filter_by(cooperative_id=coop_id, status="Pending Approval").count()
             if pending_c:
                 add("Finance", "Contributions awaiting approval", f"{pending_c} contribution(s) need your decision.",
                     "Warning", url_for("contributions_list"), source_type="FinanceQueue", source_id=1)
             if pending_e:
                 add("Finance", "Expenses awaiting approval", f"{pending_e} expense(s) need your decision.",
                     "Warning", url_for("expenses_list"), source_type="FinanceQueue", source_id=2)
+            if pending_b:
+                add("Finance", "Budgets awaiting approval", f"{pending_b} budget line(s) need your decision.",
+                    "Warning", url_for("phase7.finance_control"), source_type="FinanceQueue", source_id=4)
 
         if access.role in FINANCE_RECORD_ROLES:
-            rejected = Contribution.query.filter_by(cooperative_id=coop_id, status="Rejected").count() + \
-                       Expense.query.filter_by(cooperative_id=coop_id, status="Rejected").count()
+            rejected = (
+                Contribution.query.filter_by(cooperative_id=coop_id, status="Rejected").count()
+                + Expense.query.filter_by(cooperative_id=coop_id, status="Rejected").count()
+                + Budget.query.filter_by(cooperative_id=coop_id, status="Rejected").count()
+            )
             if rejected:
                 add("Finance", "Rejected finance needs correction", f"{rejected} rejected finance record(s) need correction or review.",
                     "Warning", url_for("phase7.finance_control"), source_type="FinanceQueue", source_id=3)
@@ -758,6 +765,55 @@ def budget_decision(budget_id):
                   f"{item.fiscal_year} {item.budget_type} {item.category}", cooperative_id=item.cooperative_id)
     db.session.commit()
     return redirect(url_for("phase7.finance_control", year=item.fiscal_year))
+
+
+@bp.route("/finance-control/budgets/<int:budget_id>/resubmit", methods=["POST"])
+@roles_required(*FINANCE_RECORD_ROLES)
+def budget_resubmit(budget_id):
+    item = Budget.query.get_or_404(budget_id)
+    require_own_cooperative(item.cooperative_id)
+    if item.status != "Rejected":
+        return "Only rejected budget lines can be corrected and resubmitted.", 400
+
+    year = parse_int(request.form.get("fiscal_year"))
+    planned = parse_float(request.form.get("planned_amount"))
+    budget_type = request.form.get("budget_type", "").strip()
+    category = request.form.get("category", "").strip() or "All"
+    notes = request.form.get("notes", "").strip() or None
+
+    if not year or year < 2020 or year > 2100 or planned is None or planned < 0:
+        return "Enter a valid fiscal year and non-negative planned amount.", 400
+    if budget_type not in {"Expense", "Contribution", "Sales Receipts"}:
+        return "Invalid budget type.", 400
+
+    duplicate = Budget.query.filter(
+        Budget.cooperative_id == item.cooperative_id,
+        Budget.fiscal_year == year,
+        Budget.budget_type == budget_type,
+        Budget.category == category,
+        Budget.id != item.id,
+    ).first()
+    if duplicate:
+        return "Another budget line already uses that year, type and category.", 400
+
+    before = f"{item.fiscal_year} {item.budget_type} {item.category} R{float(item.planned_amount or 0):.2f}"
+    item.fiscal_year = year
+    item.budget_type = budget_type
+    item.category = category
+    item.planned_amount = planned
+    item.notes = notes
+    item.status = "Pending Approval"
+    item.approved_by_user_id = None
+    item.approved_at = None
+
+    add_audit_log(
+        "BUDGET_RESUBMITTED", "Budget", item.id,
+        f"Corrected from [{before}] to [{year} {budget_type} {category} R{planned:.2f}] and resubmitted for approval.",
+        cooperative_id=item.cooperative_id,
+    )
+    db.session.commit()
+    flash("Budget line corrected and resubmitted for Chairperson approval.", "success")
+    return redirect(url_for("phase7.finance_control", year=year))
 
 
 @bp.route("/finance-control/reconciliation", methods=["POST"])
