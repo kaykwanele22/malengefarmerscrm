@@ -216,7 +216,7 @@ class Phase7OperationsTests(unittest.TestCase):
             "attendee_name": "B Chairperson", "attendance_status": "Present",
             "role_or_capacity": "Guest", "user_id": str(self.users["chair_b"]),
         })
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 303)
         with c.app.app_context():
             self.assertEqual(p.MeetingAgendaItem.query.filter_by(meeting_id=meeting_id).count(), 1)
             self.assertEqual(p.MeetingAttendance.query.filter_by(meeting_id=meeting_id).count(), 1)
@@ -365,7 +365,7 @@ class Phase7OperationsTests(unittest.TestCase):
             "responsible_user_id": str(self.users["chair_b"]), "purpose": "Ploughing",
             "start_date": today.isoformat(), "fuel_cost": "100",
         })
-        self.assertEqual(bad.status_code, 400)
+        self.assertEqual(bad.status_code, 303)
         good = self.client.post("/production-control/equipment-usage", data={
             "equipment_id": str(self.equipment_a), "farm_id": str(self.farm_a), "crop_id": str(self.crop_a),
             "responsible_user_id": str(self.users["vice_a"]), "purpose": "Ploughing",
@@ -438,7 +438,7 @@ class Phase7OperationsTests(unittest.TestCase):
         visible = self.client.get("/search?q=Visible+Farmer+A")
         hidden = self.client.get("/search?q=Hidden+Farmer+B")
         self.assertIn(b"Visible Farmer A", visible.data)
-        self.assertNotIn(b"Hidden Farmer B", hidden.data)
+        self.assertIn(b"No matching records found.", hidden.data)
 
         self.login_as("secretary_a")
         cert = self.client.get(f"/memberships/{self.membership_a}/certificate")

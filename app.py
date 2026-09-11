@@ -995,16 +995,23 @@ PRIMARY_OPERATION_RECORD_ROLES = {
     "Primary Vice Chairperson",
 }
 
-FARMER_VIEW_ROLES = MEMBERSHIP_MANAGEMENT_ROLES | MEMBERSHIP_OVERSIGHT_ROLES | LEADERSHIP_ROLES
+PRIMARY_LEADERSHIP_ROLES = {
+    "Primary Chairperson",
+    "Primary Vice Chairperson",
+}
+
+# Individual farmers, memberships and farm-production records belong to Primary
+# cooperatives. Secondary executives receive aggregate network summaries only.
+FARMER_VIEW_ROLES = MEMBERSHIP_MANAGEMENT_ROLES | PRIMARY_LEADERSHIP_ROLES
 FARMER_RECORD_ROLES = MEMBERSHIP_MANAGEMENT_ROLES
 
-AGRICULTURE_VIEW_ROLES = LEADERSHIP_ROLES
+AGRICULTURE_VIEW_ROLES = PRIMARY_LEADERSHIP_ROLES
 
 BUSINESS_VIEW_ROLES = LEADERSHIP_ROLES | FINANCE_RECORD_ROLES
 BUSINESS_RECORD_ROLES = FINANCE_RECORD_ROLES
 
 FINANCE_VIEW_ROLES = LEADERSHIP_ROLES | FINANCE_RECORD_ROLES
-MEMBERSHIP_VIEW_ROLES = COOPERATIVE_EXECUTIVE_ROLES
+MEMBERSHIP_VIEW_ROLES = PRIMARY_EXECUTIVE_ROLES
 MEMBERSHIP_ALLOWED_STATUSES = {
     "Pending",
     "Active",
@@ -1394,14 +1401,10 @@ def accessible_cooperative_ids(user_id=None):
     if not cooperative or cooperative.status != "Active":
         return []
 
-    if access.role in SECONDARY_EXECUTIVE_ROLES and cooperative.cooperative_type == "Secondary":
-        child_ids = [
-            child.id
-            for child in cooperative.primary_cooperatives
-            if child.status == "Active"
-        ]
-        return [cooperative.id] + child_ids
-
+    # Every executive works only with records owned by the cooperative assigned
+    # to that account. Secondary executives do not inherit raw Primary records.
+    # Cross-primary visibility is intentionally exposed only through explicit
+    # aggregate network summaries on the Secondary dashboard/reports.
     return [cooperative.id]
 
 
@@ -3264,7 +3267,7 @@ def dashboard():
     is_primary_dashboard = role_now in PRIMARY_EXECUTIVE_ROLES
 
     # -----------------------------------------------------
-    # Visible network / cooperative totals
+    # Direct cooperative record totals (never inherited child records)
     # -----------------------------------------------------
     farmer_count = scoped_model_query(Farmer).count()
     farm_count = scoped_model_query(Farm).count()
@@ -3335,9 +3338,16 @@ def dashboard():
         cooperative_type="Secondary", status="Active"
     ).order_by(Cooperative.name.asc()).all()
 
-    primary_cooperatives = accessible_cooperative_query().filter_by(
-        cooperative_type="Primary", status="Active"
-    ).order_by(Cooperative.name.asc()).all()
+    if is_secondary_dashboard and cooperative_now and cooperative_now.cooperative_type == "Secondary":
+        # Secondary dashboards may compare the two Primaries as aggregate units,
+        # without granting access to their individual records.
+        primary_cooperatives = Cooperative.query.filter_by(
+            parent_id=cooperative_now.id, cooperative_type="Primary", status="Active"
+        ).order_by(Cooperative.name.asc()).all()
+    else:
+        primary_cooperatives = accessible_cooperative_query().filter_by(
+            cooperative_type="Primary", status="Active"
+        ).order_by(Cooperative.name.asc()).all()
 
     primary_performance = []
     for cooperative in primary_cooperatives:

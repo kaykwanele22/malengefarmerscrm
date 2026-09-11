@@ -15,6 +15,8 @@
     {% set role = current_access.role if current_access else '' %}
 
     {% set is_admin = role == 'Admin' %}
+    {% set is_secondary = role.startswith('Secondary') %}
+    {% set is_primary = role.startswith('Primary') %}
 
     {% set is_chairperson = role in [
         'Secondary Chairperson',
@@ -150,7 +152,7 @@
                 </a>
                 {% endif %}
 
-                {% if is_leadership %}
+                {% if is_leadership and not is_secondary %}
                 <a href="{{ url_for('phase7.production_control') }}"
                    class="nav-item {% if request.endpoint in ['phase7.production_control','phase7.production_input_add','phase7.equipment_usage_add'] %}active{% endif %}">
                     <span>🚜</span><span>Production Control</span>
@@ -274,8 +276,9 @@
                     </a>
                     {% endif %}
 
-                    <p class="nav-title">MEMBERSHIP</p>
+                    {% if not is_secondary %}<p class="nav-title">MEMBERSHIP</p>{% endif %}
 
+                    {% if not is_secondary %}
                     <a href="{{ url_for('farmers_list') }}"
                        class="nav-item {% if request.endpoint in [
                            'farmers_list',
@@ -285,7 +288,9 @@
                         <span>👥</span>
                         <span>Farmers</span>
                     </a>
+                    {% endif %}
 
+                    {% if not is_secondary %}
                     <a href="{{ url_for('memberships_list') }}"
                        class="nav-item {% if request.endpoint in [
                            'memberships_list',
@@ -296,6 +301,7 @@
                         <span>🪪</span>
                         <span>Members</span>
                     </a>
+                    {% endif %}
 
                     <p class="nav-title">RECORDS</p>
 
@@ -326,11 +332,13 @@
 
                     <p class="nav-title">FINANCE</p>
 
+                    {% if not is_secondary %}
                     <a href="{{ url_for('memberships_list') }}"
                        class="nav-item {% if request.endpoint == 'memberships_list' %}active{% endif %}">
                         <span>🪪</span>
                         <span>Members</span>
                     </a>
+                    {% endif %}
 
                     <a href="{{ url_for('sales_list') }}"
                        class="nav-item {% if request.endpoint in [
@@ -398,8 +406,9 @@
                     </a>
                     {% endif %}
 
-                    <p class="nav-title">OPERATIONS</p>
+                    <p class="nav-title">{% if is_secondary %}JOINT FINANCE{% else %}OPERATIONS{% endif %}</p>
 
+                    {% if not is_secondary %}
                     <a href="{{ url_for('farmers_list') }}"
                        class="nav-item {% if request.endpoint in [
                            'farmers_list',
@@ -409,13 +418,17 @@
                         <span>👥</span>
                         <span>Farmers</span>
                     </a>
+                    {% endif %}
 
+                    {% if not is_secondary %}
                     <a href="{{ url_for('memberships_list') }}"
                        class="nav-item {% if request.endpoint == 'memberships_list' %}active{% endif %}">
                         <span>🪪</span>
                         <span>Members</span>
                     </a>
+                    {% endif %}
 
+                    {% if not is_secondary %}
                     <a href="{{ url_for('farms_list') }}"
                        class="nav-item {% if request.endpoint in [
                            'farms_list',
@@ -425,7 +438,9 @@
                         <span>🌾</span>
                         <span>Farms</span>
                     </a>
+                    {% endif %}
 
+                    {% if not is_secondary %}
                     <a href="{{ url_for('crops_list') }}"
                        class="nav-item {% if request.endpoint in [
                            'crops_list',
@@ -435,7 +450,9 @@
                         <span>🌱</span>
                         <span>Crops</span>
                     </a>
+                    {% endif %}
 
+                    {% if not is_secondary %}
                     <a href="{{ url_for('harvests_list') }}"
                        class="nav-item {% if request.endpoint in [
                            'harvests_list',
@@ -445,6 +462,7 @@
                         <span>📦</span>
                         <span>Harvests</span>
                     </a>
+                    {% endif %}
 
                     <p class="nav-title">
                         {% if is_chairperson %}FINANCIAL APPROVAL{% else %}FINANCIAL OVERSIGHT{% endif %}
@@ -510,17 +528,21 @@
                 ================================================== -->
                 {% else %}
 
+                    {% if not is_secondary %}
                     <a href="{{ url_for('farmers_list') }}"
                        class="nav-item {% if request.endpoint == 'farmers_list' %}active{% endif %}">
                         <span>👥</span>
                         <span>Farmers</span>
                     </a>
+                    {% endif %}
 
+                    {% if not is_secondary %}
                     <a href="{{ url_for('farms_list') }}"
                        class="nav-item {% if request.endpoint == 'farms_list' %}active{% endif %}">
                         <span>🌾</span>
                         <span>Farms</span>
                     </a>
+                    {% endif %}
 
                     <a href="{{ url_for('reports') }}"
                        class="nav-item {% if request.endpoint == 'reports' %}active{% endif %}">
