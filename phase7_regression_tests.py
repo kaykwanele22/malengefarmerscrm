@@ -183,18 +183,21 @@ class Phase7OperationsTests(unittest.TestCase):
         self.login_as("chair_a")
         for url in [
             "/work", "/notifications", "/documents", "/finance-control",
-            "/production-control", "/reports/command-centre", "/search", "/api/tokens",
+            "/production-control", "/reports/command-centre", "/search",
         ]:
             with self.subTest(url=url):
                 self.assertEqual(self.client.get(url).status_code, 200)
+        self.assertEqual(self.client.get("/api/tokens").status_code, 403)
 
         self.login_as("treasurer_a")
         self.assertEqual(self.client.get("/finance-control").status_code, 200)
         self.assertEqual(self.client.get("/production-control").status_code, 403)
+        self.assertEqual(self.client.get("/api/tokens").status_code, 403)
 
         self.login_as("admin")
         self.assertEqual(self.client.get("/reports/command-centre").status_code, 200)
         self.assertEqual(self.client.get("/finance-control").status_code, 403)
+        self.assertEqual(self.client.get("/api/tokens").status_code, 200)
 
     def test_meeting_agenda_attendance_and_cross_cooperative_user_block(self):
         c, p = self.crm, self.p7
@@ -329,9 +332,23 @@ class Phase7OperationsTests(unittest.TestCase):
         self.assertEqual(page.status_code, 200)
         self.assertIn(b"Potatoes A", page.data)
 
-    def test_api_token_inherits_cooperative_scope(self):
+    def test_api_access_is_admin_only(self):
         self.login_as("chair_a")
-        response = self.client.post("/api/tokens", data={"name": "Phase7 Test", "expires_days": "30"})
+        self.assertEqual(
+            self.client.post("/api/tokens", data={"name": "Blocked Executive", "expires_days": "30"}).status_code,
+            403,
+        )
+        self.assertEqual(self.client.get("/api/v1/farmers").status_code, 401)
+
+        self.login_as("treasurer_a")
+        self.assertEqual(
+            self.client.post("/api/tokens", data={"name": "Blocked Treasurer", "expires_days": "30"}).status_code,
+            403,
+        )
+        self.assertEqual(self.client.get("/api/v1/farmers").status_code, 401)
+
+        self.login_as("admin")
+        response = self.client.post("/api/tokens", data={"name": "Admin Integration", "expires_days": "30"})
         self.assertEqual(response.status_code, 200)
         match = re.search(rb"mfg_[A-Za-z0-9_-]+", response.data)
         self.assertIsNotNone(match)
@@ -344,7 +361,7 @@ class Phase7OperationsTests(unittest.TestCase):
         rows = response.get_json()
         ids = {row["id"] for row in rows}
         self.assertIn(self.farmer_a, ids)
-        self.assertNotIn(self.farmer_b, ids)
+        self.assertIn(self.farmer_b, ids)
 
     def test_notifications_search_and_certificate(self):
         c, p = self.crm, self.p7

@@ -498,7 +498,7 @@ def refresh_notifications(user_id=None):
 def _api_user():
     if session.get("user_id"):
         access = UserAccess.query.filter_by(user_id=session["user_id"]).first()
-        if access and access.status == "Active":
+        if access and access.status == "Active" and access.role == "Admin":
             return db.session.get(User, session["user_id"])
     header = request.headers.get("Authorization", "")
     if not header.startswith("Bearer "):
@@ -513,7 +513,7 @@ def _api_user():
     if token.expires_at and token.expires_at < utc_now():
         return None
     access = UserAccess.query.filter_by(user_id=token.user_id).first()
-    if not access or access.status != "Active":
+    if not access or access.status != "Active" or access.role != "Admin":
         return None
     token.last_used_at = utc_now()
     db.session.commit()
@@ -1098,7 +1098,7 @@ def global_search():
 # API access tokens and scoped read API
 # ---------------------------------------------------------------------------
 @bp.route("/api/tokens", methods=["GET", "POST"])
-@login_required
+@roles_required("Admin")
 def api_tokens():
     created_token = None
     if request.method == "POST":
@@ -1121,7 +1121,7 @@ def api_tokens():
 
 
 @bp.route("/api/tokens/<int:token_id>/revoke", methods=["POST"])
-@login_required
+@roles_required("Admin")
 def api_token_revoke(token_id):
     item = ApiAccessToken.query.filter_by(id=token_id, user_id=session["user_id"]).first_or_404()
     item.revoked_at = utc_now()
