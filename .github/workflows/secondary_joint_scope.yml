@@ -1,0 +1,60 @@
+name: Secondary Joint Scope
+
+on:
+  push:
+    branches:
+      - secondary-joint-scope
+    paths:
+      - tools/apply_secondary_joint_scope.py
+      - .github/workflows/secondary_joint_scope.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: sqlite:////tmp/malenge_secondary_scope_ci.db
+      SECRET_KEY: secondary-scope-ci-secret-not-for-production
+      APP_ENV: development
+      TWO_FACTOR_REQUIRED: "false"
+      ALLOW_BOOTSTRAP_REGISTRATION: "true"
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: secondary-joint-scope
+          fetch-depth: 0
+
+      - name: Apply secondary joint-scope patch
+        run: python tools/apply_secondary_joint_scope.py
+
+      - name: Check Python syntax
+        run: python -m py_compile app.py phase7.py secondary_scope_regression_tests.py tools/apply_secondary_joint_scope.py
+
+      - name: Install runtime dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Run focused secondary-scope regression tests
+        run: python secondary_scope_regression_tests.py
+
+      - name: Run full regression suite
+        run: python run_regression_tests.py
+
+      - name: Validate diff whitespace
+        run: git diff --check
+
+      - name: Commit integrated source
+        run: |
+          if git diff --quiet; then
+            echo "No integration changes required."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app.py templates/base.html templates/dashboard.html secondary_scope_regression_tests.py
+          git commit -m "Restrict secondary portals to joint cooperative matters [skip ci]"
+          git pull --rebase origin secondary-joint-scope
+          git push origin HEAD:secondary-joint-scope
