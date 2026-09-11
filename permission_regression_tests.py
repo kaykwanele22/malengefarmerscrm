@@ -413,11 +413,11 @@ class PermissionRegressionTests(unittest.TestCase):
     def test_secondary_secretary_surface(self):
         self.login_as("secondary_secretary")
 
-        for url in ["/farmers", "/memberships", "/reports", "/settings"]:
+        for url in ["/reports", "/settings"]:
             self.assert_status(url, 200)
 
         for url in [
-            "/farms", "/crops", "/harvests",
+            "/farmers", "/memberships", "/farms", "/crops", "/harvests",
             "/sales", "/payments", "/contributions", "/expenses"
         ]:
             self.assert_status(url, 403)
@@ -426,12 +426,11 @@ class PermissionRegressionTests(unittest.TestCase):
         self.login_as("secondary_treasurer")
 
         for url in [
-            "/memberships", "/sales", "/payments",
-            "/contributions", "/expenses", "/reports", "/settings"
+            "/sales", "/payments", "/contributions", "/expenses", "/reports", "/settings"
         ]:
             self.assert_status(url, 200)
 
-        for url in ["/farmers", "/farms", "/crops", "/harvests"]:
+        for url in ["/memberships", "/farmers", "/farms", "/crops", "/harvests"]:
             self.assert_status(url, 403)
 
     def test_secondary_treasurer_records_secondary_contribution_only(self):
@@ -532,7 +531,7 @@ class PermissionRegressionTests(unittest.TestCase):
         self.login_as("secondary_chair")
         self.assert_status(
             f"/contributions/{record_id}/decision",
-            403,
+            404,
             method="post",
             data={"decision": "approve"},
         )

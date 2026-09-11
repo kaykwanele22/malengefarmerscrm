@@ -132,9 +132,9 @@ class MembershipRegressionTests(unittest.TestCase):
             numbers = [m.member_number for m in c.Membership.query.order_by(c.Membership.id.asc()).all()]
             self.assertEqual(numbers, ["SIYA-0001", "SIYA-0002"])
 
-    def test_secondary_secretary_has_oversight_but_cannot_register_individual_member(self):
+    def test_secondary_secretary_uses_aggregate_oversight_not_primary_member_register(self):
         self.login_as("secondary_secretary")
-        self.assertEqual(self.client.get("/memberships").status_code, 200)
+        self.assertEqual(self.client.get("/memberships").status_code, 403)
         self.assertEqual(self.client.get("/memberships/add").status_code, 403)
         response = self.client.post("/memberships/add", data={
             "farmer_id": str(self.farmer_secondary_id), "fee_amount": "300", "status": "Active"
@@ -320,19 +320,16 @@ class MembershipRegressionTests(unittest.TestCase):
         with self.crm.app.app_context():
             self.assertEqual(self.crm.Contribution.query.count(), 0)
 
-    def test_membership_history_page_and_csv_export_render(self):
+    def test_secondary_secretary_cannot_open_primary_membership_history_or_export(self):
         self.register_member()
         with self.crm.app.app_context():
             membership_id = self.crm.Membership.query.one().id
         self.client = self.crm.app.test_client()
         self.login_as("secondary_secretary")
         history = self.client.get(f"/memberships/{membership_id}/history")
-        self.assertEqual(history.status_code, 200)
-        self.assertIn(b"SIYA-0001", history.data)
+        self.assertEqual(history.status_code, 403)
         export = self.client.get("/exports/memberships.csv")
-        self.assertEqual(export.status_code, 200)
-        self.assertIn(b"Member Number", export.data)
-        self.assertIn(b"SIYA-0001", export.data)
+        self.assertEqual(export.status_code, 403)
 
     def test_membership_filters_and_reports_render(self):
         self.register_member(status="Pending")
