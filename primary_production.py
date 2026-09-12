@@ -254,6 +254,18 @@ def dashboard():
         blocked += crop_blocked
 
     plans = ProductionPlan.query.filter_by(cooperative_id=cooperative.id).order_by(ProductionPlan.updated_at.desc()).all()
+    plan_by_crop = {plan.crop_id: plan for plan in plans}
+    plan_crops = [
+        crop for crop in crops
+        if crop.status not in {"Harvested", "Failed"}
+        and (crop.id not in plan_by_crop or plan_by_crop[crop.id].status in {"Rejected"})
+    ]
+    active_crops = [
+        crop for crop in crops
+        if crop.status not in {"Harvested", "Failed"}
+        and (crop.id not in plan_by_crop or plan_by_crop[crop.id].status != "Completed")
+    ]
+    actionable_plans = [plan for plan in plans if plan.status == "Approved"]
     activities = ProductionActivity.query.filter_by(cooperative_id=cooperative.id).order_by(
         ProductionActivity.due_date.asc().nullslast(), ProductionActivity.created_at.desc()
     ).limit(60).all()
@@ -280,7 +292,8 @@ def dashboard():
     return render_template(
         "primary_production/dashboard.html",
         rows=rows, plans=plans, activities=activities, equipment_logs=equipment_logs,
-        crops=crops, inventory=inventory, equipment=equipment, users=users, stats=stats,
+        crops=crops, plan_crops=plan_crops, active_crops=active_crops, actionable_plans=actionable_plans,
+        inventory=inventory, equipment=equipment, users=users, stats=stats,
         activity_types=ACTIVITY_TYPES,
         can_coordinate=access.role in PRIMARY_PRODUCTION_COORDINATOR_ROLES,
         can_approve=access.role in PRIMARY_PRODUCTION_APPROVAL_ROLES,
@@ -308,8 +321,8 @@ def plan_save():
             created_by_user_id=session["user_id"],
         )
         db.session.add(plan)
-    if plan.status == "Approved":
-        return "Approved production plans must be returned/revised through a new approval cycle.", 400
+    if plan.status in {"Approved", "Completed"}:
+        return "Approved or completed production plans are no longer available for routine resubmission.", 400
     plan.target_yield_per_ha_kg = target
     plan.approved_budget = budget
     plan.notes = request.form.get("notes", "").strip() or None
@@ -358,8 +371,8 @@ def activity_add():
     access, cooperative = _primary_context()
     plan_id = parse_int(request.form.get("plan_id"))
     plan = _own_plan(cooperative.id, plan_id)
-    if not plan or plan.status not in {"Approved", "Completed"}:
-        return "Choose an approved production plan.", 400
+    if not plan or plan.status != "Approved":
+        return "Choose an active approved production plan.", 400
     activity_type = request.form.get("activity_type", "").strip()
     title = request.form.get("title", "").strip()
     if activity_type not in ACTIVITY_TYPES or not title:
