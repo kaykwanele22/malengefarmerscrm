@@ -5,7 +5,7 @@
 <div class="page-header">
     <div>
         <h1>Payments</h1>
-        <p>{% if can_manage_business %}Manage sale payment records and outstanding balances.{% else %}View sale payments and outstanding balances within your cooperative scope.{% endif %}</p>
+        <p>{% if can_manage_business %}Record sale payments for Chairperson confirmation and manage outstanding balances.{% else %}View sale payments and outstanding balances within your cooperative scope.{% endif %}</p>
     </div>
     {% if can_manage_business %}
     <a href="{{ url_for('add_payment') }}" class="primary-button">+ Record Payment</a>
@@ -32,7 +32,7 @@
                 <th>Method</th>
                 <th>Reference</th>
                 <th>Status</th>
-                {% if can_manage_business %}<th>Actions</th>{% endif %}
+                {% if can_manage_business or can_approve_finance %}<th>Actions</th>{% endif %}
             </tr>
         </thead>
         <tbody>
@@ -47,19 +47,22 @@
                 <td>{{ payment.method or "-" }}</td>
                 <td>{{ payment.reference or "-" }}</td>
                 <td><span class="status-badge">{{ payment.status }}</span></td>
-                {% if can_manage_business %}
+                {% if can_manage_business or can_approve_finance %}
                 <td class="actions-cell">
+                    {% if can_approve_finance and payment.status == 'Pending Confirmation' %}
+                    <form method="POST" action="{{ url_for('decide_payment', payment_id=payment.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" name="decision" value="approve" class="edit-button">Confirm</button></form>
+                    <form method="POST" action="{{ url_for('decide_payment', payment_id=payment.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" name="decision" value="reject" class="delete-button">Reject</button></form>
+                    {% endif %}
+                    {% if can_manage_business and payment.status in ['Pending Confirmation','Rejected','Pending'] %}
                     <a href="{{ url_for('edit_payment', payment_id=payment.id) }}" class="edit-button">Edit</a>
-                    <form method="POST" action="{{ url_for('delete_payment', payment_id=payment.id) }}" class="delete-form">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <button type="submit" class="delete-button" onclick="return confirm('Delete this payment?');">Delete</button>
-                    </form>
+                    <form method="POST" action="{{ url_for('delete_payment', payment_id=payment.id) }}" class="delete-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" class="delete-button" onclick="return confirm('Delete this unconfirmed payment?');">Delete</button></form>
+                    {% endif %}
                 </td>
                 {% endif %}
             </tr>
             {% else %}
             <tr>
-                <td colspan="{{ 10 if can_manage_business else 9 }}" class="empty-message">
+                <td colspan="{{ 10 if can_manage_business or can_approve_finance else 9 }}" class="empty-message">
                     No payments recorded yet.{% if can_manage_business %}<br>
                     <a href="{{ url_for('add_payment') }}">Record your first payment</a>{% endif %}
                 </td>

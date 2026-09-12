@@ -5,7 +5,7 @@
 <div class="page-header">
     <div>
         <h1>{% if payment %}Edit Payment{% else %}Record Payment{% endif %}</h1>
-        <p>Record payment received for a sale. The CRM prevents overpayments and payments dated before the sale.</p>
+        <p>Record money received for a sale. Every payment remains pending until the Chairperson confirms or rejects it.</p>
     </div>
     <a href="{{ url_for('payments_list') }}" class="back-button">← Back to Payments</a>
 </div>
@@ -57,16 +57,7 @@
                 <input type="text" id="reference" name="reference" value="{{ payment.reference if payment and payment.reference else '' }}">
             </div>
 
-            <!-- STATUS -->
-            <div class="form-group">
-                <label for="status">Status</label>
-                <select id="status" name="status">
-                    {% for option in ["Received", "Pending", "Partial", "Reversed"] %}
-                    <option value="{{ option }}" {% if payment and payment.status == option %}selected{% elif not payment and option == "Received" %}selected{% endif %}>{{ option }}</option>
-                    {% endfor %}
-                </select>
-                <small>Received and Partial count toward money paid. Pending does not count as cash received. Reversed is excluded from paid totals.</small>
-            </div>
+            <div class="form-group full-width"><div class="info-card"><strong>Chairperson confirmation required.</strong> This payment will not increase confirmed sales income or account balances until approved.</div></div>
 
             <!-- NOTES -->
             <div class="form-group full-width">
@@ -78,7 +69,7 @@
         <!-- ACTIONS -->
         <div class="form-actions">
             <a href="{{ url_for('payments_list') }}" class="cancel-button">Cancel</a>
-            <button type="submit" class="save-button">{% if payment %}Update Payment{% else %}Save Payment{% endif %}</button>
+            <button type="submit" class="save-button">{% if payment %}Resubmit Payment{% else %}Submit for Confirmation{% endif %}</button>
         </div>
     </form>
 </div>

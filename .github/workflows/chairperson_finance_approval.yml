@@ -1,0 +1,29 @@
+name: Chairperson finance approval
+
+on:
+  push:
+    branches: [fix/chairperson-confirm-all-transactions]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements.txt
+      - run: python -m py_compile app.py phase7.py joint_operations.py bulk_trade.py account_ledger.py
+      - name: Run finance regression suites
+        env:
+          APP_ENV: development
+          SECRET_KEY: chairperson-approval-test
+          TWO_FACTOR_REQUIRED: 'false'
+        run: |
+          python full_regression_tests.py
+          python membership_regression_tests.py
+          python phase7_regression_tests.py
+          python joint_operations_regression_tests.py
