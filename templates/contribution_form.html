@@ -28,9 +28,10 @@
             <div class="group full">
                 <label for="farmer_id">Member / Farmer *</label>
                 <select id="farmer_id" name="farmer_id" required {% if selected_membership %}disabled style="background:#f7f9f8"{% endif %}>
-                    <option value="">Select person</option>
+                    <option value="">{% if farmers %}Select person with amount still due{% else %}No outstanding members{% endif %}</option>
                     {% for farmer in farmers %}<option value="{{ farmer.id }}" {% if selected_membership and selected_membership.farmer_id == farmer.id %}selected{% endif %}>{{ farmer.fullname }} — {{ farmer.phone }}</option>{% endfor %}
                 </select>
+                <span class="help">Members whose required contribution is fully confirmed, or fully covered by a pending record, are removed from this action list automatically.</span>
                 {% if selected_membership %}<input type="hidden" name="farmer_id" value="{{ selected_membership.farmer_id }}">{% endif %}
             </div>
 

@@ -205,6 +205,11 @@ class PrimaryContributionAccount(db.Model):
     def outstanding_amount(self):
         return max(float(self.expected_amount or 0) - self.confirmed_paid, 0.0)
 
+    @property
+    def recordable_amount(self):
+        """Amount still safe for the Treasurer to record after confirmed and pending receipts."""
+        return max(float(self.expected_amount or 0) - self.confirmed_paid - self.pending_paid, 0.0)
+
 
 class PrimaryContributionPayment(db.Model):
     __tablename__ = "primary_contribution_payment"
@@ -728,6 +733,11 @@ def contribution_payment_add(account_id):
         return str(exc), 400
     if amount <= 0:
         return "Payment amount must be greater than zero.", 400
+    available = account.recordable_amount
+    if available <= 1e-9:
+        return "This Primary cooperative has no contribution amount left to record for this year.", 400
+    if amount > available + 1e-9:
+        return f"Payment exceeds the amount still available to record. Maximum: R {available:.2f}.", 400
     item = PrimaryContributionPayment(
         account_id=account.id,
         secondary_cooperative_id=cooperative.id,
