@@ -147,6 +147,9 @@ class FinanceLedgerRegressionTests(unittest.TestCase):
         response = self.client.post("/finance/transactions", data={
             "transaction_type": "Income", "category": "Membership Fee", "amount": "300",
             "transaction_date": c.crm_today().isoformat(), "to_account_id": str(account_id),
+            "counterparty": "Farmer A", "reference": "LEDGER-PAY-001",
+            "payment_method": "Cash", "project_reference": "Potato Seed Project",
+            "notes": "Member payment for potato project",
             "source_type": "Contribution", "source_id": str(self.source_a),
         })
         self.assertEqual(response.status_code, 302)
@@ -155,6 +158,8 @@ class FinanceLedgerRegressionTests(unittest.TestCase):
             tx = l.LedgerTransaction.query.filter_by(cooperative_id=self.coop_a, source_type="Contribution", source_id=self.source_a).one()
             tx_id = tx.id
             self.assertEqual(tx.status, "Pending Confirmation")
+            self.assertEqual(tx.payment_method, "Cash")
+            self.assertEqual(tx.project_reference, "Potato Seed Project")
 
         response = self.client.post(f"/finance/transactions/{tx_id}/decision", data={"decision": "approve"})
         self.assertEqual(response.status_code, 403)
@@ -199,7 +204,20 @@ class FinanceLedgerRegressionTests(unittest.TestCase):
         response = self.client.get(f"/finance/transactions/{tx_id}")
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Membership receipt", response.data)
+        self.assertIn(b"Potato Seed Project", response.data)
+        self.assertIn(b"Cash", response.data)
+        self.assertIn(b"Farmer A", response.data)
         self.assertIn(b"Attach Evidence", response.data)
+
+        by_project = self.client.get("/finance/accounts?q=Potato+Seed+Project")
+        self.assertEqual(by_project.status_code, 200)
+        self.assertIn(b"LEDGER-PAY-001", by_project.data)
+        by_method = self.client.get("/finance/accounts?payment_method=Cash")
+        self.assertEqual(by_method.status_code, 200)
+        self.assertIn(b"Potato Seed Project", by_method.data)
+        no_match = self.client.get("/finance/accounts?q=definitely-no-such-ledger-record")
+        self.assertEqual(no_match.status_code, 200)
+        self.assertNotIn(f"View #{tx_id}".encode(), no_match.data)
 
     def test_account_reconciliation_uses_confirmed_ledger_and_is_scoped(self):
         c, l, p = self.crm, self.ledger, self.p7
@@ -289,7 +307,6 @@ class FinanceLedgerRegressionTests(unittest.TestCase):
         missing_date = self.client.post("/finance/accounts", data={
             "name": "Undated Opening", "account_type": "Bank Account", "opening_balance": "500",
         })
-        # Browser form validation is normalized to a safe 303 feedback redirect by the app shell.
         self.assertEqual(missing_date.status_code, 303)
         with c.app.app_context():
             self.assertIsNone(l.FinanceAccount.query.filter_by(cooperative_id=self.coop_a, name="Undated Opening").first())
