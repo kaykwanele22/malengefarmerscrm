@@ -8,6 +8,7 @@ on:
       - crm-hardening-2-integrity
       - crm-hardening-3-reconciliation
       - crm-hardening-4-finance-unification
+      - crm-hardening-5-opening-balance-integrity
   pull_request:
     branches:
       - main

@@ -2,6 +2,7 @@ import importlib
 import os
 import tempfile
 import unittest
+from datetime import timedelta
 from pathlib import Path
 
 
@@ -110,6 +111,7 @@ class FinanceLedgerRegressionTests(unittest.TestCase):
         response = self.client.post("/finance/accounts", data={
             "name": "Co-op Bank", "account_type": "Bank Account", "institution": "Test Bank",
             "account_last4": "1234", "opening_balance": "1000",
+            "opening_balance_date": c.crm_today().isoformat(),
         })
         self.assertEqual(response.status_code, 302)
         with c.app.app_context():
@@ -135,6 +137,7 @@ class FinanceLedgerRegressionTests(unittest.TestCase):
         response = self.client.post("/finance/accounts", data={
             "name": "Co-op Bank", "account_type": "Bank Account", "institution": "Test Bank",
             "account_last4": "1234", "opening_balance": "1000",
+            "opening_balance_date": c.crm_today().isoformat(),
         })
         self.assertEqual(response.status_code, 302)
         with c.app.app_context():
@@ -276,6 +279,53 @@ class FinanceLedgerRegressionTests(unittest.TestCase):
         self.login_as("chair")
         response = self.client.post(f"/finance/reconciliations/{reconciliation_id}/review")
         self.assertEqual(response.status_code, 403)
+
+    def test_opening_balance_effective_date_controls_historical_reconciliation(self):
+        c, l = self.crm, self.ledger
+        today = c.crm_today()
+        yesterday = today - timedelta(days=1)
+        self.login_as("treasurer")
+
+        missing_date = self.client.post("/finance/accounts", data={
+            "name": "Undated Opening", "account_type": "Bank Account", "opening_balance": "500",
+        })
+        # Browser form validation is normalized to a safe 303 feedback redirect by the app shell.
+        self.assertEqual(missing_date.status_code, 303)
+        with c.app.app_context():
+            self.assertIsNone(l.FinanceAccount.query.filter_by(cooperative_id=self.coop_a, name="Undated Opening").first())
+
+        created = self.client.post("/finance/accounts", data={
+            "name": "Dated Opening", "account_type": "Bank Account", "opening_balance": "500",
+            "opening_balance_date": today.isoformat(),
+        })
+        self.assertEqual(created.status_code, 302)
+        with c.app.app_context():
+            account = l.FinanceAccount.query.filter_by(cooperative_id=self.coop_a, name="Dated Opening").one()
+            account_id = account.id
+            self.assertEqual(account.opening_balance_date, today)
+            self.assertAlmostEqual(account.confirmed_balance, 500.0)
+
+        before = self.client.post("/finance/reconciliations", data={
+            "finance_account_id": str(account_id),
+            "statement_date": yesterday.isoformat(),
+            "statement_balance": "0",
+        })
+        self.assertEqual(before.status_code, 302)
+
+        on_date = self.client.post("/finance/reconciliations", data={
+            "finance_account_id": str(account_id),
+            "statement_date": today.isoformat(),
+            "statement_balance": "500",
+        })
+        self.assertEqual(on_date.status_code, 302)
+
+        with c.app.app_context():
+            before_row = l.FinanceReconciliation.query.filter_by(finance_account_id=account_id, statement_date=yesterday).one()
+            on_date_row = l.FinanceReconciliation.query.filter_by(finance_account_id=account_id, statement_date=today).one()
+            self.assertAlmostEqual(before_row.book_balance, 0.0)
+            self.assertAlmostEqual(before_row.difference, 0.0)
+            self.assertAlmostEqual(on_date_row.book_balance, 500.0)
+            self.assertAlmostEqual(on_date_row.difference, 0.0)
 
 
 if __name__ == "__main__":
