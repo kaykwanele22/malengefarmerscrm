@@ -90,6 +90,13 @@ class FinanceLedgerRegressionTests(unittest.TestCase):
 
     def setUp(self):
         self.client = self.crm.app.test_client()
+        c, l, p = self.crm, self.ledger, self.p7
+        with c.app.app_context():
+            l.FinanceReconciliation.query.delete()
+            l.LedgerTransaction.query.delete()
+            l.FinanceAccount.query.delete()
+            p.CooperativeDocument.query.delete()
+            c.db.session.commit()
 
     def login_as(self, key):
         with self.client.session_transaction() as sess:
@@ -97,14 +104,33 @@ class FinanceLedgerRegressionTests(unittest.TestCase):
             sess["user_id"] = self.users[key]
             sess["fullname"] = key.title()
 
+    def _create_confirmed_income(self):
+        c, l = self.crm, self.ledger
+        self.login_as("treasurer")
+        response = self.client.post("/finance/accounts", data={
+            "name": "Co-op Bank", "account_type": "Bank Account", "institution": "Test Bank",
+            "account_last4": "1234", "opening_balance": "1000",
+        })
+        self.assertEqual(response.status_code, 302)
+        with c.app.app_context():
+            account = l.FinanceAccount.query.filter_by(cooperative_id=self.coop_a, name="Co-op Bank").one()
+            account_id = account.id
+        response = self.client.post("/finance/transactions", data={
+            "transaction_type": "Income", "category": "Membership Fee", "amount": "300",
+            "transaction_date": c.crm_today().isoformat(), "to_account_id": str(account_id),
+            "source_type": "Contribution", "source_id": str(self.source_a),
+        })
+        self.assertEqual(response.status_code, 302)
+        with c.app.app_context():
+            tx = l.LedgerTransaction.query.filter_by(cooperative_id=self.coop_a, source_type="Contribution", source_id=self.source_a).one()
+            tx_id = tx.id
+        self.login_as("chair")
+        response = self.client.post(f"/finance/transactions/{tx_id}/decision", data={"decision": "approve"})
+        self.assertEqual(response.status_code, 302)
+        return account_id, tx_id
+
     def test_ledger_separation_and_evidence_workflow(self):
         c, l, p = self.crm, self.ledger, self.p7
-        with c.app.app_context():
-            l.LedgerTransaction.query.delete()
-            l.FinanceAccount.query.delete()
-            p.CooperativeDocument.query.delete()
-            c.db.session.commit()
-
         self.login_as("treasurer")
         response = self.client.post("/finance/accounts", data={
             "name": "Co-op Bank", "account_type": "Bank Account", "institution": "Test Bank",
@@ -127,11 +153,9 @@ class FinanceLedgerRegressionTests(unittest.TestCase):
             tx_id = tx.id
             self.assertEqual(tx.status, "Pending Confirmation")
 
-        # Recorder cannot approve own transaction.
         response = self.client.post(f"/finance/transactions/{tx_id}/decision", data={"decision": "approve"})
         self.assertEqual(response.status_code, 403)
 
-        # Another cooperative's source record cannot be linked.
         response = self.client.post("/finance/transactions", data={
             "transaction_type": "Income", "category": "Membership Fee", "amount": "300",
             "transaction_date": c.crm_today().isoformat(), "to_account_id": str(account_id),
@@ -146,7 +170,6 @@ class FinanceLedgerRegressionTests(unittest.TestCase):
             tx = c.db.session.get(l.LedgerTransaction, tx_id)
             self.assertEqual(tx.status, "Confirmed")
 
-        # The same source cannot post twice.
         self.login_as("treasurer")
         response = self.client.post("/finance/transactions", data={
             "transaction_type": "Income", "category": "Membership Fee", "amount": "300",
@@ -155,7 +178,6 @@ class FinanceLedgerRegressionTests(unittest.TestCase):
         })
         self.assertEqual(response.status_code, 409)
 
-        # Linked evidence must appear on the transaction detail page.
         with c.app.app_context():
             doc = p.CooperativeDocument(
                 cooperative_id=self.coop_a,
@@ -175,6 +197,85 @@ class FinanceLedgerRegressionTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Membership receipt", response.data)
         self.assertIn(b"Attach Evidence", response.data)
+
+    def test_account_reconciliation_uses_confirmed_ledger_and_is_scoped(self):
+        c, l, p = self.crm, self.ledger, self.p7
+        account_id, _ = self._create_confirmed_income()
+
+        self.login_as("treasurer")
+        response = self.client.post("/finance/reconciliations", data={
+            "finance_account_id": str(account_id),
+            "statement_date": c.crm_today().isoformat(),
+            "statement_balance": "1290",
+            "notes": "R10 bank timing difference",
+        })
+        self.assertEqual(response.status_code, 302)
+        with c.app.app_context():
+            row = l.FinanceReconciliation.query.filter_by(cooperative_id=self.coop_a, finance_account_id=account_id).one()
+            reconciliation_id = row.id
+            self.assertAlmostEqual(row.book_balance, 1300.0)
+            self.assertAlmostEqual(row.difference, -10.0)
+            self.assertEqual(row.status, "Pending Review")
+
+        response = self.client.post("/finance/reconciliations", data={
+            "finance_account_id": str(account_id),
+            "statement_date": c.crm_today().isoformat(),
+            "statement_balance": "1290",
+        })
+        self.assertEqual(response.status_code, 409)
+
+        self.login_as("other_chair")
+        self.assertEqual(self.client.get(f"/finance/reconciliations/{reconciliation_id}").status_code, 404)
+
+        self.login_as("chair")
+        response = self.client.post(f"/finance/reconciliations/{reconciliation_id}/review")
+        self.assertEqual(response.status_code, 302)
+        with c.app.app_context():
+            row = c.db.session.get(l.FinanceReconciliation, reconciliation_id)
+            self.assertEqual(row.status, "Reviewed")
+            self.assertEqual(row.reviewed_by_user_id, self.users["chair"])
+
+        with c.app.app_context():
+            doc = p.CooperativeDocument(
+                cooperative_id=self.coop_a,
+                document_type="Financial Document",
+                title="Bank statement evidence",
+                entity_type="FinanceReconciliation",
+                entity_id=reconciliation_id,
+                original_name="statement.pdf",
+                stored_name="ledger-test-statement.pdf",
+                file_sha256="1" * 64,
+                uploaded_by_user_id=self.users["treasurer"],
+            )
+            c.db.session.add(doc)
+            c.db.session.commit()
+
+        self.login_as("treasurer")
+        response = self.client.get(f"/finance/reconciliations/{reconciliation_id}")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Bank statement evidence", response.data)
+        self.assertIn(b"R 1,300.00", response.data)
+
+    def test_reconciliation_self_review_is_blocked(self):
+        c, l = self.crm, self.ledger
+        account_id, _ = self._create_confirmed_income()
+        with c.app.app_context():
+            row = l.FinanceReconciliation(
+                cooperative_id=self.coop_a,
+                finance_account_id=account_id,
+                statement_date=c.crm_today(),
+                statement_balance=1300,
+                book_balance=1300,
+                difference=0,
+                status="Pending Review",
+                prepared_by_user_id=self.users["chair"],
+            )
+            c.db.session.add(row)
+            c.db.session.commit()
+            reconciliation_id = row.id
+        self.login_as("chair")
+        response = self.client.post(f"/finance/reconciliations/{reconciliation_id}/review")
+        self.assertEqual(response.status_code, 403)
 
 
 if __name__ == "__main__":
