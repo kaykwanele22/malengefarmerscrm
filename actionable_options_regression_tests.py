@@ -183,7 +183,11 @@ class ActionableOptionsRegressionTests(unittest.TestCase):
                 "csrf_token": "actionable-options-test-csrf",
             },
         )
-        self.assertEqual(response.status_code, 400)
+        # Form validation errors are converted to a safe 303 feedback redirect by the app shell.
+        self.assertEqual(response.status_code, 303)
+        with self.crm.app.app_context():
+            payment_count = self.jo.PrimaryContributionPayment.query.filter_by(account_id=self.account_done_id).count()
+            self.assertEqual(payment_count, 1)
 
     def test_completed_production_items_are_not_actionable_options(self):
         self.login_as("primary_vice")
