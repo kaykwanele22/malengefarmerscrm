@@ -56,8 +56,26 @@ class FinanceLedgerRegressionTests(unittest.TestCase):
         farmer_b = c.Farmer(cooperative_id=coop_b.id, fullname="Farmer B", phone="0722222222", location="B", status="Active")
         c.db.session.add_all([farmer_a, farmer_b])
         c.db.session.flush()
-        contribution_a = c.Contribution(cooperative_id=coop_a.id, farmer_id=farmer_a.id, amount=300, contribution_type="Membership Fee", contribution_date=c.crm_today(), status="Confirmed", recorded_by_user_id=cls.users["treasurer"])
-        contribution_b = c.Contribution(cooperative_id=coop_b.id, farmer_id=farmer_b.id, amount=300, contribution_type="Membership Fee", contribution_date=c.crm_today(), status="Confirmed", recorded_by_user_id=cls.users["other_chair"])
+        contribution_a = c.Contribution(
+            cooperative_id=coop_a.id,
+            farmer_id=farmer_a.id,
+            amount=300,
+            contribution_date=c.crm_today(),
+            category="Membership Fee",
+            method="Cash",
+            reference="LEDGER-A-001",
+            status="Confirmed",
+        )
+        contribution_b = c.Contribution(
+            cooperative_id=coop_b.id,
+            farmer_id=farmer_b.id,
+            amount=300,
+            contribution_date=c.crm_today(),
+            category="Membership Fee",
+            method="Cash",
+            reference="LEDGER-B-001",
+            status="Confirmed",
+        )
         c.db.session.add_all([contribution_a, contribution_b])
         c.db.session.commit()
         cls.source_a, cls.source_b = contribution_a.id, contribution_b.id
