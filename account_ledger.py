@@ -2,7 +2,7 @@
 import importlib
 import sys
 from flask import Blueprint, abort, flash, redirect, render_template, request, session, url_for
-from sqlalchemy import func
+from sqlalchemy import func, or_
 
 _core=sys.modules.get("__main__")
 if _core is None or not hasattr(_core,"db"): _core=importlib.import_module("app")
@@ -15,6 +15,7 @@ from phase7 import _upsert_notification, CooperativeDocument
 bp=Blueprint("ledger",__name__)
 ACCOUNT_TYPES=("Bank Account","Cash Box","Mobile Money","Savings","Other")
 TRANSACTION_TYPES=("Opening Balance","Income","Expense","Transfer")
+PAYMENT_METHODS=("Cash","EFT / Bank Transfer","Card","Mobile Money","Cheque","Other")
 INCOME_CATEGORIES=("Product Sale","Bulk Sale","Membership Fee","Primary Contribution","Grant","Loan","Other Income")
 EXPENSE_CATEGORIES=("Farm Inputs","Transport","Packaging","Equipment","Wages","Bank Charges","Refund","Other Expense")
 SYSTEM_CATEGORIES=("Opening Balance","Transfer")
@@ -61,7 +62,8 @@ class LedgerTransaction(db.Model):
     id=db.Column(db.Integer,primary_key=True); cooperative_id=db.Column(db.Integer,db.ForeignKey("cooperative.id"),nullable=False,index=True)
     transaction_type=db.Column(db.String(30),nullable=False,index=True); category=db.Column(db.String(100),nullable=False,index=True); amount=db.Column(db.Float,nullable=False)
     transaction_date=db.Column(db.Date,nullable=False,index=True); from_account_id=db.Column(db.Integer,db.ForeignKey("finance_account.id")); to_account_id=db.Column(db.Integer,db.ForeignKey("finance_account.id"))
-    counterparty=db.Column(db.String(180)); reference=db.Column(db.String(120)); source_type=db.Column(db.String(60)); source_id=db.Column(db.Integer)
+    counterparty=db.Column(db.String(180)); reference=db.Column(db.String(120)); payment_method=db.Column(db.String(40),index=True); project_reference=db.Column(db.String(140),index=True)
+    source_type=db.Column(db.String(60)); source_id=db.Column(db.Integer)
     status=db.Column(db.String(40),nullable=False,default="Pending Confirmation",index=True); notes=db.Column(db.Text)
     recorded_by_user_id=db.Column(db.Integer,db.ForeignKey("user.id"),nullable=False); decided_by_user_id=db.Column(db.Integer,db.ForeignKey("user.id")); decided_at=db.Column(db.DateTime); created_at=db.Column(db.DateTime,nullable=False,default=utc_now)
     cooperative=db.relationship("Cooperative",foreign_keys=[cooperative_id]); from_account=db.relationship("FinanceAccount",foreign_keys=[from_account_id],backref=db.backref("outgoing_transactions",lazy=True)); to_account=db.relationship("FinanceAccount",foreign_keys=[to_account_id],backref=db.backref("incoming_transactions",lazy=True))
@@ -124,16 +126,28 @@ def _confirmed_account_balance_through(account,through_date):
 def dashboard():
     access,coop=_context(); accounts=FinanceAccount.query.filter_by(cooperative_id=coop.id).order_by(FinanceAccount.name).all(); query=LedgerTransaction.query.filter_by(cooperative_id=coop.id)
     category=request.args.get("category","").strip(); group=request.args.get("group","").strip(); status=request.args.get("status","").strip(); account_id=parse_int(request.args.get("account_id"))
+    q=request.args.get("q","").strip(); payment_method=request.args.get("payment_method","").strip(); date_from_raw=request.args.get("date_from","").strip(); date_to_raw=request.args.get("date_to","").strip()
+    try:
+        date_from=parse_date(date_from_raw) if date_from_raw else None; date_to=parse_date(date_to_raw) if date_to_raw else None
+    except ValueError:
+        return "Enter valid ledger filter dates.",400
+    if date_from and date_to and date_from>date_to: return "The from date cannot be after the to date.",400
     if group in CATEGORY_GROUPS: query=query.filter(LedgerTransaction.category.in_(CATEGORY_GROUPS[group]))
     elif category in ALL_CATEGORIES: query=query.filter(LedgerTransaction.category==category)
     if status in {"Pending Confirmation","Confirmed","Rejected"}: query=query.filter(LedgerTransaction.status==status)
     if account_id and any(a.id==account_id for a in accounts): query=query.filter((LedgerTransaction.from_account_id==account_id)|(LedgerTransaction.to_account_id==account_id))
+    if payment_method in PAYMENT_METHODS: query=query.filter(LedgerTransaction.payment_method==payment_method)
+    if date_from: query=query.filter(LedgerTransaction.transaction_date>=date_from)
+    if date_to: query=query.filter(LedgerTransaction.transaction_date<=date_to)
+    if q:
+        pattern=f"%{q}%"
+        query=query.filter(or_(LedgerTransaction.counterparty.ilike(pattern),LedgerTransaction.reference.ilike(pattern),LedgerTransaction.project_reference.ilike(pattern),LedgerTransaction.notes.ilike(pattern),LedgerTransaction.category.ilike(pattern)))
     transactions=query.order_by(LedgerTransaction.transaction_date.desc(),LedgerTransaction.created_at.desc()).limit(250).all()
     group_totals={}
     for label,categories in CATEGORY_GROUPS.items():
         rows=LedgerTransaction.query.filter(LedgerTransaction.cooperative_id==coop.id,LedgerTransaction.status=="Confirmed",LedgerTransaction.category.in_(categories)).all()
         group_totals[label]=sum(float(r.amount or 0) for r in rows)
-    return render_template("finance_accounts/dashboard.html",accounts=accounts,transactions=transactions,confirmed_total=sum(a.confirmed_balance for a in accounts),pending_total=sum(a.pending_change for a in accounts),account_types=ACCOUNT_TYPES,income_categories=INCOME_CATEGORIES,expense_categories=EXPENSE_CATEGORIES,all_categories=ALL_CATEGORIES,category_groups=CATEGORY_GROUPS,group_totals=group_totals,selected_group=group,selected_category=category,selected_status=status,selected_account_id=account_id,can_record=access.role in FINANCE_RECORD_ROLES,can_approve=access.role in FINANCE_APPROVAL_ROLES)
+    return render_template("finance_accounts/dashboard.html",accounts=accounts,transactions=transactions,confirmed_total=sum(a.confirmed_balance for a in accounts),pending_total=sum(a.pending_change for a in accounts),account_types=ACCOUNT_TYPES,payment_methods=PAYMENT_METHODS,income_categories=INCOME_CATEGORIES,expense_categories=EXPENSE_CATEGORIES,all_categories=ALL_CATEGORIES,category_groups=CATEGORY_GROUPS,group_totals=group_totals,selected_group=group,selected_category=category,selected_status=status,selected_account_id=account_id,selected_payment_method=payment_method,selected_q=q,selected_date_from=date_from_raw,selected_date_to=date_to_raw,can_record=access.role in FINANCE_RECORD_ROLES,can_approve=access.role in FINANCE_APPROVAL_ROLES)
 
 @bp.route("/finance/transactions/<int:item_id>")
 @roles_required(*FINANCE_VIEW_ROLES)
@@ -199,9 +213,12 @@ def transaction_create():
     else:
         allowed=("Opening Balance",); category="Opening Balance"
     if category not in allowed: return "Choose a valid category for this transaction type.",400
+    payment_method=request.form.get("payment_method","").strip() or None
+    if payment_method and payment_method not in PAYMENT_METHODS: return "Choose a valid payment method.",400
+    project_reference=request.form.get("project_reference","").strip()[:140] or None
     source_type=request.form.get("source_type","").strip() or None; source_id=parse_int(request.form.get("source_id")); _validate_source(coop.id,source_type,source_id)
-    row=LedgerTransaction(cooperative_id=coop.id,transaction_type=kind,category=category,amount=float(amount),transaction_date=transaction_date,from_account_id=from_id,to_account_id=to_id,counterparty=request.form.get("counterparty","").strip()[:180] or None,reference=request.form.get("reference","").strip()[:120] or None,source_type=source_type,source_id=source_id,status="Pending Confirmation",notes=request.form.get("notes","").strip() or None,recorded_by_user_id=session["user_id"])
-    db.session.add(row); db.session.flush(); _notify(coop.id,FINANCE_APPROVAL_ROLES,"Account transaction awaiting approval",f"{kind}: R{amount:.2f} — {category}.","LedgerTransactionApproval",row.id,"Warning"); add_audit_log("LEDGER_TRANSACTION_RECORDED","LedgerTransaction",row.id,f"{kind} R{amount:.2f}",cooperative_id=coop.id); db.session.commit(); flash("Transaction recorded for Chairperson confirmation.","success"); return redirect(url_for("ledger.transaction_detail",item_id=row.id))
+    row=LedgerTransaction(cooperative_id=coop.id,transaction_type=kind,category=category,amount=float(amount),transaction_date=transaction_date,from_account_id=from_id,to_account_id=to_id,counterparty=request.form.get("counterparty","").strip()[:180] or None,reference=request.form.get("reference","").strip()[:120] or None,payment_method=payment_method,project_reference=project_reference,source_type=source_type,source_id=source_id,status="Pending Confirmation",notes=request.form.get("notes","").strip() or None,recorded_by_user_id=session["user_id"])
+    db.session.add(row); db.session.flush(); context=f"{kind} R{amount:.2f}; {category}"+(f"; {payment_method}" if payment_method else "")+(f"; project {project_reference}" if project_reference else ""); _notify(coop.id,FINANCE_APPROVAL_ROLES,"Account transaction awaiting approval",f"{kind}: R{amount:.2f} — {category}.","LedgerTransactionApproval",row.id,"Warning"); add_audit_log("LEDGER_TRANSACTION_RECORDED","LedgerTransaction",row.id,context,cooperative_id=coop.id); db.session.commit(); flash("Transaction recorded for Chairperson confirmation.","success"); return redirect(url_for("ledger.transaction_detail",item_id=row.id))
 
 @bp.route("/finance/reconciliations",methods=["POST"])
 @roles_required(*FINANCE_RECORD_ROLES)
