@@ -143,6 +143,7 @@ class ActionableOptionsRegressionTests(unittest.TestCase):
             sess["user_id"] = self.user_ids[key]
             sess["fullname"] = key
             sess["two_factor_authenticated"] = True
+            sess["_csrf_token"] = "actionable-options-test-csrf"
 
     def test_contribution_list_only_shows_members_with_amount_left(self):
         self.login_as("primary_treasurer")
@@ -176,7 +177,11 @@ class ActionableOptionsRegressionTests(unittest.TestCase):
             self.assertEqual(account.recordable_amount, 0)
         response = self.client.post(
             f"/joint-operations/contribution-accounts/{self.account_done_id}/payments",
-            data={"amount": "1", "payment_date": date.today().isoformat()},
+            data={
+                "amount": "1",
+                "payment_date": date.today().isoformat(),
+                "csrf_token": "actionable-options-test-csrf",
+            },
         )
         self.assertEqual(response.status_code, 400)
 
