@@ -17,6 +17,7 @@ class PermissionRegressionTests(unittest.TestCase):
 
         # Import app only after the test database URL is configured.
         cls.crm = importlib.import_module("app")
+        cls.jo = importlib.import_module("joint_operations")
         cls.crm.app.config.update(TESTING=True)
 
         # Backend permission tests do not need HTML rendering. This also makes
@@ -426,24 +427,50 @@ class PermissionRegressionTests(unittest.TestCase):
         self.login_as("secondary_treasurer")
 
         for url in [
-            "/sales", "/payments", "/contributions", "/expenses", "/reports", "/settings"
+            "/sales", "/payments", "/expenses", "/reports", "/settings", "/joint-operations"
         ]:
             self.assert_status(url, 200)
+
+        contribution_redirect = self.assert_status("/contributions", 302)
+        self.assertIn("/joint-operations", contribution_redirect.headers.get("Location", ""))
+        self.assertIn("#primary-contributions", contribution_redirect.headers.get("Location", ""))
+
+        add_redirect = self.assert_status("/contributions/add", 302)
+        self.assertIn("#primary-contributions", add_redirect.headers.get("Location", ""))
 
         for url in ["/memberships", "/farmers", "/farms", "/crops", "/harvests"]:
             self.assert_status(url, 403)
 
-    def test_secondary_treasurer_records_secondary_contribution_only(self):
+    def test_secondary_treasurer_records_primary_cooperative_contribution_only(self):
         self.login_as("secondary_treasurer")
+        year = date.today().year
 
         response = self.client.post(
-            "/contributions/add",
+            "/joint-operations/contribution-accounts",
             data={
-                "farmer_id": str(self.farmer_secondary_id),
+                "primary_cooperative_id": str(self.primary_a_id),
+                "fiscal_year": str(year),
+                "expected_amount": "1000",
+                "notes": "Primary cooperative annual contribution",
+            },
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 302)
+
+        with self.crm.app.app_context():
+            account = self.jo.PrimaryContributionAccount.query.filter_by(
+                secondary_cooperative_id=self.secondary_id,
+                primary_cooperative_id=self.primary_a_id,
+                fiscal_year=year,
+            ).one()
+            account_id = account.id
+
+        response = self.client.post(
+            f"/joint-operations/contribution-accounts/{account_id}/payments",
+            data={
                 "amount": "40",
-                "category": "General",
-                "contribution_date": date.today().isoformat(),
-                "method": "Cash",
+                "payment_date": date.today().isoformat(),
+                "method": "Bank Transfer",
                 "reference": "SECONDARY-CONTRIB-001",
             },
             follow_redirects=False,
@@ -451,14 +478,18 @@ class PermissionRegressionTests(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
 
         with self.crm.app.app_context():
-            record = self.crm.Contribution.query.filter_by(
+            payment = self.jo.PrimaryContributionPayment.query.filter_by(
                 reference="SECONDARY-CONTRIB-001"
-            ).first()
-            self.assertIsNotNone(record)
-            self.assertEqual(record.cooperative_id, self.secondary_id)
-            self.assertEqual(record.status, "Pending Confirmation")
+            ).one()
+            self.assertEqual(payment.secondary_cooperative_id, self.secondary_id)
+            self.assertEqual(payment.primary_cooperative_id, self.primary_a_id)
+            self.assertEqual(payment.status, "Pending Confirmation")
+            self.assertIsNone(
+                self.crm.Contribution.query.filter_by(reference="SECONDARY-CONTRIB-001").first(),
+                "Secondary cooperative money must not be stored as a farmer contribution.",
+            )
 
-    def test_secondary_treasurer_cannot_record_primary_contribution(self):
+    def test_secondary_treasurer_cannot_use_legacy_primary_contribution_form(self):
         self.login_as("secondary_treasurer")
 
         response = self.client.post(
@@ -474,7 +505,9 @@ class PermissionRegressionTests(unittest.TestCase):
             follow_redirects=False,
         )
 
-        self.assertEqual(response.status_code, 303)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/joint-operations", response.headers.get("Location", ""))
+        self.assertIn("#primary-contributions", response.headers.get("Location", ""))
 
         with self.crm.app.app_context():
             record = self.crm.Contribution.query.filter_by(
@@ -484,32 +517,43 @@ class PermissionRegressionTests(unittest.TestCase):
 
     def test_secondary_chair_can_approve_secondary_finance(self):
         c = self.crm
+        year = date.today().year + 1
         with c.app.app_context():
-            record = c.Contribution(
-                cooperative_id=self.secondary_id,
-                farmer_id=self.farmer_secondary_id,
+            account = self.jo.PrimaryContributionAccount(
+                secondary_cooperative_id=self.secondary_id,
+                primary_cooperative_id=self.primary_b_id,
+                fiscal_year=year,
+                expected_amount=30.0,
+                created_by_user_id=self.user_ids["secondary_treasurer"],
+            )
+            c.db.session.add(account)
+            c.db.session.flush()
+            payment = self.jo.PrimaryContributionPayment(
+                account_id=account.id,
+                secondary_cooperative_id=self.secondary_id,
+                primary_cooperative_id=self.primary_b_id,
                 amount=30.0,
-                contribution_date=date.today(),
-                category="General",
-                method="Cash",
+                payment_date=date.today(),
+                method="Bank Transfer",
                 reference="SECONDARY-CHAIR-APPROVE",
                 status="Pending Confirmation",
+                recorded_by_user_id=self.user_ids["secondary_treasurer"],
             )
-            c.db.session.add(record)
+            c.db.session.add(payment)
             c.db.session.commit()
-            record_id = record.id
+            payment_id = payment.id
 
         self.login_as("secondary_chair")
         self.assert_status(
-            f"/contributions/{record_id}/decision",
+            f"/joint-operations/contribution-payments/{payment_id}/decision",
             302,
             method="post",
             data={"decision": "approve"},
         )
 
         with c.app.app_context():
-            record = c.db.session.get(c.Contribution, record_id)
-            self.assertEqual(record.status, "Confirmed")
+            payment = c.db.session.get(self.jo.PrimaryContributionPayment, payment_id)
+            self.assertEqual(payment.status, "Confirmed")
 
     def test_secondary_chair_cannot_approve_primary_finance(self):
         c = self.crm
@@ -531,7 +575,7 @@ class PermissionRegressionTests(unittest.TestCase):
         self.login_as("secondary_chair")
         self.assert_status(
             f"/contributions/{record_id}/decision",
-            404,
+            403,
             method="post",
             data={"decision": "approve"},
         )
