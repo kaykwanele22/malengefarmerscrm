@@ -289,7 +289,10 @@ class FinanceLedgerRegressionTests(unittest.TestCase):
         missing_date = self.client.post("/finance/accounts", data={
             "name": "Undated Opening", "account_type": "Bank Account", "opening_balance": "500",
         })
-        self.assertEqual(missing_date.status_code, 400)
+        # Browser form validation is normalized to a safe 303 feedback redirect by the app shell.
+        self.assertEqual(missing_date.status_code, 303)
+        with c.app.app_context():
+            self.assertIsNone(l.FinanceAccount.query.filter_by(cooperative_id=self.coop_a, name="Undated Opening").first())
 
         created = self.client.post("/finance/accounts", data={
             "name": "Dated Opening", "account_type": "Bank Account", "opening_balance": "500",
