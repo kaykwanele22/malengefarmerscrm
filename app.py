@@ -569,6 +569,37 @@ class Membership(db.Model):
         )
 
     @property
+    def fee_credit_confirmed(self):
+        """Confirmed money received above the required membership fee."""
+        explicit_credit = sum(
+            float(contribution.amount or 0)
+            for contribution in self.contributions
+            if contribution.status == "Confirmed"
+            and (contribution.category or "").strip().casefold() in MEMBER_CREDIT_CATEGORY_ALIASES
+        )
+        legacy_credit = max(float(self.fee_paid or 0) - float(self.fee_amount or 0), 0.0)
+        return explicit_credit + legacy_credit
+
+    @property
+    def fee_credit_pending(self):
+        """Overpayment recorded by the Treasurer and awaiting confirmation."""
+        return sum(
+            float(contribution.amount or 0)
+            for contribution in self.contributions
+            if contribution.status == "Pending Confirmation"
+            and (contribution.category or "").strip().casefold() in MEMBER_CREDIT_CATEGORY_ALIASES
+        )
+
+    @property
+    def fee_credit(self):
+        return self.fee_credit_confirmed + self.fee_credit_pending
+
+    @property
+    def fee_paid_applied(self):
+        """Confirmed membership money actually allocated to the required fee."""
+        return min(float(self.fee_paid or 0), float(self.fee_amount or 0))
+
+    @property
     def fee_status(self):
         expected = float(self.fee_amount or 0)
         confirmed = float(self.fee_paid or 0)
@@ -1022,6 +1053,8 @@ MEMBERSHIP_ALLOWED_STATUSES = {
 }
 MEMBERSHIP_FEE_CATEGORY = "Membership Fee"
 MEMBERSHIP_FEE_CATEGORY_ALIASES = {"membership fee", "membership"}
+MEMBER_CREDIT_CATEGORY = "Member Credit"
+MEMBER_CREDIT_CATEGORY_ALIASES = {"member credit", "membership credit", "credit"}
 
 # Deferred/extended module permissions. Secondary leadership may view operational
 # records across the network, while Primary Chair/Vice Chair mutate farm operations.
@@ -5770,9 +5803,11 @@ def memberships_list():
     attention_members = base_query.filter(Membership.status.in_(("Pending", "Suspended"))).count()
     fee_memberships = base_query.all()
     total_expected = sum(float(m.fee_amount or 0) for m in fee_memberships)
-    total_paid = sum(float(m.fee_paid or 0) for m in fee_memberships)
+    total_paid = sum(float(m.fee_paid_applied or 0) for m in fee_memberships)
     total_pending = sum(float(m.fee_pending or 0) for m in fee_memberships)
     total_outstanding = sum(float(m.fee_outstanding or 0) for m in fee_memberships)
+    total_credit = sum(float(m.fee_credit_confirmed or 0) for m in fee_memberships)
+    total_credit_pending = sum(float(m.fee_credit_pending or 0) for m in fee_memberships)
 
     return render_template(
         "memberships.html",
@@ -5790,6 +5825,8 @@ def memberships_list():
         total_paid=total_paid,
         total_pending=total_pending,
         total_outstanding=total_outstanding,
+        total_credit=total_credit,
+        total_credit_pending=total_credit_pending,
     )
 
 
@@ -6205,38 +6242,79 @@ def add_contribution():
                 return f"Membership-fee payments cannot be recorded while the membership is {linked_membership.status}.", 400
 
             available = linked_membership.fee_outstanding
-            if amount > available + 1e-9:
-                return f"Membership-fee contribution exceeds the amount still due. Maximum: R {available:.2f}.", 400
 
-        contribution = Contribution(
-            cooperative_id=access.cooperative_id,
-            farmer_id=farmer.id,
-            membership_id=linked_membership.id if linked_membership else None,
-            amount=amount,
-            contribution_date=contribution_date,
-            category=category,
-            method=request.form.get("method", "").strip() or None,
-            reference=request.form.get("reference", "").strip() or None,
-            status="Pending Confirmation",
-            notes=request.form.get("notes", "").strip() or None,
-        )
-        db.session.add(contribution)
-        db.session.flush()
+        method = request.form.get("method", "").strip() or None
+        reference = request.form.get("reference", "").strip() or None
+        notes = request.form.get("notes", "").strip() or None
+
+        fee_allocation = amount
+        credit_allocation = 0.0
         if linked_membership:
+            fee_allocation = min(amount, float(linked_membership.fee_outstanding or 0))
+            credit_allocation = max(amount - fee_allocation, 0.0)
+
+        created = []
+        if fee_allocation > 1e-9:
+            contribution = Contribution(
+                cooperative_id=access.cooperative_id,
+                farmer_id=farmer.id,
+                membership_id=linked_membership.id if linked_membership else None,
+                amount=fee_allocation,
+                contribution_date=contribution_date,
+                category=category,
+                method=method,
+                reference=reference,
+                status="Pending Confirmation",
+                notes=notes,
+            )
+            db.session.add(contribution)
+            db.session.flush()
+            created.append(contribution)
+            add_audit_log(
+                "FINANCE_RECORDED", "Contribution", contribution.id,
+                f"{farmer.fullname} - R{fee_allocation:.2f} - {category or 'Contribution'} - pending Chairperson confirmation",
+                cooperative_id=contribution.cooperative_id,
+            )
+
+        credit_contribution = None
+        if linked_membership and credit_allocation > 1e-9:
+            credit_contribution = Contribution(
+                cooperative_id=access.cooperative_id,
+                farmer_id=farmer.id,
+                membership_id=linked_membership.id,
+                amount=credit_allocation,
+                contribution_date=contribution_date,
+                category=MEMBER_CREDIT_CATEGORY,
+                method=method,
+                reference=reference,
+                status="Pending Confirmation",
+                notes=(f"Unallocated member credit from R{amount:.2f} receipt. " + (notes or "")).strip(),
+            )
+            db.session.add(credit_contribution)
+            db.session.flush()
+            created.append(credit_contribution)
+            add_audit_log(
+                "MEMBER_CREDIT_RECORDED", "Contribution", credit_contribution.id,
+                f"{farmer.fullname} - R{credit_allocation:.2f} unallocated member credit - pending Chairperson confirmation",
+                cooperative_id=credit_contribution.cooperative_id,
+            )
+
+        if not created:
+            return "No amount was available to record.", 400
+
+        if linked_membership:
+            description = f"Treasurer recorded R{amount:.2f}. R{fee_allocation:.2f} allocated to membership fee"
+            if credit_allocation > 1e-9:
+                description += f" and R{credit_allocation:.2f} recorded as unallocated member credit"
+            description += "; pending Chairperson confirmation."
             record_membership_history(
                 linked_membership,
                 "FEE_RECORDED",
-                description=f"Treasurer recorded R{amount:.2f} membership fee; pending Chairperson confirmation.",
+                description=description,
                 from_status=linked_membership.status,
                 to_status=linked_membership.status,
             )
-        add_audit_log(
-            "FINANCE_RECORDED",
-            "Contribution",
-            contribution.id,
-            f"{farmer.fullname} - R{amount:.2f} - {category or 'Contribution'} - pending Chairperson confirmation",
-            cooperative_id=contribution.cooperative_id,
-        )
+
         db.session.commit()
         return redirect(url_for("contributions_list"))
 
@@ -6302,7 +6380,7 @@ def decide_contribution(contribution_id):
         details = f"Contribution R{float(contribution.amount or 0):.2f} confirmed by Chairperson"
     else:
         contribution.status = "Rejected"
-        if linked_membership:
+        if linked_membership and (contribution.category or "").strip().casefold() in MEMBERSHIP_FEE_CATEGORY_ALIASES:
             record_membership_history(
                 linked_membership,
                 "FEE_REJECTED",
@@ -6338,7 +6416,7 @@ def delete_contribution(contribution_id):
         return "Confirmed financial records cannot be deleted.", 400
 
     linked_membership = contribution.membership
-    if linked_membership:
+    if linked_membership and (contribution.category or "").strip().casefold() in MEMBERSHIP_FEE_CATEGORY_ALIASES:
         record_membership_history(
             linked_membership,
             "FEE_RECORD_REMOVED",
