@@ -964,7 +964,7 @@ def membership_certificate(membership_id):
 # ---------------------------------------------------------------------------
 # Production costing + equipment usage
 # ---------------------------------------------------------------------------
-@bp.route("/production-control")
+@bp.route("/production-control/legacy")
 @roles_required(*OPERATIONS_VIEW_ROLES)
 def production_control():
     access = current_access()

@@ -9057,6 +9057,11 @@ from joint_operations import register_joint_operations
 register_joint_operations(app)
 
 
+# Primary production command centre separates field coordination from Chairperson oversight.
+from primary_production import register_primary_production
+register_primary_production(app)
+
+
 # =========================================================
 # RUN APPLICATION
 # =========================================================
