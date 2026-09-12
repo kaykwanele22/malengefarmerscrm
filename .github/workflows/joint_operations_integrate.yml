@@ -21,7 +21,9 @@ jobs:
         with:
           python-version: '3.12'
       - name: Apply integration edits
-        run: python tools/apply_joint_operations_integration.py
+        run: |
+          python tools/apply_joint_operations_integration.py
+          python tools/update_joint_operations_permission_tests.py
       - name: Commit integration edits when needed
         run: |
           if ! git diff --quiet; then
