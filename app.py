@@ -1080,8 +1080,8 @@ _LOGIN_FAILURE_LOCK = threading.Lock()
 CONFIRMED_EXPENSE_STATUSES = ("Paid", "Confirmed")
 CONFIRMED_CONTRIBUTION_STATUSES = ("Received", "Confirmed")
 
-PAYMENT_VALUE_STATUSES = ("Received", "Partial")
-PAYMENT_ALLOWED_STATUSES = {"Received", "Pending", "Partial", "Reversed"}
+PAYMENT_VALUE_STATUSES = ("Received", "Partial", "Confirmed")
+PAYMENT_ALLOWED_STATUSES = {"Received", "Pending", "Partial", "Reversed", "Pending Confirmation", "Confirmed", "Rejected"}
 
 CROP_ALLOWED_STATUSES = {
     "Planted",
@@ -4624,7 +4624,6 @@ def add_payment():
         payment_date_text = request.form.get("payment_date", "").strip()
         method = request.form.get("method", "").strip()
         reference = request.form.get("reference", "").strip()
-        status = request.form.get("status", "Received").strip()
         notes = request.form.get("notes", "").strip()
 
         if not sale_id or not amount or not payment_date_text:
@@ -4653,13 +4652,10 @@ def add_payment():
         if payment_date_value < sale.sale_date:
             return "Payment date cannot be earlier than the sale date.", 400
 
-        if status not in PAYMENT_ALLOWED_STATUSES:
-            return "Invalid payment status.", 400
-
         already_recorded = sale_recorded_payment_amount(sale)
-        if status != "Reversed" and already_recorded + 1e-9 >= float(sale.total_amount or 0):
+        if already_recorded + 1e-9 >= float(sale.total_amount or 0):
             return "This sale is already fully paid and no longer accepts new payments.", 400
-        if status != "Reversed" and already_recorded + amount_value > float(sale.total_amount or 0) + 1e-9:
+        if already_recorded + amount_value > float(sale.total_amount or 0) + 1e-9:
             remaining = max(float(sale.total_amount or 0) - already_recorded, 0.0)
             return (
                 f"Payment exceeds the remaining sale balance. "
@@ -4673,13 +4669,21 @@ def add_payment():
             payment_date=payment_date_value,
             method=method or None,
             reference=reference or None,
-            status=status,
+            status="Pending Confirmation",
             notes=notes or None,
             cooperative_id=own_cooperative_id(),
         )
         db.session.add(new_payment)
         db.session.flush()
-        add_audit_log("CREATE", "Payment", new_payment.id, f'R{float(new_payment.amount or 0):.2f}', cooperative_id=new_payment.cooperative_id)
+        add_audit_log("SALE_PAYMENT_RECORDED", "Payment", new_payment.id,
+                      f'R{float(new_payment.amount or 0):.2f} pending Chairperson confirmation',
+                      cooperative_id=new_payment.cooperative_id)
+        notify_finance_users(
+            new_payment.cooperative_id, FINANCE_APPROVAL_ROLES,
+            "Sale payment awaiting confirmation",
+            f"{sale.buyer_name}: R{amount_value:.2f} requires your confirmation.",
+            "SalePaymentApproval", new_payment.id, "Warning",
+        )
         db.session.commit()
         return redirect(url_for("payments_list"))
 
@@ -4697,6 +4701,8 @@ def edit_payment(payment_id):
     """Edit a payment."""
     payment = scoped_get_or_404(Payment, payment_id)
     require_own_cooperative(payment.cooperative_id)
+    if payment.status not in {"Pending Confirmation", "Rejected", "Pending"}:
+        return "Confirmed sale payments cannot be edited.", 400
     sales = own_cooperative_query(Sale).order_by(Sale.sale_date.desc()).all()
 
     if request.method == "POST":
@@ -4705,7 +4711,6 @@ def edit_payment(payment_id):
         payment_date_text = request.form.get("payment_date", "").strip()
         method = request.form.get("method", "").strip()
         reference = request.form.get("reference", "").strip()
-        status = request.form.get("status", "Received").strip()
         notes = request.form.get("notes", "").strip()
 
         if not sale_id or not amount or not payment_date_text:
@@ -4734,14 +4739,11 @@ def edit_payment(payment_id):
         if payment_date_value < sale.sale_date:
             return "Payment date cannot be earlier than the sale date.", 400
 
-        if status not in PAYMENT_ALLOWED_STATUSES:
-            return "Invalid payment status.", 400
-
         already_recorded = sale_recorded_payment_amount(
             sale,
             exclude_payment_id=payment.id,
         )
-        if status != "Reversed" and already_recorded + amount_value > float(sale.total_amount or 0) + 1e-9:
+        if already_recorded + amount_value > float(sale.total_amount or 0) + 1e-9:
             remaining = max(float(sale.total_amount or 0) - already_recorded, 0.0)
             return (
                 f"Payment exceeds the remaining sale balance. "
@@ -4755,9 +4757,44 @@ def edit_payment(payment_id):
         payment.payment_date = payment_date_value
         payment.method = method or None
         payment.reference = reference or None
-        payment.status = status
+        payment.status = "Pending Confirmation"
         payment.notes = notes or None
-        add_audit_log("UPDATE", "Payment", payment.id, f"R{float(payment.amount or 0):.2f}", cooperative_id=payment.cooperative_id)
+        add_audit_log("SALE_PAYMENT_RESUBMITTED", "Payment", payment.id,
+                      f"R{float(payment.amount or 0):.2f} pending Chairperson confirmation",
+                      cooperative_id=payment.cooperative_id)
+        notify_finance_users(
+            payment.cooperative_id, FINANCE_APPROVAL_ROLES,
+            "Sale payment awaiting confirmation",
+            f"{sale.b@app.route("/payments/<int:payment_id>/decision", methods=["POST"])
+@roles_required(*FINANCE_APPROVAL_ROLES)
+def decide_payment(payment_id):
+    """Chairperson confirms or rejects a sale payment before it affects balances."""
+    payment = scoped_get_or_404(Payment, payment_id)
+    require_own_cooperative(payment.cooperative_id)
+    if payment.status != "Pending Confirmation":
+        return "Only sale payments awaiting confirmation can be decided.", 400
+    decision = request.form.get("decision", "").strip().lower()
+    if decision not in {"approve", "reject"}:
+        return "Please choose approve or reject.", 400
+    payment.status = "Confirmed" if decision == "approve" else "Rejected"
+    action = "SALE_PAYMENT_CONFIRMED" if decision == "approve" else "SALE_PAYMENT_REJECTED"
+    add_audit_log(action, "Payment", payment.id,
+                  f"R{float(payment.amount or 0):.2f} {payment.status.lower()} by Chairperson",
+                  cooperative_id=payment.cooperative_id)
+    notify_finance_users(
+        payment.cooperative_id, BUSINESS_RECORD_ROLES,
+        f"Sale payment {payment.status.lower()}",
+        f"{payment.sale.buyer_name}: R{float(payment.amount or 0):.2f} was {payment.status.lower()}.",
+        "SalePaymentDecision", payment.id,
+        "Info" if decision == "approve" else "Warning",
+    )
+    db.session.commit()
+    return redirect(url_for("payments_list"))
+
+
+uyer_name}: R{amount_value:.2f} requires your confirmation.",
+            "SalePaymentApproval", payment.id, "Warning",
+        )
         db.session.commit()
         return redirect(url_for("payments_list"))
 
