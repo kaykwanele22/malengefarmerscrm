@@ -76,6 +76,8 @@ class MembershipRegressionTests(unittest.TestCase):
     def setUp(self):
         c = self.crm
         with c.app.app_context():
+            import phase7
+            phase7.Notification.query.delete()
             c.Contribution.query.delete()
             c.MembershipHistory.query.delete()
             c.Membership.query.delete()
@@ -329,6 +331,39 @@ class MembershipRegressionTests(unittest.TestCase):
             self.assertAlmostEqual(membership.fee_pending, 100.0)
             self.assertAlmostEqual(membership.fee_credit_pending, 50.0)
             self.assertAlmostEqual(membership.fee_outstanding, 0.0)
+            import phase7
+            chair_notice = phase7.Notification.query.filter_by(
+                user_id=self.user_ids["primary_chair"],
+                source_type="MembershipPaymentApproval",
+            ).one()
+            self.assertIn("R150.00", chair_notice.message)
+            self.assertEqual(chair_notice.link, "/contributions")
+            entry_ids = [entry.id for entry in entries]
+
+        self.client = self.crm.app.test_client()
+        self.login_as("primary_chair")
+        for entry_id in entry_ids:
+            response = self.client.post(
+                f"/contributions/{entry_id}/decision",
+                data={"decision": "approve"},
+                follow_redirects=False,
+            )
+            self.assertEqual(response.status_code, 302)
+
+        with self.crm.app.app_context():
+            membership = self.crm.db.session.get(self.crm.Membership, membership_id)
+            entries = self.crm.Contribution.query.filter_by(membership_id=membership_id).all()
+            self.assertTrue(all(entry.status == "Confirmed" for entry in entries))
+            self.assertAlmostEqual(membership.fee_paid_applied, 100.0)
+            self.assertAlmostEqual(membership.fee_credit_confirmed, 50.0)
+            self.assertAlmostEqual(membership.fee_outstanding, 0.0)
+            import phase7
+            treasurer_notices = phase7.Notification.query.filter_by(
+                user_id=self.user_ids["primary_treasurer"],
+                source_type="MembershipPaymentDecision",
+            ).all()
+            self.assertEqual(len(treasurer_notices), 2)
+            self.assertTrue(all("approved" in notice.message for notice in treasurer_notices))
 
     def test_secondary_secretary_cannot_open_primary_membership_history_or_export(self):
         self.register_member()

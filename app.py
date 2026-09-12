@@ -6132,6 +6132,32 @@ def export_memberships():
 # =========================================================
 # ROUTES - CONTRIBUTIONS
 # =========================================================
+def notify_finance_users(cooperative_id, roles, title, message, source_type, source_id, severity="Info"):
+    """Create an immediate, role-scoped finance notification without weakening cooperative boundaries."""
+    try:
+        from phase7 import _upsert_notification
+    except (ImportError, AttributeError):
+        return
+
+    recipients = UserAccess.query.filter(
+        UserAccess.cooperative_id == cooperative_id,
+        UserAccess.status == "Active",
+        UserAccess.role.in_(tuple(roles)),
+    ).all()
+    for recipient in recipients:
+        _upsert_notification(
+            recipient.user_id,
+            cooperative_id,
+            "Finance",
+            title,
+            message,
+            severity,
+            url_for("contributions_list"),
+            source_type=source_type,
+            source_id=source_id,
+        )
+
+
 @app.route("/contributions")
 @roles_required(*FINANCE_VIEW_ROLES)
 def contributions_list():
@@ -6315,6 +6341,23 @@ def add_contribution():
                 to_status=linked_membership.status,
             )
 
+        notification_message = (
+            f"{farmer.fullname} paid R{amount:.2f}. "
+            f"R{fee_allocation:.2f} is awaiting joining-fee approval"
+        )
+        if credit_allocation > 1e-9:
+            notification_message += f" and R{credit_allocation:.2f} is awaiting member-credit approval"
+        notification_message += "."
+        notify_finance_users(
+            access.cooperative_id,
+            FINANCE_APPROVAL_ROLES,
+            "Membership payment awaiting approval",
+            notification_message,
+            "MembershipPaymentApproval",
+            created[0].id,
+            "Warning",
+        )
+
         db.session.commit()
         return redirect(url_for("contributions_list"))
 
@@ -6397,6 +6440,20 @@ def decide_contribution(contribution_id):
         contribution.id,
         details,
         cooperative_id=contribution.cooperative_id,
+    )
+    member_name = contribution.farmer.fullname if contribution.farmer else "Member"
+    decision_label = "approved" if decision == "approve" else "rejected"
+    notify_finance_users(
+        contribution.cooperative_id,
+        FINANCE_RECORD_ROLES,
+        f"Membership payment {decision_label}",
+        (
+            f"The Chairperson {decision_label} R{float(contribution.amount or 0):.2f} "
+            f"for {member_name} ({contribution.category or 'Membership payment'})."
+        ),
+        "MembershipPaymentDecision",
+        contribution.id,
+        "Info" if decision == "approve" else "Warning",
     )
     db.session.commit()
     return redirect(url_for("contributions_list"))
