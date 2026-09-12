@@ -7,6 +7,7 @@ on:
       - crm-hardening-2026-09
       - crm-hardening-2-integrity
       - crm-hardening-3-reconciliation
+      - crm-hardening-4-finance-unification
   pull_request:
     branches:
       - main
