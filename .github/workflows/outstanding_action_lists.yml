@@ -8,6 +8,7 @@ on:
       - tools/apply_outstanding_action_lists.py
       - tools/fix_outstanding_action_tests.py
       - outstanding_action_regression_tests.py
+      - joint_operations_regression_tests.py
       - app.py
       - joint_operations.py
       - primary_production.py
@@ -53,6 +54,6 @@ jobs:
           fi
           git config user.name "Kwanele Nduku"
           git config user.email "kaykwanele226@gmail.com"
-          git add app.py joint_operations.py primary_production.py templates/contribution_form.html templates/payment_form.html templates/primary_production/dashboard.html templates/joint_operations/dashboard.html run_regression_tests.py outstanding_action_regression_tests.py
+          git add app.py joint_operations.py primary_production.py templates/contribution_form.html templates/payment_form.html templates/primary_production/dashboard.html templates/joint_operations/dashboard.html run_regression_tests.py outstanding_action_regression_tests.py joint_operations_regression_tests.py
           git commit -m "Apply outstanding-only action lists"
           git push origin HEAD:outstanding-action-lists
