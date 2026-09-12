@@ -40,7 +40,9 @@ class FinanceAccount(db.Model):
     name=db.Column(db.String(120),nullable=False)
     account_type=db.Column(db.String(40),nullable=False)
     institution=db.Column(db.String(120)); account_last4=db.Column(db.String(4))
-    opening_balance=db.Column(db.Float,nullable=False,default=0); status=db.Column(db.String(20),nullable=False,default="Active",index=True)
+    opening_balance=db.Column(db.Float,nullable=False,default=0)
+    opening_balance_date=db.Column(db.Date,index=True)
+    status=db.Column(db.String(20),nullable=False,default="Active",index=True)
     notes=db.Column(db.Text); created_by_user_id=db.Column(db.Integer,db.ForeignKey("user.id"),nullable=False); created_at=db.Column(db.DateTime,nullable=False,default=utc_now)
     cooperative=db.relationship("Cooperative",foreign_keys=[cooperative_id])
     @property
@@ -109,7 +111,8 @@ def _validate_source(coop_id,source_type,source_id):
     return row
 
 def _confirmed_account_balance_through(account,through_date):
-    total=float(account.opening_balance or 0)
+    # Legacy accounts have no opening_balance_date; preserve their historic behaviour.
+    total=float(account.opening_balance or 0) if not account.opening_balance_date or account.opening_balance_date<=through_date else 0.0
     incoming=LedgerTransaction.query.filter_by(cooperative_id=account.cooperative_id,to_account_id=account.id,status="Confirmed").filter(LedgerTransaction.transaction_date<=through_date).all()
     outgoing=LedgerTransaction.query.filter_by(cooperative_id=account.cooperative_id,from_account_id=account.id,status="Confirmed").filter(LedgerTransaction.transaction_date<=through_date).all()
     total+=sum(float(x.amount or 0) for x in incoming)
@@ -160,9 +163,12 @@ def account_create():
     if not name or account_type not in ACCOUNT_TYPES: return "Account name and valid type are required.",400
     opening=parse_float(request.form.get("opening_balance"),0)
     if opening is None: return "Enter a valid opening balance.",400
+    try: opening_date=parse_date(request.form.get("opening_balance_date"))
+    except ValueError: return "Enter a valid opening balance date.",400
+    if abs(float(opening))>1e-9 and not opening_date: return "Opening balance date is required when the opening balance is not zero.",400
     if FinanceAccount.query.filter(func.lower(FinanceAccount.name)==name.lower(),FinanceAccount.cooperative_id==coop.id).first(): return "An account with this name already exists.",400
-    item=FinanceAccount(cooperative_id=coop.id,name=name[:120],account_type=account_type,institution=request.form.get("institution","").strip()[:120] or None,account_last4=request.form.get("account_last4","").strip()[-4:] or None,opening_balance=float(opening),notes=request.form.get("notes","").strip() or None,created_by_user_id=session["user_id"])
-    db.session.add(item); db.session.flush(); add_audit_log("FINANCE_ACCOUNT_CREATED","FinanceAccount",item.id,item.name,cooperative_id=coop.id); db.session.commit(); flash("Financial account created.","success"); return redirect(url_for("ledger.dashboard"))
+    item=FinanceAccount(cooperative_id=coop.id,name=name[:120],account_type=account_type,institution=request.form.get("institution","").strip()[:120] or None,account_last4=request.form.get("account_last4","").strip()[-4:] or None,opening_balance=float(opening),opening_balance_date=opening_date,notes=request.form.get("notes","").strip() or None,created_by_user_id=session["user_id"])
+    db.session.add(item); db.session.flush(); opening_label=opening_date.isoformat() if opening_date else "legacy/unspecified"; add_audit_log("FINANCE_ACCOUNT_CREATED","FinanceAccount",item.id,f"{item.name}; opening R{float(opening):.2f} as at {opening_label}",cooperative_id=coop.id); db.session.commit(); flash("Financial account created.","success"); return redirect(url_for("ledger.dashboard"))
 
 @bp.route("/finance/transactions",methods=["POST"])
 @roles_required(*FINANCE_RECORD_ROLES)
