@@ -26,9 +26,9 @@
         {% if selected_membership %}<input type="hidden" name="membership_id" value="{{ selected_membership.id }}">{% endif %}
         <div class="form-grid">
             <div class="group full">
-                <label for="farmer_id">Member / Farmer *</label>
+                <label for="farmer_id">Member with Outstanding Contribution *</label>
                 <select id="farmer_id" name="farmer_id" required {% if selected_membership %}disabled style="background:#f7f9f8"{% endif %}>
-                    <option value="">Select person</option>
+                    <option value="">{% if farmers %}Select person{% else %}No outstanding members{% endif %}</option>
                     {% for farmer in farmers %}<option value="{{ farmer.id }}" {% if selected_membership and selected_membership.farmer_id == farmer.id %}selected{% endif %}>{{ farmer.fullname }} — {{ farmer.phone }}</option>{% endfor %}
                 </select>
                 {% if selected_membership %}<input type="hidden" name="farmer_id" value="{{ selected_membership.farmer_id }}">{% endif %}

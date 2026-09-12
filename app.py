@@ -1816,6 +1816,14 @@ def sale_recorded_payment_amount(sale, exclude_payment_id=None):
     return total
 
 
+def sale_recording_remaining_amount(sale, exclude_payment_id=None):
+    """Amount still eligible for a new payment record, including pending receipts."""
+    return max(
+        float(sale.total_amount or 0) - float(sale_recorded_payment_amount(sale, exclude_payment_id=exclude_payment_id) or 0),
+        0.0,
+    )
+
+
 def sale_outstanding_amount(sale):
     """Calculate outstanding amount for a sale."""
     return max(float(sale.total_amount or 0) - float(sale_paid_amount(sale) or 0), 0)
@@ -1853,6 +1861,16 @@ def harvest_available_quantity(harvest, exclude_sale_id=None):
     harvested = float(harvest.quantity or 0)
     sold = harvest_sold_quantity(harvest, exclude_sale_id=exclude_sale_id)
     return max(harvested - sold, 0.0)
+
+
+def sync_harvest_status_after_sale_change(harvest):
+    """Keep sale eligibility aligned with the quantity still available."""
+    if not harvest or harvest.status == "Spoiled":
+        return
+    if harvest_available_quantity(harvest) <= 1e-9:
+        harvest.status = "Sold"
+    elif harvest.status == "Sold":
+        harvest.status = "Available"
 
 
 def crop_harvest_count(crop_id, exclude_harvest_id=None):
@@ -4155,7 +4173,9 @@ def harvests_list():
 @roles_required(*PRIMARY_OPERATION_RECORD_ROLES)
 def add_harvest():
     """Add a harvest."""
-    crops = own_cooperative_query(Crop).order_by(Crop.name.asc()).all()
+    crops = own_cooperative_query(Crop).filter(
+        Crop.status.notin_(["Harvested", "Failed"])
+    ).order_by(Crop.name.asc()).all()
 
     if request.method == "POST":
         crop_id = request.form.get("crop_id", "").strip()
@@ -4193,6 +4213,8 @@ def add_harvest():
 
         if crop.status == "Failed":
             return "A failed crop cannot receive a harvest record. Update the crop status first if harvesting is possible.", 400
+        if crop.status == "Harvested":
+            return "This crop is already marked as fully harvested and is no longer eligible for another harvest record.", 400
 
         if crop.planting_date and harvest_date_value < crop.planting_date:
             return "Harvest date cannot be earlier than the crop planting date.", 400
@@ -4356,7 +4378,10 @@ def sales_list():
 @roles_required(*BUSINESS_RECORD_ROLES)
 def add_sale():
     """Add a sale."""
-    harvests = own_cooperative_query(Harvest).order_by(Harvest.harvest_date.desc()).all()
+    harvests = [
+        harvest for harvest in own_cooperative_query(Harvest).order_by(Harvest.harvest_date.desc()).all()
+        if harvest.status not in {"Sold", "Spoiled"} and harvest_available_quantity(harvest) > 1e-9
+    ]
 
     if request.method == "POST":
         harvest_id = request.form.get("harvest_id", "").strip()
@@ -4383,6 +4408,8 @@ def add_sale():
         harvest = db.session.get(Harvest, harvest_id_value)
         if not harvest or harvest.cooperative_id != own_cooperative_id():
             return "Please select a harvest from your own cooperative.", 400
+        if harvest.status in {"Sold", "Spoiled"}:
+            return "This harvest is already closed for new sales.", 400
 
         if quantity_value <= 0:
             return "Sale quantity must be greater than zero.", 400
@@ -4425,6 +4452,7 @@ def add_sale():
         )
         db.session.add(new_sale)
         db.session.flush()
+        sync_harvest_status_after_sale_change(harvest)
         add_audit_log("CREATE", "Sale", new_sale.id, new_sale.buyer_name, cooperative_id=new_sale.cooperative_id)
         db.session.commit()
         return redirect(url_for("sales_list"))
@@ -4510,6 +4538,7 @@ def edit_sale(sale_id):
         if status == "Cancelled" and sale_paid_amount(sale) > 1e-9:
             return "Reverse received payments before cancelling this sale.", 400
 
+        old_harvest = sale.harvest
         sale.harvest_id = harvest.id
         sale.cooperative_id = own_cooperative_id()
         sale.buyer_name = buyer_name
@@ -4521,6 +4550,10 @@ def edit_sale(sale_id):
         sale.sale_date = sale_date_value
         sale.status = status
         sale.notes = notes or None
+        db.session.flush()
+        sync_harvest_status_after_sale_change(harvest)
+        if old_harvest and old_harvest.id != harvest.id:
+            sync_harvest_status_after_sale_change(old_harvest)
         add_audit_log("UPDATE", "Sale", sale.id, sale.buyer_name, cooperative_id=sale.cooperative_id)
         db.session.commit()
         return redirect(url_for("sales_list"))
@@ -4537,8 +4570,11 @@ def delete_sale(sale_id):
 
     if sale.payments:
         return "This sale cannot be deleted because payments are linked to it.", 400
+    harvest = sale.harvest
     add_audit_log("DELETE", "Sale", sale.id, sale.buyer_name, cooperative_id=sale.cooperative_id)
     db.session.delete(sale)
+    db.session.flush()
+    sync_harvest_status_after_sale_change(harvest)
     db.session.commit()
     return redirect(url_for("sales_list"))
 
@@ -4569,7 +4605,10 @@ def payments_list():
 @roles_required(*BUSINESS_RECORD_ROLES)
 def add_payment():
     """Add a payment."""
-    sales = own_cooperative_query(Sale).order_by(Sale.sale_date.desc()).all()
+    sales = [
+        sale for sale in own_cooperative_query(Sale).order_by(Sale.sale_date.desc()).all()
+        if sale.status != "Cancelled" and sale_recording_remaining_amount(sale) > 1e-9
+    ]
 
     if request.method == "POST":
         sale_id = request.form.get("sale_id", "").strip()
@@ -5786,7 +5825,12 @@ def add_membership():
     if not cooperative or cooperative.cooperative_type != "Primary":
         abort(403)
 
-    farmers = own_cooperative_query(Farmer).order_by(Farmer.fullname.asc()).all()
+    registered_farmer_ids = db.session.query(Membership.farmer_id).filter(
+        Membership.cooperative_id == access.cooperative_id
+    )
+    farmers = own_cooperative_query(Farmer).filter(
+        ~Farmer.id.in_(registered_farmer_ids)
+    ).order_by(Farmer.fullname.asc()).all()
 
     if request.method == "POST":
         farmer_id = parse_int(request.form.get("farmer_id"))
@@ -6109,17 +6153,33 @@ def contributions_list():
 @app.route("/contributions/add", methods=["GET", "POST"])
 @roles_required(*FINANCE_RECORD_ROLES)
 def add_contribution():
-    """Treasurer records money; membership-fee money is linked to the exact member record."""
+    """Treasurer records money; completed member obligations stay out of the action list."""
     access = current_access()
     if access and access.role.startswith("Secondary"):
         return redirect(url_for("jointops.dashboard", year=crm_today().year, _anchor="primary-contributions"))
-    farmers = own_cooperative_query(Farmer).order_by(Farmer.fullname.asc()).all()
+
+    eligible_memberships = Membership.query.filter(
+        Membership.cooperative_id == access.cooperative_id,
+        Membership.status.notin_(["Resigned", "Deceased", "Inactive"]),
+    ).all()
+    eligible_farmer_ids = [
+        membership.farmer_id for membership in eligible_memberships
+        if membership.fee_outstanding > 1e-9
+    ]
+    farmers = own_cooperative_query(Farmer).filter(
+        Farmer.id.in_(eligible_farmer_ids or [-1])
+    ).order_by(Farmer.fullname.asc()).all()
     selected_membership = None
 
     requested_membership_id = parse_int(request.args.get("membership_id"))
     if requested_membership_id:
         candidate = scoped_get(Membership, requested_membership_id)
-        if candidate and candidate.cooperative_id == access.cooperative_id:
+        if (
+            candidate
+            and candidate.cooperative_id == access.cooperative_id
+            and candidate.status not in {"Resigned", "Deceased", "Inactive"}
+            and candidate.fee_outstanding > 1e-9
+        ):
             selected_membership = candidate
 
     if request.method == "POST":

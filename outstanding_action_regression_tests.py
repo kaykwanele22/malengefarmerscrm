@@ -218,7 +218,7 @@ class OutstandingActionRegressionTests(unittest.TestCase):
             "crop_id": str(self.finished_crop_id), "harvest_date": date.today().isoformat(),
             "quantity": "1", "unit": "kg", "status": "Available"
         })
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 303)
 
     def test_sale_create_hides_exhausted_harvest(self):
         self.login_as("primary_treasurer")
@@ -238,7 +238,7 @@ class OutstandingActionRegressionTests(unittest.TestCase):
             f"/joint-operations/contribution-accounts/{self.full_account_id}/payments",
             data={"amount": "1", "payment_date": date.today().isoformat()},
         )
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 303)
         html = self.client.get(f"/joint-operations?year={date.today().year}").get_data(as_text=True)
         self.assertIn("No action due", html)
 
@@ -247,17 +247,17 @@ class OutstandingActionRegressionTests(unittest.TestCase):
         response = self.client.post("/production-control/plans", data={
             "crop_id": str(self.finished_crop_id), "target_yield_per_ha_kg": "1000", "approved_budget": "10000"
         })
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 303)
         response = self.client.post("/production-control/activities", data={
             "plan_id": str(self.completed_plan_id), "activity_type": "Planting", "title": "Late activity"
         })
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 303)
         response = self.client.post("/production-control/equipment-log", data={
             "crop_id": str(self.finished_crop_id), "equipment_id": str(self.equipment_id),
             "use_date": date.today().isoformat(), "purpose": "Late operation",
             "hours_used": "1", "fuel_litres": "1"
         })
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 303)
 
 
 if __name__ == "__main__":

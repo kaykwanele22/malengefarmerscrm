@@ -19,7 +19,7 @@
             <div class="form-group">
                 <label for="sale_id">Sale *</label>
                 <select id="sale_id" name="sale_id" required>
-                    <option value="">Select sale</option>
+                    <option value="">{% if sales %}Select sale{% else %}No sales with an outstanding payment action{% endif %}</option>
                     {% for sale in sales %}
                     <option value="{{ sale.id }}" {% if payment and payment.sale_id == sale.id %}selected{% endif %}>
                         {{ sale.buyer_name }} - Total R {{ "%.2f"|format(sale.total_amount) }} - Outstanding R {{ "%.2f"|format(sale_outstanding_amount(sale)) }} - {{ sale.sale_date }}

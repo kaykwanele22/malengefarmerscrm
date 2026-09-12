@@ -78,7 +78,7 @@
     <section class="p7-card"><div class="p7-card-head"><h2>Prepare / Revise Production Plan</h2></div><div class="p7-card-body">
       <form class="p7-form" method="POST" action="{{ url_for('primaryprod.plan_save') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <div class="p7-field full"><label>Crop</label><select name="crop_id" required><option value="">Select...</option>{% for c in crops %}<option value="{{ c.id }}">{{ c.name }} · {{ c.farm.name if c.farm else 'Farm' }}</option>{% endfor %}</select></div>
+        <div class="p7-field full"><label>Crop</label><select name="crop_id" required><option value="">Select...</option>{% for c in plan_crops %}<option value="{{ c.id }}">{{ c.name }} · {{ c.farm.name if c.farm else 'Farm' }}</option>{% endfor %}</select></div>
         <div class="p7-field"><label>Target Yield (kg/ha)</label><input type="number" step="0.01" min="0" name="target_yield_per_ha_kg" required></div>
         <div class="p7-field"><label>Production Budget (R)</label><input type="number" step="0.01" min="0" name="approved_budget" required></div>
         <div class="p7-field full"><label>Plan Notes</label><textarea name="notes"></textarea></div>
@@ -89,7 +89,7 @@
     <section class="p7-card"><div class="p7-card-head"><h2>Add Field Activity</h2></div><div class="p7-card-body">
       <form class="p7-form" method="POST" action="{{ url_for('primaryprod.activity_add') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <div class="p7-field full"><label>Approved Plan</label><select name="plan_id" required><option value="">Select...</option>{% for p in plans if p.status in ['Approved','Completed'] %}<option value="{{ p.id }}">{{ p.crop.name }} · {{ p.crop.farm.name if p.crop and p.crop.farm else 'Farm' }}</option>{% endfor %}</select></div>
+        <div class="p7-field full"><label>Approved Plan</label><select name="plan_id" required><option value="">Select...</option>{% for p in plans if p.status == 'Approved' %}<option value="{{ p.id }}">{{ p.crop.name }} · {{ p.crop.farm.name if p.crop and p.crop.farm else 'Farm' }}</option>{% endfor %}</select></div>
         <div class="p7-field"><label>Activity Type</label><select name="activity_type" required>{% for t in activity_types %}<option>{{ t }}</option>{% endfor %}</select></div>
         <div class="p7-field"><label>Title</label><input name="title" required placeholder="e.g. First fertilizer application"></div>
         <div class="p7-field"><label>Planned Date</label><input type="date" name="planned_date"></div>
@@ -104,7 +104,7 @@
       <div class="prod-input-note">When an inventory item is selected, stock is reduced automatically and an OUT transaction is written to the Inventory history. The value recorded here is operational usage, not a Treasurer expense.</div>
       <form class="p7-form" method="POST" action="{{ url_for('primaryprod.input_usage_add') }}" style="margin-top:12px">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <div class="p7-field full"><label>Crop</label><select name="crop_id" required><option value="">Select...</option>{% for c in crops %}<option value="{{ c.id }}">{{ c.name }} · {{ c.farm.name if c.farm else 'Farm' }}</option>{% endfor %}</select></div>
+        <div class="p7-field full"><label>Crop</label><select name="crop_id" required><option value="">Select...</option>{% for c in active_crops %}<option value="{{ c.id }}">{{ c.name }} · {{ c.farm.name if c.farm else 'Farm' }}</option>{% endfor %}</select></div>
         <div class="p7-field"><label>Input Type</label><select name="input_type" required><option>Seed</option><option>Fertilizer</option><option>Chemical</option><option>Labour</option><option>Fuel</option><option>Irrigation</option><option>Transport</option><option>Other</option></select></div>
         <div class="p7-field"><label>Activity Date</label><input type="date" name="activity_date" required></div>
         <div class="p7-field full"><label>Description</label><input name="description" required></div>
@@ -120,7 +120,7 @@
   <section class="p7-card"><div class="p7-card-head"><h2>Record Equipment Usage</h2><small>Operational hours and fuel quantity only; finance records the money.</small></div><div class="p7-card-body">
     <form class="p7-form" method="POST" action="{{ url_for('primaryprod.equipment_log_add') }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <div class="p7-field"><label>Crop</label><select name="crop_id" required><option value="">Select...</option>{% for c in crops %}<option value="{{ c.id }}">{{ c.name }} · {{ c.farm.name if c.farm else 'Farm' }}</option>{% endfor %}</select></div>
+      <div class="p7-field"><label>Crop</label><select name="crop_id" required><option value="">Select...</option>{% for c in active_crops %}<option value="{{ c.id }}">{{ c.name }} · {{ c.farm.name if c.farm else 'Farm' }}</option>{% endfor %}</select></div>
       <div class="p7-field"><label>Equipment</label><select name="equipment_id" required><option value="">Select...</option>{% for e in equipment %}<option value="{{ e.id }}">{{ e.name }}</option>{% endfor %}</select></div>
       <div class="p7-field"><label>Use Date</label><input type="date" name="use_date" required></div>
       <div class="p7-field"><label>Responsible Person</label><select name="responsible_user_id"><option value="">Unassigned</option>{% for u in users %}<option value="{{ u.id }}">{{ u.fullname }}</option>{% endfor %}</select></div>

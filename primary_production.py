@@ -254,6 +254,12 @@ def dashboard():
         blocked += crop_blocked
 
     plans = ProductionPlan.query.filter_by(cooperative_id=cooperative.id).order_by(ProductionPlan.updated_at.desc()).all()
+    active_crops = [crop for crop in crops if crop.status not in {"Harvested", "Failed"}]
+    plan_by_crop = {plan.crop_id: plan for plan in plans}
+    plan_crops = [
+        crop for crop in active_crops
+        if crop.id not in plan_by_crop or plan_by_crop[crop.id].status == "Rejected"
+    ]
     activities = ProductionActivity.query.filter_by(cooperative_id=cooperative.id).order_by(
         ProductionActivity.due_date.asc().nullslast(), ProductionActivity.created_at.desc()
     ).limit(60).all()
@@ -280,7 +286,8 @@ def dashboard():
     return render_template(
         "primary_production/dashboard.html",
         rows=rows, plans=plans, activities=activities, equipment_logs=equipment_logs,
-        crops=crops, inventory=inventory, equipment=equipment, users=users, stats=stats,
+        crops=crops, active_crops=active_crops, plan_crops=plan_crops,
+        inventory=inventory, equipment=equipment, users=users, stats=stats,
         activity_types=ACTIVITY_TYPES,
         can_coordinate=access.role in PRIMARY_PRODUCTION_COORDINATOR_ROLES,
         can_approve=access.role in PRIMARY_PRODUCTION_APPROVAL_ROLES,
@@ -295,6 +302,8 @@ def plan_save():
     crop = _own_crop(cooperative.id, crop_id)
     if not crop:
         return "Choose a crop from your Primary cooperative.", 400
+    if crop.status in {"Harvested", "Failed"}:
+        return "This crop is closed and is no longer eligible for a production plan action.", 400
     try:
         target = _non_negative(request.form.get("target_yield_per_ha_kg"), "Target yield per hectare")
         budget = _non_negative(request.form.get("approved_budget"), "Planned production budget")
@@ -308,8 +317,8 @@ def plan_save():
             created_by_user_id=session["user_id"],
         )
         db.session.add(plan)
-    if plan.status == "Approved":
-        return "Approved production plans must be returned/revised through a new approval cycle.", 400
+    if plan.status in {"Pending Approval", "Approved", "Completed"}:
+        return "This production plan already has an active or completed workflow and is no longer available in the create/revise list.", 400
     plan.target_yield_per_ha_kg = target
     plan.approved_budget = budget
     plan.notes = request.form.get("notes", "").strip() or None
@@ -358,8 +367,8 @@ def activity_add():
     access, cooperative = _primary_context()
     plan_id = parse_int(request.form.get("plan_id"))
     plan = _own_plan(cooperative.id, plan_id)
-    if not plan or plan.status not in {"Approved", "Completed"}:
-        return "Choose an approved production plan.", 400
+    if not plan or plan.status != "Approved":
+        return "Choose an approved production plan that is still active.", 400
     activity_type = request.form.get("activity_type", "").strip()
     title = request.form.get("title", "").strip()
     if activity_type not in ACTIVITY_TYPES or not title:
@@ -447,6 +456,8 @@ def input_usage_add():
     crop = _own_crop(cooperative.id, crop_id)
     if not crop:
         return "Choose a crop from your Primary cooperative.", 400
+    if crop.status in {"Harvested", "Failed"}:
+        return "This crop is closed and cannot receive new production input usage.", 400
     description = request.form.get("description", "").strip()
     input_type = request.form.get("input_type", "").strip()
     if not description or not input_type:
@@ -514,6 +525,8 @@ def equipment_log_add():
     equipment = Equipment.query.filter_by(id=equipment_id, cooperative_id=cooperative.id).first()
     if not crop or not equipment or not crop.farm or crop.farm.cooperative_id != cooperative.id:
         return "Crop and equipment must belong to your Primary cooperative.", 400
+    if crop.status in {"Harvested", "Failed"}:
+        return "This crop is closed and cannot receive new equipment usage records.", 400
     purpose = request.form.get("purpose", "").strip()
     if not purpose:
         return "Equipment purpose is required.", 400

@@ -20,6 +20,7 @@ SUITES = [
     "secondary_scope_regression_tests.py",
     "joint_operations_regression_tests.py",
     "primary_production_regression_tests.py",
+    "outstanding_action_regression_tests.py",
 ]
 
 
