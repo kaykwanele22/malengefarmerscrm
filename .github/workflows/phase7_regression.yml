@@ -1,13 +1,14 @@
-name: Phase 7 Regression
+name: CRM Regression Suite
 
 on:
   push:
     branches:
-      - phase7-cooperative-operations-suite
-    paths:
-      - phase7_regression_tests.py
-      - run_regression_tests.py
-      - phase7.py
+      - main
+      - crm-hardening-2026-09
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -15,10 +16,28 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: python -m pip install -r requirements.txt
-      - run: python run_regression_tests.py
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Verify migrations build a fresh database
+        env:
+          SECRET_KEY: github-actions-migration-secret
+          APP_ENV: testing
+          TWO_FACTOR_REQUIRED: 'false'
+          DATABASE_URL: sqlite:////tmp/malenge_migration_test.db
+        run: |
+          rm -f /tmp/malenge_migration_test.db
+          python -m flask --app app db upgrade
+          python -m flask --app app db current
+      - name: Run complete CRM regression suite
+        env:
+          SECRET_KEY: github-actions-regression-secret
+          APP_ENV: testing
+          TWO_FACTOR_REQUIRED: 'false'
+        run: python run_regression_tests.py
