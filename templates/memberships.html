@@ -14,7 +14,7 @@
     .secondary-action,.small-action{background:#fff;border:1px solid #dbe6df;color:#315441}
     .small-action{min-height:34px;padding:0 10px;font-size:10px}
     .info-card{padding:14px 16px;background:#f7faf8;border:1px solid #e0e9e3;border-radius:13px;color:#53665b;font-size:12px;line-height:1.6}
-    .stats-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:14px}
+    .stats-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
     .stat-card{padding:18px;background:#fff;border:1px solid #e2eae4;border-radius:14px}
     .stat-label{display:block;color:#738179;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.45px}
     .stat-value{display:block;margin-top:8px;color:#173b2b;font-size:24px;font-weight:850}
@@ -78,6 +78,8 @@
         <article class="stat-card"><span class="stat-label">Fees Confirmed</span><span class="stat-value">R {{ "{:,.2f}".format(total_paid) }}</span><span class="stat-note">Chairperson-confirmed fee money</span></article>
         <article class="stat-card"><span class="stat-label">Fees Pending</span><span class="stat-value">R {{ "{:,.2f}".format(total_pending) }}</span><span class="stat-note">Recorded by Treasurer, awaiting confirmation</span></article>
         <article class="stat-card"><span class="stat-label">Fees Outstanding</span><span class="stat-value">R {{ "{:,.2f}".format(total_outstanding) }}</span><span class="stat-note">Still to be paid after confirmed + pending receipts</span></article>
+        <article class="stat-card"><span class="stat-label">Member Credit</span><span class="stat-value">R {{ "{:,.2f}".format(total_credit) }}</span><span class="stat-note">Confirmed overpayments held as unallocated member credit</span></article>
+        <article class="stat-card"><span class="stat-label">Credit Pending</span><span class="stat-value">R {{ "{:,.2f}".format(total_credit_pending) }}</span><span class="stat-note">Overpayments awaiting Chairperson confirmation</span></article>
     </section>
 
     <section class="filter-card">
@@ -137,9 +139,11 @@
                     <td>{{ membership.join_date.strftime('%d %b %Y') if membership.join_date else '—' }}</td>
                     <td>
                         <div class="fee-row"><span class="fee-label">Expected</span><span class="fee-value">R {{ "{:,.2f}".format(membership.fee_amount|float) }}</span></div>
-                        <div class="fee-row"><span class="fee-label">Confirmed</span><span class="fee-value fee-paid">R {{ "{:,.2f}".format(membership.fee_paid|float) }}</span></div>
-                        <div class="fee-row"><span class="fee-label">Pending</span><span class="fee-value {% if membership.fee_pending > 0 %}fee-due{% endif %}">R {{ "{:,.2f}".format(membership.fee_pending) }}</span></div>
+                        <div class="fee-row"><span class="fee-label">Confirmed Fee</span><span class="fee-value fee-paid">R {{ "{:,.2f}".format(membership.fee_paid_applied|float) }}</span></div>
+                        <div class="fee-row"><span class="fee-label">Pending Fee</span><span class="fee-value {% if membership.fee_pending > 0 %}fee-due{% endif %}">R {{ "{:,.2f}".format(membership.fee_pending) }}</span></div>
                         <div class="fee-row"><span class="fee-label">Outstanding</span><span class="fee-value {% if membership.fee_outstanding > 0 %}fee-due{% else %}fee-paid{% endif %}">R {{ "{:,.2f}".format(membership.fee_outstanding) }}</span></div>
+                        {% if membership.fee_credit_confirmed > 0 %}<div class="fee-row"><span class="fee-label">Credit</span><span class="fee-value fee-paid">R {{ "{:,.2f}".format(membership.fee_credit_confirmed) }}</span></div>{% endif %}
+                        {% if membership.fee_credit_pending > 0 %}<div class="fee-row"><span class="fee-label">Credit Pending</span><span class="fee-value fee-due">R {{ "{:,.2f}".format(membership.fee_credit_pending) }}</span></div>{% endif %}
                         <span class="meta">{{ membership.fee_status }}</span>
                     </td>
                     <td><span class="status {{ (membership.status or 'inactive')|lower }}">{{ membership.status }}</span></td>

@@ -306,7 +306,7 @@ class MembershipRegressionTests(unittest.TestCase):
             self.assertAlmostEqual(membership.fee_outstanding, 0.0)
             self.assertEqual(membership.fee_status, "Awaiting Confirmation")
 
-    def test_membership_fee_overpayment_is_rejected(self):
+    def test_membership_fee_overpayment_becomes_member_credit(self):
         self.register_member(fee="100")
         with self.crm.app.app_context():
             membership_id = self.crm.Membership.query.one().id
@@ -314,11 +314,21 @@ class MembershipRegressionTests(unittest.TestCase):
         self.login_as("primary_treasurer")
         response = self.client.post("/contributions/add", data={
             "membership_id": str(membership_id), "farmer_id": str(self.farmer_a_id), "amount": "150",
-            "category": "Membership Fee", "contribution_date": date.today().isoformat(), "method": "Cash"
+            "category": "Membership Fee", "contribution_date": date.today().isoformat(), "method": "Cash",
+            "reference": "OVERPAY-150",
         }, follow_redirects=False)
-        self.assertEqual(response.status_code, 303)
+        self.assertEqual(response.status_code, 302)
         with self.crm.app.app_context():
-            self.assertEqual(self.crm.Contribution.query.count(), 0)
+            membership = self.crm.db.session.get(self.crm.Membership, membership_id)
+            entries = self.crm.Contribution.query.filter_by(membership_id=membership_id).order_by(self.crm.Contribution.id.asc()).all()
+            self.assertEqual(len(entries), 2)
+            self.assertEqual(entries[0].category, "Membership Fee")
+            self.assertAlmostEqual(entries[0].amount, 100.0)
+            self.assertEqual(entries[1].category, "Member Credit")
+            self.assertAlmostEqual(entries[1].amount, 50.0)
+            self.assertAlmostEqual(membership.fee_pending, 100.0)
+            self.assertAlmostEqual(membership.fee_credit_pending, 50.0)
+            self.assertAlmostEqual(membership.fee_outstanding, 0.0)
 
     def test_secondary_secretary_cannot_open_primary_membership_history_or_export(self):
         self.register_member()

@@ -735,9 +735,22 @@ def finance_control():
         CooperativeDocument.cooperative_id == coop_id,
         CooperativeDocument.document_type.in_(["Quotation", "Invoice", "Receipt", "Proof of Payment", "Financial Document"]),
     ).order_by(CooperativeDocument.created_at.desc()).limit(10).all()
+    memberships = Membership.query.filter_by(cooperative_id=coop_id).all()
+    member_fee_expected = sum(float(m.fee_amount or 0) for m in memberships)
+    member_fee_confirmed = sum(float(m.fee_paid_applied or 0) for m in memberships)
+    member_fee_pending = sum(float(m.fee_pending or 0) for m in memberships)
+    member_fee_outstanding = sum(float(m.fee_outstanding or 0) for m in memberships)
+    member_credit_confirmed = sum(float(m.fee_credit_confirmed or 0) for m in memberships)
+    member_credit_pending = sum(float(m.fee_credit_pending or 0) for m in memberships)
+    book_balance = _confirmed_book_balance(coop_id)
+    latest_reconciliation = reconciliations[0] if reconciliations else None
     return render_template(
         "phase7/finance_control.html", budget_rows=budget_rows, reconciliations=reconciliations,
-        finance_docs=finance_docs, year=year, book_balance=_confirmed_book_balance(coop_id),
+        finance_docs=finance_docs, year=year, book_balance=book_balance,
+        member_fee_expected=member_fee_expected, member_fee_confirmed=member_fee_confirmed,
+        member_fee_pending=member_fee_pending, member_fee_outstanding=member_fee_outstanding,
+        member_credit_confirmed=member_credit_confirmed, member_credit_pending=member_credit_pending,
+        latest_reconciliation=latest_reconciliation,
         can_record=access.role in FINANCE_RECORD_ROLES, can_approve=access.role in FINANCE_APPROVAL_ROLES,
     )
 

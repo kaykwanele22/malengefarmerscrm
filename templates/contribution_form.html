@@ -17,7 +17,7 @@
     {% if selected_membership %}
     <div class="member-fee-card">
         <strong>{{ selected_membership.member_number }} — {{ selected_membership.farmer.fullname }}</strong><br>
-        Expected: R {{ "{:,.2f}".format(selected_membership.fee_amount|float) }} · Confirmed: R {{ "{:,.2f}".format(selected_membership.fee_paid|float) }} · Pending: R {{ "{:,.2f}".format(selected_membership.fee_pending) }} · Still to pay: <strong>R {{ "{:,.2f}".format(selected_membership.fee_outstanding) }}</strong>. This payment will be linked permanently to the membership history.
+        Expected: R {{ "{:,.2f}".format(selected_membership.fee_amount|float) }} · Confirmed fee: R {{ "{:,.2f}".format(selected_membership.fee_paid_applied|float) }} · Pending fee: R {{ "{:,.2f}".format(selected_membership.fee_pending) }} · Still to pay: <strong>R {{ "{:,.2f}".format(selected_membership.fee_outstanding) }}</strong> · Confirmed credit: <strong>R {{ "{:,.2f}".format(selected_membership.fee_credit_confirmed) }}</strong>. If this receipt is more than the amount still due, the excess is automatically recorded as <strong>Member Credit</strong> instead of being treated as membership fee.
     </div>
     {% endif %}
 
@@ -35,7 +35,7 @@
                 {% if selected_membership %}<input type="hidden" name="farmer_id" value="{{ selected_membership.farmer_id }}">{% endif %}
             </div>
 
-            <div class="group"><label for="amount">Amount (R) *</label><input id="amount" name="amount" type="number" min="0.01" step="0.01" required {% if selected_membership %}max="{{ '%.2f'|format(selected_membership.fee_outstanding) }}" value="{{ '%.2f'|format(selected_membership.fee_outstanding) }}"{% endif %}></div>
+            <div class="group"><label for="amount">Amount Received (R) *</label><input id="amount" name="amount" type="number" min="0.01" step="0.01" required {% if selected_membership %}value="{{ '%.2f'|format(selected_membership.fee_outstanding) }}"{% endif %}><span class="help">You may enter the full amount actually received. Any amount above the membership fee still due will be separated into Member Credit.</span></div>
             <div class="group"><label for="contribution_date">Contribution Date *</label><input id="contribution_date" name="contribution_date" type="date" required></div>
 
             <div class="group">
