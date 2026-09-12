@@ -7,6 +7,7 @@ on:
     paths:
       - tools/apply_actionable_option_filtering.py
       - actionable_options_regression_tests.py
+      - run_regression_tests.py
       - .github/workflows/actionable_options_integrate.yml
 
 permissions:
