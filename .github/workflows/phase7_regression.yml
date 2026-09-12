@@ -6,6 +6,7 @@ on:
       - main
       - crm-hardening-2026-09
       - crm-hardening-2-integrity
+      - crm-hardening-3-reconciliation
   pull_request:
     branches:
       - main
