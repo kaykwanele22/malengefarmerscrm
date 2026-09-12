@@ -4698,7 +4698,7 @@ def add_payment():
 @app.route("/payments/edit/<int:payment_id>", methods=["GET", "POST"])
 @roles_required(*BUSINESS_RECORD_ROLES)
 def edit_payment(payment_id):
-    """Edit a payment."""
+    """Edit and resubmit an unconfirmed or rejected sale payment."""
     payment = scoped_get_or_404(Payment, payment_id)
     require_own_cooperative(payment.cooperative_id)
     if payment.status not in {"Pending Confirmation", "Rejected", "Pending"}:
@@ -4712,45 +4712,29 @@ def edit_payment(payment_id):
         method = request.form.get("method", "").strip()
         reference = request.form.get("reference", "").strip()
         notes = request.form.get("notes", "").strip()
-
         if not sale_id or not amount or not payment_date_text:
             return "Sale, amount and payment date are required.", 400
-
         try:
             sale_id_value = int(sale_id)
             amount_value = float(amount)
             payment_date_value = parse_date(payment_date_text)
         except ValueError:
             return "Please enter valid payment information.", 400
-
         sale = db.session.get(Sale, sale_id_value)
         if not sale or sale.cooperative_id != own_cooperative_id():
             return "Please select a sale from your own cooperative.", 400
-
         if sale.status == "Cancelled":
             return "Payments cannot be assigned to a cancelled sale.", 400
-
         if amount_value <= 0:
             return "Payment amount must be greater than zero.", 400
-
         if not payment_date_value:
             return "A valid payment date is required.", 400
-
         if payment_date_value < sale.sale_date:
             return "Payment date cannot be earlier than the sale date.", 400
-
-        already_recorded = sale_recorded_payment_amount(
-            sale,
-            exclude_payment_id=payment.id,
-        )
+        already_recorded = sale_recorded_payment_amount(sale, exclude_payment_id=payment.id)
         if already_recorded + amount_value > float(sale.total_amount or 0) + 1e-9:
             remaining = max(float(sale.total_amount or 0) - already_recorded, 0.0)
-            return (
-                f"Payment exceeds the remaining sale balance. "
-                f"Maximum payment for this record: R {remaining:.2f}.",
-                400,
-            )
-
+            return f"Payment exceeds the remaining sale balance. Maximum payment for this record: R {remaining:.2f}.", 400
         payment.sale_id = sale.id
         payment.cooperative_id = own_cooperative_id()
         payment.amount = amount_value
@@ -4765,7 +4749,16 @@ def edit_payment(payment_id):
         notify_finance_users(
             payment.cooperative_id, FINANCE_APPROVAL_ROLES,
             "Sale payment awaiting confirmation",
-            f"{sale.b@app.route("/payments/<int:payment_id>/decision", methods=["POST"])
+            f"{sale.buyer_name}: R{amount_value:.2f} requires your confirmation.",
+            "SalePaymentApproval", payment.id, "Warning",
+        )
+        db.session.commit()
+        return redirect(url_for("payments_list"))
+
+    return render_optional_template("payment_form.html", "Edit Payment", payment=payment, sales=sales)
+
+
+@app.route("/payments/<int:payment_id>/decision", methods=["POST"])
 @roles_required(*FINANCE_APPROVAL_ROLES)
 def decide_payment(payment_id):
     """Chairperson confirms or rejects a sale payment before it affects balances."""
@@ -4792,20 +4785,6 @@ def decide_payment(payment_id):
     return redirect(url_for("payments_list"))
 
 
-uyer_name}: R{amount_value:.2f} requires your confirmation.",
-            "SalePaymentApproval", payment.id, "Warning",
-        )
-        db.session.commit()
-        return redirect(url_for("payments_list"))
-
-    return render_optional_template(
-        "payment_form.html",
-        "Edit Payment",
-        payment=payment,
-        sales=sales,
-    )
-
-
 @app.route("/payments/delete/<int:payment_id>", methods=["POST"])
 @roles_required(*BUSINESS_RECORD_ROLES)
 def delete_payment(payment_id):
@@ -4813,8 +4792,8 @@ def delete_payment(payment_id):
     payment = scoped_get_or_404(Payment, payment_id)
     require_own_cooperative(payment.cooperative_id)
 
-    if payment.status not in {"Pending", "Reversed"}:
-        return "Received financial records cannot be deleted. Reverse the payment instead.", 400
+    if payment.status not in {"Pending", "Pending Confirmation", "Rejected", "Reversed"}:
+        return "Confirmed financial records cannot be deleted.", 400
 
     add_audit_log("DELETE", "Payment", payment.id, f"R{float(payment.amount or 0):.2f}", cooperative_id=payment.cooperative_id)
     db.session.delete(payment)
