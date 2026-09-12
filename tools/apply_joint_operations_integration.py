@@ -1,4 +1,4 @@
-"""Apply the small integration edits required by joint_operations.py.
+"""Apply the integration edits required by joint_operations.py.
 
 The feature itself lives in its own module. This script keeps changes to the
 large legacy app/template files deterministic and reviewable in CI.
@@ -36,6 +36,23 @@ def patch_app():
         "register_joint_operations(app)\n"
     )
     text = replace_once(text, old, new, "app registration")
+
+    old = '''def contributions_list():\n    """List contributions within the user's visibility scope."""\n'''
+    new = old + '''    access = current_access()\n    if access and access.role.startswith("Secondary"):\n        return redirect(url_for("jointops.dashboard", year=crm_today().year, _anchor="primary-contributions"))\n'''
+    text = replace_once(text, old, new, "secondary contribution list redirect")
+
+    old = '''def add_contribution():\n    """Treasurer records money; membership-fee money is linked to the exact member record."""\n    access = current_access()\n'''
+    new = '''def add_contribution():\n    """Treasurer records money; membership-fee money is linked to the exact member record."""\n    access = current_access()\n    if access and access.role.startswith("Secondary"):\n        return redirect(url_for("jointops.dashboard", year=crm_today().year, _anchor="primary-contributions"))\n'''
+    text = replace_once(text, old, new, "secondary contribution add redirect")
+
+    old = '''def decide_contribution(contribution_id):\n    """Chairperson confirms or rejects a Treasurer-recorded contribution."""\n    contribution = scoped_get_or_404(Contribution, contribution_id)\n'''
+    new = '''def decide_contribution(contribution_id):\n    """Chairperson confirms or rejects a Treasurer-recorded contribution."""\n    access = current_access()\n    if access and access.role.startswith("Secondary"):\n        abort(403)\n    contribution = scoped_get_or_404(Contribution, contribution_id)\n'''
+    text = replace_once(text, old, new, "secondary legacy contribution approval block")
+
+    old = '''def delete_contribution(contribution_id):\n    """Treasurer may remove only an unconfirmed/rejected mistaken record."""\n    contribution = scoped_get_or_404(Contribution, contribution_id)\n'''
+    new = '''def delete_contribution(contribution_id):\n    """Treasurer may remove only an unconfirmed/rejected mistaken record."""\n    access = current_access()\n    if access and access.role.startswith("Secondary"):\n        abort(403)\n    contribution = scoped_get_or_404(Contribution, contribution_id)\n'''
+    text = replace_once(text, old, new, "secondary legacy contribution delete block")
+
     return write_if_changed(path, text)
 
 
@@ -45,6 +62,48 @@ def patch_sidebar():
     old = '''                {% if is_leadership or is_treasurer %}\n                <a href="{{ url_for('phase7.finance_control') }}"\n                   class="nav-item {% if request.endpoint and request.endpoint.startswith('phase7.') and request.endpoint in ['phase7.finance_control','phase7.budget_create','phase7.budget_decision','phase7.reconciliation_create','phase7.reconciliation_review'] %}active{% endif %}">\n                    <span>🏦</span><span>Finance Control</span>\n                </a>\n                {% endif %}\n'''
     new = old + '''\n                {% if is_secondary %}\n                <a href="{{ url_for('jointops.dashboard') }}"\n                   class="nav-item {% if request.endpoint and request.endpoint.startswith('jointops.') %}active{% endif %}">\n                    <span>🤝</span><span>Joint Operations</span>\n                </a>\n                {% endif %}\n'''
     text = replace_once(text, old, new, "secondary Joint Operations sidebar link")
+
+    treasurer_old = '''                    <a href="{{ url_for('contributions_list') }}"\n                       class="nav-item {% if request.endpoint in [\n                           'contributions_list',\n                           'add_contribution',\n                           'delete_contribution'\n                       ] %}active{% endif %}">\n                        <span>🏦</span>\n                        <span>Contributions</span>\n                    </a>\n'''
+    treasurer_new = '''                    {% if is_secondary %}\n                    <a href="{{ url_for('jointops.dashboard', _anchor='primary-contributions') }}"\n                       class="nav-item {% if request.endpoint and request.endpoint.startswith('jointops.') %}active{% endif %}">\n                        <span>🏦</span>\n                        <span>Primary Contributions</span>\n                    </a>\n                    {% else %}\n                    <a href="{{ url_for('contributions_list') }}"\n                       class="nav-item {% if request.endpoint in [\n                           'contributions_list',\n                           'add_contribution',\n                           'delete_contribution'\n                       ] %}active{% endif %}">\n                        <span>🏦</span>\n                        <span>Contributions</span>\n                    </a>\n                    {% endif %}\n'''
+    text = replace_once(text, treasurer_old, treasurer_new, "secondary treasurer Primary Contributions link")
+
+    leadership_old = '''                    <a href="{{ url_for('contributions_list') }}"\n                       class="nav-item {% if request.endpoint in [\n                           'contributions_list',\n                           'decide_contribution'\n                       ] %}active{% endif %}">\n                        <span>🏦</span>\n                        <span>Contributions</span>\n                    </a>\n'''
+    leadership_new = '''                    {% if is_secondary %}\n                    <a href="{{ url_for('jointops.dashboard', _anchor='primary-contributions') }}"\n                       class="nav-item {% if request.endpoint and request.endpoint.startswith('jointops.') %}active{% endif %}">\n                        <span>🏦</span>\n                        <span>Primary Contributions</span>\n                    </a>\n                    {% else %}\n                    <a href="{{ url_for('contributions_list') }}"\n                       class="nav-item {% if request.endpoint in [\n                           'contributions_list',\n                           'decide_contribution'\n                       ] %}active{% endif %}">\n                        <span>🏦</span>\n                        <span>Contributions</span>\n                    </a>\n                    {% endif %}\n'''
+    text = replace_once(text, leadership_old, leadership_new, "secondary chair Primary Contributions link")
+    return write_if_changed(path, text)
+
+
+def patch_dashboard():
+    path = ROOT / "templates" / "dashboard.html"
+    text = path.read_text(encoding="utf-8")
+    old = '''            {% if is_admin %}<a href="{{ url_for('users_list') }}" class="dash-primary-btn">Manage Users &amp; Access</a>\n            {% elif is_chairperson and own_pending_finance > 0 %}<a href="{{ url_for('contributions_list') }}" class="dash-primary-btn">Review {{ own_pending_finance }} Pending Approvals</a>\n            {% elif is_treasurer %}<a href="{{ url_for('add_contribution') }}" class="dash-primary-btn">Record Money</a>\n'''
+    new = '''            {% if is_admin %}<a href="{{ url_for('users_list') }}" class="dash-primary-btn">Manage Users &amp; Access</a>\n            {% elif is_secondary and is_chairperson %}<a href="{{ url_for('jointops.dashboard', _anchor='primary-contributions') }}" class="dash-primary-btn">Review Joint Finance</a>\n            {% elif is_chairperson and own_pending_finance > 0 %}<a href="{{ url_for('contributions_list') }}" class="dash-primary-btn">Review {{ own_pending_finance }} Pending Approvals</a>\n            {% elif is_secondary and is_treasurer %}<a href="{{ url_for('jointops.dashboard', _anchor='primary-contributions') }}" class="dash-primary-btn">Record Primary Contribution</a>\n            {% elif is_treasurer %}<a href="{{ url_for('add_contribution') }}" class="dash-primary-btn">Record Money</a>\n'''
+    text = replace_once(text, old, new, "secondary contribution dashboard actions")
+    return write_if_changed(path, text)
+
+
+def patch_joint_dashboard():
+    path = ROOT / "templates" / "joint_operations" / "dashboard.html"
+    text = path.read_text(encoding="utf-8")
+    old = '''    <section class="p7-card">\n        <div class="p7-card-head"><h2>Primary Cooperative Contributions to MFPSU</h2>'''
+    new = '''    <section class="p7-card" id="primary-contributions">\n        <div class="p7-card-head"><h2>Primary Cooperative Contributions to MFPSU</h2>'''
+    text = replace_once(text, old, new, "Primary contributions anchor")
+    return write_if_changed(path, text)
+
+
+def patch_joint_tests():
+    path = ROOT / "joint_operations_regression_tests.py"
+    text = path.read_text(encoding="utf-8")
+    old = '''        cls._make_user("primary_chair", "Primary Chairperson", siy.id)\n'''
+    new = old + '''        cls._make_user("primary_treasurer", "Primary Treasurer", siy.id)\n'''
+    text = replace_once(text, old, new, "Primary Treasurer regression user")
+
+    marker = '''    def test_treasurer_records_primary_contribution_and_chair_confirms(self):\n'''
+    test = '''    def test_secondary_uses_cooperative_contributions_not_farmer_contributions(self):\n        self.login_as("sec_treasurer")\n        response = self.client.get("/contributions")\n        self.assertEqual(response.status_code, 302)\n        self.assertIn("/joint-operations", response.headers.get("Location", ""))\n        self.assertIn("#primary-contributions", response.headers.get("Location", ""))\n\n        response = self.client.get("/contributions/add")\n        self.assertEqual(response.status_code, 302)\n        self.assertIn("#primary-contributions", response.headers.get("Location", ""))\n\n        dashboard = self.client.get("/dashboard").get_data(as_text=True)\n        self.assertIn("Record Primary Contribution", dashboard)\n        self.assertNotIn('href="/contributions/add" class="dash-primary-btn">Record Money', dashboard)\n\n        self.login_as("primary_treasurer")\n        response = self.client.get("/contributions/add")\n        self.assertEqual(response.status_code, 200)\n        page = response.get_data(as_text=True)\n        self.assertIn("Member / Farmer", page)\n        self.assertNotIn("Primary Cooperative Contributions to MFPSU", page)\n\n'''
+    if test not in text:
+        if marker not in text:
+            raise RuntimeError("Could not find joint contribution test marker")
+        text = text.replace(marker, test + marker, 1)
     return write_if_changed(path, text)
 
 
@@ -110,6 +169,9 @@ def main():
     for name, fn in [
         ("app.py", patch_app),
         ("templates/base.html", patch_sidebar),
+        ("templates/dashboard.html", patch_dashboard),
+        ("templates/joint_operations/dashboard.html", patch_joint_dashboard),
+        ("joint_operations_regression_tests.py", patch_joint_tests),
         ("run_regression_tests.py", patch_regression_runner),
         ("phase7.py", patch_phase7),
         ("templates/phase7/finance_control.html", patch_finance_copy),
