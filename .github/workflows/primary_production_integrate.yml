@@ -1,0 +1,54 @@
+name: Primary Production Command Integration
+
+on:
+  push:
+    branches:
+      - primary-production-command-centre
+    paths:
+      - primary_production.py
+      - primary_production_regression_tests.py
+      - templates/primary_production/**
+      - migrations/versions/e9f0a1b2c333_primary_production_command_centre.py
+      - tools/apply_primary_production_integration.py
+      - app.py
+      - phase7.py
+      - templates/base.html
+      - run_regression_tests.py
+      - .github/workflows/primary_production_integrate.yml
+
+permissions:
+  contents: write
+
+jobs:
+  integrate-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: primary-production-command-centre
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements.txt
+      - name: Apply integration
+        run: python tools/apply_primary_production_integration.py
+      - name: Compile source
+        run: python -m compileall -q app.py phase7.py primary_production.py
+      - name: Focused production tests
+        run: python primary_production_regression_tests.py
+      - name: Full regression suite
+        run: python run_regression_tests.py
+      - name: Whitespace check
+        run: git diff --check
+      - name: Commit integrated source
+        run: |
+          if git diff --quiet; then
+            echo "No integration changes to commit."
+            exit 0
+          fi
+          git config user.name "Kwanele Nduku"
+          git config user.email "kaykwanele226@gmail.com"
+          git add app.py phase7.py templates/base.html
+          git commit -m "Integrate Primary production command centre"
+          git push origin HEAD:primary-production-command-centre
