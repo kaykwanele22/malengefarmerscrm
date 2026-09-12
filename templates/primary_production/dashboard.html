@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% block title %}Production Command Centre | Malenge Farmers CRM{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/phase7.css') }}">
+<style>
+.prod-role-note{padding:14px 16px;border-radius:12px;background:#f5f8f6;border:1px solid #dfe9e2;color:#43594b;font-size:12px;line-height:1.55}
+.prod-role-note strong{color:#173b2b}.prod-grid-5{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}.prod-grid-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.prod-progress{height:8px;background:#edf2ee;border-radius:999px;overflow:hidden}.prod-progress span{display:block;height:100%;background:#2e7d4f}.prod-alert{color:#a43b3b;font-weight:800}.prod-muted{color:#7c8a82;font-size:10px}.prod-actions{display:flex;gap:7px;flex-wrap:wrap}.prod-actions form{margin:0}.prod-input-note{padding:10px 12px;border-radius:9px;background:#fffaf0;border:1px solid #eadfbf;color:#705d2a;font-size:11px;line-height:1.5}.prod-section-anchor{scroll-margin-top:90px}@media(max-width:1100px){.prod-grid-5{grid-template-columns:repeat(2,minmax(0,1fr))}.prod-grid-3{grid-template-columns:1fr}}@media(max-width:650px){.prod-grid-5{grid-template-columns:1fr}}
+</style>
+{% endblock %}
+{% block content %}
+<div class="p7-page">
+  <div class="p7-head">
+    <div>
+      <span class="p7-eyebrow">Primary Cooperative Operations</span>
+      <h1>Production Command Centre</h1>
+      <p>Plan crops, coordinate field work, control input usage, monitor production performance and verify completed milestones.</p>
+    </div>
+    <div class="p7-actions">
+      <a class="p7-btn" href="{{ url_for('crops_list') }}">Crops</a>
+      <a class="p7-btn" href="{{ url_for('harvests_list') }}">Harvests</a>
+      <a class="p7-btn" href="{{ url_for('inventory_list') }}">Inventory</a>
+      <a class="p7-btn" href="{{ url_for('equipment_list') }}">Equipment</a>
+    </div>
+  </div>
+
+  {% if can_approve %}
+  <div class="prod-role-note"><strong>Chairperson oversight mode.</strong> You approve production plans and independently verify completed activities. Routine field recording is handled by the Primary Vice Chairperson.</div>
+  {% elif can_coordinate %}
+  <div class="prod-role-note"><strong>Vice Chairperson coordination mode.</strong> You prepare production plans, record field activities, issue production inputs and log equipment usage. Chairperson approval and verification stay separate.</div>
+  {% endif %}
+
+  <div class="p7-grid-4">
+    <div class="p7-stat"><span>Active Crops</span><strong>{{ stats.active_crops }}</strong><small>{{ '%.2f'|format(stats.total_area) }} ha under recorded crops</small></div>
+    <div class="p7-stat"><span>Approved Production Budget</span><strong>R {{ '{:,.2f}'.format(stats.approved_budget|float) }}</strong><small>Approved production plans</small></div>
+    <div class="p7-stat"><span>Operational Input Cost</span><strong>R {{ '{:,.2f}'.format(stats.operational_cost|float) }}</strong><small>Usage-based production estimate</small></div>
+    <div class="p7-stat"><span>Confirmed Finance Cost</span><strong>R {{ '{:,.2f}'.format(stats.confirmed_finance_cost|float) }}</strong><small>Confirmed farm expenses in crop periods</small></div>
+  </div>
+  <div class="prod-grid-5">
+    <div class="p7-stat"><span>Target Production</span><strong>{{ '{:,.1f}'.format((stats.target_kg|float)/1000) }} t</strong><small>Approved/drafted targets combined</small></div>
+    <div class="p7-stat"><span>Harvested</span><strong>{{ '{:,.1f}'.format((stats.harvested_kg|float)/1000) }} t</strong><small>kg + tonnes converted</small></div>
+    <div class="p7-stat {% if stats.overdue %}warning{% endif %}"><span>Overdue Activities</span><strong>{{ stats.overdue }}</strong><small>Needs follow-up</small></div>
+    <div class="p7-stat {% if stats.blocked %}warning{% endif %}"><span>Blocked Activities</span><strong>{{ stats.blocked }}</strong><small>Production risks</small></div>
+    <div class="p7-stat"><span>Control Principle</span><strong>2 Roles</strong><small>Coordinator records · Chair verifies</small></div>
+  </div>
+
+  <section class="p7-card prod-section-anchor" id="plans">
+    <div class="p7-card-head"><h2>Production Programmes</h2><small>Crop plan, target, cost, harvest and activity progress</small></div>
+    <div class="p7-table-wrap"><table class="p7-table">
+      <thead><tr><th>Crop / Farm</th><th>Area</th><th>Plan</th><th>Target</th><th>Operational Cost</th><th>Confirmed Finance</th><th>Harvest</th><th>Progress</th><th>Alerts</th><th>Action</th></tr></thead>
+      <tbody>
+      {% for row in rows %}
+      <tr>
+        <td><strong>{{ row.crop.name }}</strong><br><small>{{ row.crop.farm.name if row.crop.farm else '—' }} · {{ row.crop.status }}</small></td>
+        <td>{{ row.crop.area_planted or 0 }} ha</td>
+        <td>{% if row.plan %}<span class="p7-badge {% if row.plan.status=='Pending Approval' %}warning{% elif row.plan.status=='Rejected' %}danger{% endif %}">{{ row.plan.status }}</span><br><small>R {{ '{:,.2f}'.format(row.plan.approved_budget|float) }}</small>{% else %}<span class="prod-muted">No plan</span>{% endif %}</td>
+        <td>{% if row.plan %}{{ '{:,.0f}'.format(row.plan.target_yield_per_ha_kg|float) }} kg/ha<br><small>{{ '{:,.1f}'.format((row.target_kg|float)/1000) }} t total</small>{% else %}—{% endif %}</td>
+        <td>R {{ '{:,.2f}'.format(row.operational_cost|float) }}</td>
+        <td>R {{ '{:,.2f}'.format(row.confirmed_finance_cost|float) }}</td>
+        <td>{{ '{:,.1f}'.format((row.harvested_kg|float)/1000) }} t{% if row.other_yield %}<br><small>{% for unit, qty in row.other_yield.items() %}{{ '%g'|format(qty) }} {{ unit }}{% if not loop.last %}, {% endif %}{% endfor %}</small>{% endif %}</td>
+        <td><div class="prod-progress"><span style="width:{{ row.progress }}%"></span></div><small>{{ row.progress }}%</small></td>
+        <td>{% if row.overdue %}<span class="prod-alert">{{ row.overdue }} overdue</span><br>{% endif %}{% if row.blocked %}<span class="prod-alert">{{ row.blocked }} blocked</span>{% endif %}{% if not row.overdue and not row.blocked %}<span class="prod-muted">Clear</span>{% endif %}</td>
+        <td>
+          {% if can_approve and row.plan and row.plan.status == 'Pending Approval' %}
+          <div class="prod-actions">
+            <form method="POST" action="{{ url_for('primaryprod.plan_decision', plan_id=row.plan.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="p7-btn primary" name="decision" value="approve">Approve</button></form>
+            <form method="POST" action="{{ url_for('primaryprod.plan_decision', plan_id=row.plan.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="p7-btn danger" name="decision" value="reject">Reject</button></form>
+          </div>
+          {% else %}—{% endif %}
+        </td>
+      </tr>
+      {% else %}<tr><td colspan="10"><div class="p7-empty">No crop records yet. Add crops first, then build production plans here.</div></td></tr>{% endfor %}
+      </tbody>
+    </table></div>
+  </section>
+
+  {% if can_coordinate %}
+  <div class="prod-grid-3 prod-section-anchor" id="coordinate">
+    <section class="p7-card"><div class="p7-card-head"><h2>Prepare / Revise Production Plan</h2></div><div class="p7-card-body">
+      <form class="p7-form" method="POST" action="{{ url_for('primaryprod.plan_save') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="p7-field full"><label>Crop</label><select name="crop_id" required><option value="">Select...</option>{% for c in crops %}<option value="{{ c.id }}">{{ c.name }} · {{ c.farm.name if c.farm else 'Farm' }}</option>{% endfor %}</select></div>
+        <div class="p7-field"><label>Target Yield (kg/ha)</label><input type="number" step="0.01" min="0" name="target_yield_per_ha_kg" required></div>
+        <div class="p7-field"><label>Production Budget (R)</label><input type="number" step="0.01" min="0" name="approved_budget" required></div>
+        <div class="p7-field full"><label>Plan Notes</label><textarea name="notes"></textarea></div>
+        <div class="p7-field full"><button class="p7-btn primary">Submit to Chairperson</button></div>
+      </form>
+    </div></section>
+
+    <section class="p7-card"><div class="p7-card-head"><h2>Add Field Activity</h2></div><div class="p7-card-body">
+      <form class="p7-form" method="POST" action="{{ url_for('primaryprod.activity_add') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="p7-field full"><label>Approved Plan</label><select name="plan_id" required><option value="">Select...</option>{% for p in plans if p.status in ['Approved','Completed'] %}<option value="{{ p.id }}">{{ p.crop.name }} · {{ p.crop.farm.name if p.crop and p.crop.farm else 'Farm' }}</option>{% endfor %}</select></div>
+        <div class="p7-field"><label>Activity Type</label><select name="activity_type" required>{% for t in activity_types %}<option>{{ t }}</option>{% endfor %}</select></div>
+        <div class="p7-field"><label>Title</label><input name="title" required placeholder="e.g. First fertilizer application"></div>
+        <div class="p7-field"><label>Planned Date</label><input type="date" name="planned_date"></div>
+        <div class="p7-field"><label>Due Date</label><input type="date" name="due_date"></div>
+        <div class="p7-field full"><label>Responsible Person</label><select name="responsible_user_id"><option value="">Unassigned</option>{% for u in users %}<option value="{{ u.id }}">{{ u.fullname }}</option>{% endfor %}</select></div>
+        <div class="p7-field full"><label>Notes</label><textarea name="notes"></textarea></div>
+        <div class="p7-field full"><button class="p7-btn primary">Add Activity</button></div>
+      </form>
+    </div></section>
+
+    <section class="p7-card"><div class="p7-card-head"><h2>Issue Production Input</h2></div><div class="p7-card-body">
+      <div class="prod-input-note">When an inventory item is selected, stock is reduced automatically and an OUT transaction is written to the Inventory history. The value recorded here is operational usage, not a Treasurer expense.</div>
+      <form class="p7-form" method="POST" action="{{ url_for('primaryprod.input_usage_add') }}" style="margin-top:12px">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="p7-field full"><label>Crop</label><select name="crop_id" required><option value="">Select...</option>{% for c in crops %}<option value="{{ c.id }}">{{ c.name }} · {{ c.farm.name if c.farm else 'Farm' }}</option>{% endfor %}</select></div>
+        <div class="p7-field"><label>Input Type</label><select name="input_type" required><option>Seed</option><option>Fertilizer</option><option>Chemical</option><option>Labour</option><option>Fuel</option><option>Irrigation</option><option>Transport</option><option>Other</option></select></div>
+        <div class="p7-field"><label>Activity Date</label><input type="date" name="activity_date" required></div>
+        <div class="p7-field full"><label>Description</label><input name="description" required></div>
+        <div class="p7-field full"><label>Inventory Item (optional)</label><select name="inventory_item_id"><option value="">No stock item</option>{% for i in inventory %}<option value="{{ i.id }}">{{ i.name }} · {{ '%g'|format(i.quantity_on_hand or 0) }} {{ i.unit }}</option>{% endfor %}</select></div>
+        <div class="p7-field"><label>Quantity</label><input type="number" name="quantity" step="0.01" min="0.01" required></div>
+        <div class="p7-field"><label>Unit</label><input name="unit" placeholder="bags, kg, litres, hours"></div>
+        <div class="p7-field full"><label>Operational Unit Cost Estimate (R)</label><input type="number" name="unit_cost" step="0.01" min="0" value="0"><small>Ignored when linked inventory has its own unit cost.</small></div>
+        <div class="p7-field full"><button class="p7-btn primary">Record Input Usage</button></div>
+      </form>
+    </div></section>
+  </div>
+
+  <section class="p7-card"><div class="p7-card-head"><h2>Record Equipment Usage</h2><small>Operational hours and fuel quantity only; finance records the money.</small></div><div class="p7-card-body">
+    <form class="p7-form" method="POST" action="{{ url_for('primaryprod.equipment_log_add') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="p7-field"><label>Crop</label><select name="crop_id" required><option value="">Select...</option>{% for c in crops %}<option value="{{ c.id }}">{{ c.name }} · {{ c.farm.name if c.farm else 'Farm' }}</option>{% endfor %}</select></div>
+      <div class="p7-field"><label>Equipment</label><select name="equipment_id" required><option value="">Select...</option>{% for e in equipment %}<option value="{{ e.id }}">{{ e.name }}</option>{% endfor %}</select></div>
+      <div class="p7-field"><label>Use Date</label><input type="date" name="use_date" required></div>
+      <div class="p7-field"><label>Responsible Person</label><select name="responsible_user_id"><option value="">Unassigned</option>{% for u in users %}<option value="{{ u.id }}">{{ u.fullname }}</option>{% endfor %}</select></div>
+      <div class="p7-field full"><label>Purpose</label><input name="purpose" required placeholder="Ploughing, planting, spraying, harvesting..."></div>
+      <div class="p7-field"><label>Hours Used</label><input type="number" step="0.1" min="0" name="hours_used" value="0"></div>
+      <div class="p7-field"><label>Fuel Used (litres)</label><input type="number" step="0.1" min="0" name="fuel_litres" value="0"></div>
+      <div class="p7-field full"><label>Notes</label><textarea name="notes"></textarea></div>
+      <div class="p7-field full"><button class="p7-btn primary">Record Equipment Usage</button></div>
+    </form>
+  </div></section>
+  {% endif %}
+
+  <section class="p7-card prod-section-anchor" id="activities">
+    <div class="p7-card-head"><h2>Production Activity Register</h2><small>Plan → work → evidence → Chairperson verification</small></div>
+    <div class="p7-table-wrap"><table class="p7-table">
+      <thead><tr><th>Crop</th><th>Activity</th><th>Responsible</th><th>Due</th><th>Status</th><th>Evidence / Notes</th><th>Action</th></tr></thead>
+      <tbody>
+      {% for a in activities %}
+      <tr>
+        <td>{{ a.plan.crop.name if a.plan and a.plan.crop else '—' }}</td>
+        <td><strong>{{ a.title }}</strong><br><small>{{ a.activity_type }}</small></td>
+        <td>{{ a.responsible_user.fullname if a.responsible_user else 'Unassigned' }}</td>
+        <td>{% if a.due_date %}{{ a.due_date.strftime('%d %b %Y') }}{% else %}—{% endif %}{% if a.is_overdue %}<br><span class="prod-alert">Overdue</span>{% endif %}</td>
+        <td><span class="p7-badge {% if a.status=='Blocked' %}danger{% elif a.status=='Completed' %}warning{% endif %}">{{ a.status }}</span></td>
+        <td>{{ a.evidence_reference or a.notes or '—' }}</td>
+        <td>
+          {% if can_coordinate and a.status != 'Verified' %}
+          <details><summary class="p7-btn">Update</summary><form class="p7-form" method="POST" action="{{ url_for('primaryprod.activity_progress', activity_id=a.id) }}" style="margin-top:8px;min-width:260px"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="p7-field"><label>Status</label><select name="status"><option>Planned</option><option>In Progress</option><option>Blocked</option><option>Completed</option></select></div><div class="p7-field"><label>Evidence Reference</label><input name="evidence_reference" placeholder="Photo ref, document ref, delivery note..."></div><div class="p7-field"><label>Notes</label><textarea name="notes"></textarea></div><button class="p7-btn primary">Save Progress</button></form></details>
+          {% elif can_approve and a.status == 'Completed' %}
+          <form method="POST" action="{{ url_for('primaryprod.activity_verify', activity_id=a.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="p7-btn primary">Verify Completion</button></form>
+          {% else %}—{% endif %}
+        </td>
+      </tr>
+      {% else %}<tr><td colspan="7"><div class="p7-empty">No production activities recorded yet.</div></td></tr>{% endfor %}
+      </tbody>
+    </table></div>
+  </section>
+
+  <section class="p7-card"><div class="p7-card-head"><h2>Recent Equipment Operations</h2><small>No financial fuel cost is created here.</small></div><div class="p7-table-wrap"><table class="p7-table"><thead><tr><th>Date</th><th>Crop / Farm</th><th>Equipment</th><th>Purpose</th><th>Hours</th><th>Fuel</th><th>Responsible</th></tr></thead><tbody>{% for log in equipment_logs %}<tr><td>{{ log.use_date.strftime('%d %b %Y') }}</td><td>{{ log.crop.name if log.crop else '—' }}<br><small>{{ log.farm.name if log.farm else '—' }}</small></td><td>{{ log.equipment.name if log.equipment else '—' }}</td><td>{{ log.purpose }}</td><td>{{ '%g'|format(log.hours_used or 0) }}</td><td>{{ '%g'|format(log.fuel_litres or 0) }} L</td><td>{{ log.responsible_user.fullname if log.responsible_user else '—' }}</td></tr>{% else %}<tr><td colspan="7"><div class="p7-empty">No production equipment logs yet.</div></td></tr>{% endfor %}</tbody></table></div></section>
+</div>
+{% endblock %}
