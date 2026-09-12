@@ -58,6 +58,7 @@ jobs:
           - primary_production_regression_tests.py
           - joint_operations_regression_tests.py
           - actionable_options_regression_tests.py
+          - ledger_regression_tests.py
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
