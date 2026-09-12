@@ -65,14 +65,35 @@ class LedgerTransaction(db.Model):
     cooperative=db.relationship("Cooperative",foreign_keys=[cooperative_id]); from_account=db.relationship("FinanceAccount",foreign_keys=[from_account_id],backref=db.backref("outgoing_transactions",lazy=True)); to_account=db.relationship("FinanceAccount",foreign_keys=[to_account_id],backref=db.backref("incoming_transactions",lazy=True))
     recorded_by=db.relationship("User",foreign_keys=[recorded_by_user_id]); decided_by=db.relationship("User",foreign_keys=[decided_by_user_id])
 
+class FinanceReconciliation(db.Model):
+    __tablename__="finance_reconciliation"
+    __table_args__=(db.UniqueConstraint("cooperative_id","finance_account_id","statement_date",name="uq_finance_reconciliation_scope"),)
+    id=db.Column(db.Integer,primary_key=True)
+    cooperative_id=db.Column(db.Integer,db.ForeignKey("cooperative.id"),nullable=False,index=True)
+    finance_account_id=db.Column(db.Integer,db.ForeignKey("finance_account.id"),nullable=False,index=True)
+    statement_date=db.Column(db.Date,nullable=False,index=True)
+    statement_balance=db.Column(db.Float,nullable=False)
+    book_balance=db.Column(db.Float,nullable=False)
+    difference=db.Column(db.Float,nullable=False)
+    status=db.Column(db.String(30),nullable=False,default="Pending Review",index=True)
+    notes=db.Column(db.Text)
+    prepared_by_user_id=db.Column(db.Integer,db.ForeignKey("user.id"),nullable=False)
+    reviewed_by_user_id=db.Column(db.Integer,db.ForeignKey("user.id"))
+    reviewed_at=db.Column(db.DateTime)
+    created_at=db.Column(db.DateTime,nullable=False,default=utc_now)
+    cooperative=db.relationship("Cooperative",foreign_keys=[cooperative_id])
+    finance_account=db.relationship("FinanceAccount",foreign_keys=[finance_account_id],backref=db.backref("reconciliations",lazy=True))
+    prepared_by=db.relationship("User",foreign_keys=[prepared_by_user_id])
+    reviewed_by=db.relationship("User",foreign_keys=[reviewed_by_user_id])
+
 def _context():
     access,coop=current_access(),current_cooperative()
     if not access or access.role not in FINANCE_VIEW_ROLES or not coop: abort(403)
     return access,coop
 
-def _notify(coop_id,roles,title,message,source_type,source_id,severity="Info"):
+def _notify(coop_id,roles,title,message,source_type,source_id,severity="Info",link=None):
     for access in UserAccess.query.filter(UserAccess.cooperative_id==coop_id,UserAccess.status=="Active",UserAccess.role.in_(tuple(roles))).all():
-        _upsert_notification(access.user_id,coop_id,"Finance",title,message,severity,url_for("ledger.dashboard"),source_type=source_type,source_id=source_id)
+        _upsert_notification(access.user_id,coop_id,"Finance",title,message,severity,link or url_for("ledger.dashboard"),source_type=source_type,source_id=source_id)
 
 def _validate_source(coop_id,source_type,source_id):
     if not source_type and not source_id: return None
@@ -86,6 +107,14 @@ def _validate_source(coop_id,source_type,source_id):
     existing=LedgerTransaction.query.filter_by(cooperative_id=coop_id,source_type=source_type,source_id=source_id).first()
     if existing: abort(409,"This source record is already linked to ledger transaction #%s."%existing.id)
     return row
+
+def _confirmed_account_balance_through(account,through_date):
+    total=float(account.opening_balance or 0)
+    incoming=LedgerTransaction.query.filter_by(cooperative_id=account.cooperative_id,to_account_id=account.id,status="Confirmed").filter(LedgerTransaction.transaction_date<=through_date).all()
+    outgoing=LedgerTransaction.query.filter_by(cooperative_id=account.cooperative_id,from_account_id=account.id,status="Confirmed").filter(LedgerTransaction.transaction_date<=through_date).all()
+    total+=sum(float(x.amount or 0) for x in incoming)
+    total-=sum(float(x.amount or 0) for x in outgoing)
+    return total
 
 @bp.route("/finance/accounts")
 @roles_required(*FINANCE_VIEW_ROLES)
@@ -109,6 +138,20 @@ def transaction_detail(item_id):
     access,coop=_context(); row=LedgerTransaction.query.filter_by(id=item_id,cooperative_id=coop.id).first_or_404()
     documents=CooperativeDocument.query.filter_by(cooperative_id=coop.id,entity_type="LedgerTransaction",entity_id=row.id).order_by(CooperativeDocument.created_at.desc()).all()
     return render_template("finance_accounts/transaction_detail.html",transaction=row,documents=documents,can_record=access.role in FINANCE_RECORD_ROLES,can_approve=access.role in FINANCE_APPROVAL_ROLES)
+
+@bp.route("/finance/reconciliations")
+@roles_required(*FINANCE_VIEW_ROLES)
+def reconciliation_list():
+    access,coop=_context(); accounts=FinanceAccount.query.filter_by(cooperative_id=coop.id).order_by(FinanceAccount.name).all(); account_id=parse_int(request.args.get("account_id")); query=FinanceReconciliation.query.filter_by(cooperative_id=coop.id)
+    if account_id and any(a.id==account_id for a in accounts): query=query.filter(FinanceReconciliation.finance_account_id==account_id)
+    rows=query.order_by(FinanceReconciliation.statement_date.desc(),FinanceReconciliation.created_at.desc()).limit(100).all()
+    return render_template("finance_accounts/reconciliations.html",accounts=accounts,reconciliations=rows,selected_account_id=account_id,can_record=access.role in FINANCE_RECORD_ROLES,can_approve=access.role in FINANCE_APPROVAL_ROLES)
+
+@bp.route("/finance/reconciliations/<int:item_id>")
+@roles_required(*FINANCE_VIEW_ROLES)
+def reconciliation_detail(item_id):
+    access,coop=_context(); row=FinanceReconciliation.query.filter_by(id=item_id,cooperative_id=coop.id).first_or_404(); documents=CooperativeDocument.query.filter_by(cooperative_id=coop.id,entity_type="FinanceReconciliation",entity_id=row.id).order_by(CooperativeDocument.created_at.desc()).all()
+    return render_template("finance_accounts/reconciliation_detail.html",reconciliation=row,documents=documents,can_record=access.role in FINANCE_RECORD_ROLES,can_approve=access.role in FINANCE_APPROVAL_ROLES)
 
 @bp.route("/finance/accounts",methods=["POST"])
 @roles_required(*FINANCE_RECORD_ROLES)
@@ -154,6 +197,19 @@ def transaction_create():
     row=LedgerTransaction(cooperative_id=coop.id,transaction_type=kind,category=category,amount=float(amount),transaction_date=transaction_date,from_account_id=from_id,to_account_id=to_id,counterparty=request.form.get("counterparty","").strip()[:180] or None,reference=request.form.get("reference","").strip()[:120] or None,source_type=source_type,source_id=source_id,status="Pending Confirmation",notes=request.form.get("notes","").strip() or None,recorded_by_user_id=session["user_id"])
     db.session.add(row); db.session.flush(); _notify(coop.id,FINANCE_APPROVAL_ROLES,"Account transaction awaiting approval",f"{kind}: R{amount:.2f} — {category}.","LedgerTransactionApproval",row.id,"Warning"); add_audit_log("LEDGER_TRANSACTION_RECORDED","LedgerTransaction",row.id,f"{kind} R{amount:.2f}",cooperative_id=coop.id); db.session.commit(); flash("Transaction recorded for Chairperson confirmation.","success"); return redirect(url_for("ledger.transaction_detail",item_id=row.id))
 
+@bp.route("/finance/reconciliations",methods=["POST"])
+@roles_required(*FINANCE_RECORD_ROLES)
+def reconciliation_create():
+    access,coop=_context(); account_id=parse_int(request.form.get("finance_account_id")); account=FinanceAccount.query.filter_by(id=account_id,cooperative_id=coop.id,status="Active").first()
+    if account is None: return "Choose an active financial account belonging to this cooperative.",400
+    try: statement_date=parse_date(request.form.get("statement_date"))
+    except ValueError: return "Enter a valid statement date.",400
+    statement_balance=parse_float(request.form.get("statement_balance"))
+    if not statement_date or statement_balance is None: return "Statement date and statement balance are required.",400
+    if FinanceReconciliation.query.filter_by(cooperative_id=coop.id,finance_account_id=account.id,statement_date=statement_date).first(): return "A reconciliation already exists for this account and statement date.",409
+    book=_confirmed_account_balance_through(account,statement_date); row=FinanceReconciliation(cooperative_id=coop.id,finance_account_id=account.id,statement_date=statement_date,statement_balance=float(statement_balance),book_balance=float(book),difference=float(statement_balance)-float(book),status="Pending Review",notes=request.form.get("notes","").strip() or None,prepared_by_user_id=session["user_id"])
+    db.session.add(row); db.session.flush(); _notify(coop.id,FINANCE_APPROVAL_ROLES,"Account reconciliation awaiting review",f"{account.name}: statement R{statement_balance:.2f}; ledger R{book:.2f}; difference R{row.difference:.2f}.","FinanceReconciliationReview",row.id,"Warning",url_for("ledger.reconciliation_detail",item_id=row.id)); add_audit_log("FINANCE_RECONCILIATION_RECORDED","FinanceReconciliation",row.id,f"{account.name}: statement R{statement_balance:.2f}; ledger R{book:.2f}; difference R{row.difference:.2f}",cooperative_id=coop.id); db.session.commit(); flash("Account reconciliation recorded for Chairperson review.","success"); return redirect(url_for("ledger.reconciliation_detail",item_id=row.id))
+
 @bp.route("/finance/transactions/<int:item_id>/decision",methods=["POST"])
 @roles_required(*FINANCE_APPROVAL_ROLES)
 def transaction_decision(item_id):
@@ -164,6 +220,14 @@ def transaction_decision(item_id):
     if decision not in {"approve","reject"}: return "Choose approve or reject.",400
     if decision=="approve" and row.transaction_type in {"Expense","Transfer"} and row.from_account.confirmed_balance+1e-9<float(row.amount): return "The paying account does not have enough confirmed funds.",400
     row.status="Confirmed" if decision=="approve" else "Rejected"; row.decided_by_user_id=session["user_id"]; row.decided_at=utc_now(); _notify(coop.id,FINANCE_RECORD_ROLES,f"Account transaction {row.status.lower()}",f"{row.transaction_type} R{row.amount:.2f} ({row.category}) was {row.status.lower()}.","LedgerTransactionDecision",row.id,"Info" if decision=="approve" else "Warning"); add_audit_log("LEDGER_TRANSACTION_CONFIRMED" if decision=="approve" else "LEDGER_TRANSACTION_REJECTED","LedgerTransaction",row.id,f"{row.transaction_type} R{row.amount:.2f}",cooperative_id=coop.id); db.session.commit(); return redirect(url_for("ledger.transaction_detail",item_id=row.id))
+
+@bp.route("/finance/reconciliations/<int:item_id>/review",methods=["POST"])
+@roles_required(*FINANCE_APPROVAL_ROLES)
+def reconciliation_review(item_id):
+    access,coop=_context(); row=FinanceReconciliation.query.filter_by(id=item_id,cooperative_id=coop.id).first_or_404()
+    if row.status!="Pending Review": return "Only pending reconciliations can be reviewed.",400
+    if row.prepared_by_user_id==session.get("user_id"): return "You cannot review a reconciliation you prepared.",403
+    row.status="Reviewed"; row.reviewed_by_user_id=session["user_id"]; row.reviewed_at=utc_now(); _notify(coop.id,FINANCE_RECORD_ROLES,"Account reconciliation reviewed",f"{row.finance_account.name}: difference R{row.difference:.2f} reviewed.","FinanceReconciliationDecision",row.id,"Info",url_for("ledger.reconciliation_detail",item_id=row.id)); add_audit_log("FINANCE_RECONCILIATION_REVIEWED","FinanceReconciliation",row.id,f"{row.finance_account.name}: difference R{row.difference:.2f}",cooperative_id=coop.id); db.session.commit(); flash("Account reconciliation marked reviewed.","success"); return redirect(url_for("ledger.reconciliation_detail",item_id=row.id))
 
 def register_account_ledger(app):
     if "ledger" not in app.blueprints: app.register_blueprint(bp)
