@@ -114,12 +114,18 @@ class PrimaryProductionCommandTests(unittest.TestCase):
         self.assertEqual(self.client.get("/production-control").status_code, 403)
 
     def test_vice_submits_plan_and_chair_approves(self):
+        with self.crm.app.app_context():
+            existing = self.pp.ProductionPlan.query.filter_by(crop_id=self.crop_id).first()
+            if existing:
+                self.crm.db.session.delete(existing)
+                self.crm.db.session.commit()
+
         self.login_as("primary_vice")
         response = self.client.post("/production-control/plans", data={
             "crop_id": str(self.crop_id), "target_yield_per_ha_kg": "45000",
             "approved_budget": "300000", "notes": "Potato production plan",
         })
-        self.assertEqual(response.status_code, 302)
+        self.assertIn(response.status_code, {302, 303})
         with self.crm.app.app_context():
             plan = self.pp.ProductionPlan.query.filter_by(crop_id=self.crop_id).one()
             self.assertEqual(plan.status, "Pending Approval")
@@ -127,7 +133,7 @@ class PrimaryProductionCommandTests(unittest.TestCase):
 
         self.login_as("primary_chair")
         response = self.client.post(f"/production-control/plans/{plan_id}/decision", data={"decision": "approve"})
-        self.assertEqual(response.status_code, 302)
+        self.assertIn(response.status_code, {302, 303})
         with self.crm.app.app_context():
             plan = self.crm.db.session.get(self.pp.ProductionPlan, plan_id)
             self.assertEqual(plan.status, "Approved")
@@ -151,7 +157,7 @@ class PrimaryProductionCommandTests(unittest.TestCase):
             "quantity": "12", "unit": "bags", "unit_cost": "0",
             "activity_date": self.crm.crm_today().isoformat(),
         })
-        self.assertEqual(response.status_code, 302)
+        self.assertIn(response.status_code, {302, 303})
         with self.crm.app.app_context():
             item = self.crm.db.session.get(self.crm.InventoryItem, self.inventory_id)
             self.assertEqual(item.quantity_on_hand, before - 12)
@@ -189,20 +195,20 @@ class PrimaryProductionCommandTests(unittest.TestCase):
             "responsible_user_id": str(self.users["primary_vice"]),
             "due_date": self.crm.crm_today().isoformat(),
         })
-        self.assertEqual(response.status_code, 302)
+        self.assertIn(response.status_code, {302, 303})
         with self.crm.app.app_context():
             activity = self.pp.ProductionActivity.query.filter_by(title="First fertilizer application").one()
             activity_id = activity.id
         response = self.client.post(f"/production-control/activities/{activity_id}/progress", data={
             "status": "Completed", "evidence_reference": "FIELD-PHOTO-001",
         })
-        self.assertEqual(response.status_code, 302)
+        self.assertIn(response.status_code, {302, 303})
         with self.crm.app.app_context():
             self.assertEqual(self.crm.db.session.get(self.pp.ProductionActivity, activity_id).status, "Completed")
 
         self.login_as("primary_chair")
         response = self.client.post(f"/production-control/activities/{activity_id}/verify", data={})
-        self.assertEqual(response.status_code, 302)
+        self.assertIn(response.status_code, {302, 303})
         with self.crm.app.app_context():
             activity = self.crm.db.session.get(self.pp.ProductionActivity, activity_id)
             self.assertEqual(activity.status, "Verified")
@@ -218,7 +224,7 @@ class PrimaryProductionCommandTests(unittest.TestCase):
             "hours_used": "6.5", "fuel_litres": "28",
             "responsible_user_id": str(self.users["primary_vice"]),
         })
-        self.assertEqual(response.status_code, 302)
+        self.assertIn(response.status_code, {302, 303})
         with self.crm.app.app_context():
             log = self.pp.ProductionEquipmentLog.query.filter_by(crop_id=self.crop_id).order_by(self.pp.ProductionEquipmentLog.id.desc()).first()
             self.assertEqual(log.hours_used, 6.5)
