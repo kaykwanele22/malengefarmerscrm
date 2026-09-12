@@ -14,6 +14,7 @@ class ActionableOptionsRegressionTests(unittest.TestCase):
         os.environ["DATABASE_URL"] = f"sqlite:///{cls.db_path.as_posix()}"
         os.environ["SECRET_KEY"] = "malenge-actionable-options-secret"
         os.environ["APP_ENV"] = "development"
+        os.environ["TWO_FACTOR_REQUIRED"] = "false"
 
         cls.crm = importlib.import_module("app")
         cls.jo = importlib.import_module("joint_operations")
@@ -138,8 +139,10 @@ class ActionableOptionsRegressionTests(unittest.TestCase):
 
     def login_as(self, key):
         with self.client.session_transaction() as sess:
+            sess.clear()
             sess["user_id"] = self.user_ids[key]
             sess["fullname"] = key
+            sess["two_factor_authenticated"] = True
 
     def test_contribution_list_only_shows_members_with_amount_left(self):
         self.login_as("primary_treasurer")
