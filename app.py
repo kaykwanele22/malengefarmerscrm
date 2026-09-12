@@ -9234,6 +9234,14 @@ register_joint_operations(app)
 from primary_production import register_primary_production
 register_primary_production(app)
 
+# Secondary bulk procurement, collective sales and Primary allocations.
+from bulk_trade import register_bulk_trade
+register_bulk_trade(app)
+
+# Cooperative cash, bank and other account balances.
+from account_ledger import register_account_ledger
+register_account_ledger(app)
+
 
 # =========================================================
 # RUN APPLICATION

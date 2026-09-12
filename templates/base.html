@@ -150,12 +150,20 @@
                    class="nav-item {% if request.endpoint and request.endpoint.startswith('phase7.') and request.endpoint in ['phase7.finance_control','phase7.budget_create','phase7.budget_decision','phase7.reconciliation_create','phase7.reconciliation_review'] %}active{% endif %}">
                     <span>🏦</span><span>Finance Control</span>
                 </a>
+                <a href="{{ url_for('ledger.dashboard') }}"
+                   class="nav-item {% if request.endpoint and request.endpoint.startswith('ledger.') %}active{% endif %}">
+                    <span>💳</span><span>Cash &amp; Bank Accounts</span>
+                </a>
                 {% endif %}
 
                 {% if is_secondary %}
                 <a href="{{ url_for('jointops.dashboard') }}"
                    class="nav-item {% if request.endpoint and request.endpoint.startswith('jointops.') %}active{% endif %}">
                     <span>🤝</span><span>Joint Operations</span>
+                </a>
+                <a href="{{ url_for('bulktrade.dashboard') }}"
+                   class="nav-item {% if request.endpoint and request.endpoint.startswith('bulktrade.') %}active{% endif %}">
+                    <span>📦</span><span>Bulk Trade</span>
                 </a>
                 {% endif %}
 
