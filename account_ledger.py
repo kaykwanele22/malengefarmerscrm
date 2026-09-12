@@ -17,7 +17,19 @@ ACCOUNT_TYPES=("Bank Account","Cash Box","Mobile Money","Savings","Other")
 TRANSACTION_TYPES=("Opening Balance","Income","Expense","Transfer")
 INCOME_CATEGORIES=("Product Sale","Bulk Sale","Membership Fee","Primary Contribution","Grant","Loan","Other Income")
 EXPENSE_CATEGORIES=("Farm Inputs","Transport","Packaging","Equipment","Wages","Bank Charges","Refund","Other Expense")
-ALL_CATEGORIES=INCOME_CATEGORIES+EXPENSE_CATEGORIES
+SYSTEM_CATEGORIES=("Opening Balance","Transfer")
+ALL_CATEGORIES=INCOME_CATEGORIES+EXPENSE_CATEGORIES+SYSTEM_CATEGORIES
+CATEGORY_GROUPS={
+    "Sales Income":("Product Sale","Bulk Sale"),
+    "Member Contributions":("Membership Fee","Primary Contribution"),
+    "Grants/Funding":("Grant","Loan"),
+    "Other Income":("Other Income",),
+    "Farm Inputs":("Farm Inputs",),
+    "Machinery":("Equipment",),
+    "Labour":("Wages",),
+    "Transport":("Transport",),
+    "Other Expenses":("Packaging","Bank Charges","Refund","Other Expense"),
+}
 SOURCE_MODELS={"Sale":"Sale","Payment":"Payment","Expense":"Expense","Contribution":"Contribution"}
 
 class FinanceAccount(db.Model):
@@ -79,12 +91,17 @@ def _validate_source(coop_id,source_type,source_id):
 @roles_required(*FINANCE_VIEW_ROLES)
 def dashboard():
     access,coop=_context(); accounts=FinanceAccount.query.filter_by(cooperative_id=coop.id).order_by(FinanceAccount.name).all(); query=LedgerTransaction.query.filter_by(cooperative_id=coop.id)
-    category=request.args.get("category","").strip(); status=request.args.get("status","").strip(); account_id=parse_int(request.args.get("account_id"))
-    if category in ALL_CATEGORIES: query=query.filter(LedgerTransaction.category==category)
+    category=request.args.get("category","").strip(); group=request.args.get("group","").strip(); status=request.args.get("status","").strip(); account_id=parse_int(request.args.get("account_id"))
+    if group in CATEGORY_GROUPS: query=query.filter(LedgerTransaction.category.in_(CATEGORY_GROUPS[group]))
+    elif category in ALL_CATEGORIES: query=query.filter(LedgerTransaction.category==category)
     if status in {"Pending Confirmation","Confirmed","Rejected"}: query=query.filter(LedgerTransaction.status==status)
     if account_id and any(a.id==account_id for a in accounts): query=query.filter((LedgerTransaction.from_account_id==account_id)|(LedgerTransaction.to_account_id==account_id))
     transactions=query.order_by(LedgerTransaction.transaction_date.desc(),LedgerTransaction.created_at.desc()).limit(250).all()
-    return render_template("finance_accounts/dashboard.html",accounts=accounts,transactions=transactions,confirmed_total=sum(a.confirmed_balance for a in accounts),pending_total=sum(a.pending_change for a in accounts),account_types=ACCOUNT_TYPES,income_categories=INCOME_CATEGORIES,expense_categories=EXPENSE_CATEGORIES,all_categories=ALL_CATEGORIES,selected_category=category,selected_status=status,selected_account_id=account_id,can_record=access.role in FINANCE_RECORD_ROLES,can_approve=access.role in FINANCE_APPROVAL_ROLES)
+    group_totals={}
+    for label,categories in CATEGORY_GROUPS.items():
+        rows=LedgerTransaction.query.filter(LedgerTransaction.cooperative_id==coop.id,LedgerTransaction.status=="Confirmed",LedgerTransaction.category.in_(categories)).all()
+        group_totals[label]=sum(float(r.amount or 0) for r in rows)
+    return render_template("finance_accounts/dashboard.html",accounts=accounts,transactions=transactions,confirmed_total=sum(a.confirmed_balance for a in accounts),pending_total=sum(a.pending_change for a in accounts),account_types=ACCOUNT_TYPES,income_categories=INCOME_CATEGORIES,expense_categories=EXPENSE_CATEGORIES,all_categories=ALL_CATEGORIES,category_groups=CATEGORY_GROUPS,group_totals=group_totals,selected_group=group,selected_category=category,selected_status=status,selected_account_id=account_id,can_record=access.role in FINANCE_RECORD_ROLES,can_approve=access.role in FINANCE_APPROVAL_ROLES)
 
 @bp.route("/finance/transactions/<int:item_id>")
 @roles_required(*FINANCE_VIEW_ROLES)
@@ -123,7 +140,14 @@ def transaction_create():
         if not from_id or from_id not in owned: return "Choose the account paying the money.",400
     else:
         if not from_id or not to_id or from_id==to_id or from_id not in owned or to_id not in owned: return "Choose two different accounts in this cooperative for a transfer.",400
-    category=request.form.get("category","").strip(); allowed=INCOME_CATEGORIES if kind in {"Income","Opening Balance"} else EXPENSE_CATEGORIES if kind=="Expense" else ("Transfer",)
+    if kind=="Income":
+        allowed=INCOME_CATEGORIES; category=request.form.get("category","").strip()
+    elif kind=="Expense":
+        allowed=EXPENSE_CATEGORIES; category=request.form.get("category","").strip()
+    elif kind=="Transfer":
+        allowed=("Transfer",); category="Transfer"
+    else:
+        allowed=("Opening Balance",); category="Opening Balance"
     if category not in allowed: return "Choose a valid category for this transaction type.",400
     source_type=request.form.get("source_type","").strip() or None; source_id=parse_int(request.form.get("source_id")); _validate_source(coop.id,source_type,source_id)
     row=LedgerTransaction(cooperative_id=coop.id,transaction_type=kind,category=category,amount=float(amount),transaction_date=transaction_date,from_account_id=from_id,to_account_id=to_id,counterparty=request.form.get("counterparty","").strip()[:180] or None,reference=request.form.get("reference","").strip()[:120] or None,source_type=source_type,source_id=source_id,status="Pending Confirmation",notes=request.form.get("notes","").strip() or None,recorded_by_user_id=session["user_id"])
