@@ -7,6 +7,7 @@ on:
     paths:
       - tools/apply_actionable_option_filtering.py
       - tools/fix_actionable_option_filtering.py
+      - tools/fix_contribution_actionable_eligibility.py
       - actionable_options_regression_tests.py
       - run_regression_tests.py
       - .github/workflows/actionable_options_integrate.yml
@@ -30,6 +31,7 @@ jobs:
         run: |
           python tools/apply_actionable_option_filtering.py
           python tools/fix_actionable_option_filtering.py
+          python tools/fix_contribution_actionable_eligibility.py
       - name: Compile source
         run: python -m compileall -q app.py joint_operations.py primary_production.py
       - name: Focused actionable-option tests
