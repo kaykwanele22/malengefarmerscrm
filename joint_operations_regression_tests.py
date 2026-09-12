@@ -52,6 +52,7 @@ class JointOperationsTests(unittest.TestCase):
         cls._make_user("sec_secretary", "Secondary Secretary", secondary.id)
         cls._make_user("sec_treasurer", "Secondary Treasurer", secondary.id)
         cls._make_user("primary_chair", "Primary Chairperson", siy.id)
+        cls._make_user("primary_treasurer", "Primary Treasurer", siy.id)
         farmer = c.Farmer(cooperative_id=siy.id, fullname="Private Primary Farmer", phone="0711111111", location="Malenge", status="Active")
         c.db.session.add(farmer)
         c.db.session.commit()
@@ -106,6 +107,28 @@ class JointOperationsTests(unittest.TestCase):
             allocation = self.jo.JointProjectAllocation.query.filter_by(project_id=project_id, primary_cooperative_id=self.siy_id).one()
             self.assertEqual(allocation.progress_percentage, 70)
             self.assertEqual(allocation.allocated_amount, 180000)
+
+    def test_secondary_uses_cooperative_contributions_not_farmer_contributions(self):
+        self.login_as("sec_treasurer")
+        response = self.client.get("/contributions")
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/joint-operations", response.headers.get("Location", ""))
+        self.assertIn("#primary-contributions", response.headers.get("Location", ""))
+
+        response = self.client.get("/contributions/add")
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("#primary-contributions", response.headers.get("Location", ""))
+
+        dashboard = self.client.get("/dashboard").get_data(as_text=True)
+        self.assertIn("Record Primary Contribution", dashboard)
+        self.assertNotIn('href="/contributions/add" class="dash-primary-btn">Record Money', dashboard)
+
+        self.login_as("primary_treasurer")
+        response = self.client.get("/contributions/add")
+        self.assertEqual(response.status_code, 200)
+        page = response.get_data(as_text=True)
+        self.assertIn("Member / Farmer", page)
+        self.assertNotIn("Primary Cooperative Contributions to MFPSU", page)
 
     def test_treasurer_records_primary_contribution_and_chair_confirms(self):
         year = self.crm.crm_today().year

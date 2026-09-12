@@ -164,7 +164,7 @@
         </tbody></table></div>
     </section>
 
-    <section class="p7-card">
+    <section class="p7-card" id="primary-contributions">
         <div class="p7-card-head"><h2>Primary Cooperative Contributions to MFPSU</h2><form method="GET"><input name="year" type="number" value="{{ year }}" min="2020" max="2100" style="height:34px;width:90px"><button class="p7-btn" type="submit">Go</button></form></div>
         <div class="p7-grid-4 p7-card-body"><div class="p7-stat"><span>Expected</span><strong>R {{ "{:,.2f}".format(stats.expected_contributions|float) }}</strong></div><div class="p7-stat good"><span>Confirmed</span><strong>R {{ "{:,.2f}".format(stats.confirmed_contributions|float) }}</strong></div><div class="p7-stat warning"><span>Pending Confirmation</span><strong>R {{ "{:,.2f}".format(stats.pending_contributions|float) }}</strong></div><div class="p7-stat"><span>Outstanding</span><strong>R {{ "{:,.2f}".format(stats.outstanding_contributions|float) }}</strong></div></div>
         {% if can_finance_record %}

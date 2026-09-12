@@ -6083,6 +6083,9 @@ def export_memberships():
 @roles_required(*FINANCE_VIEW_ROLES)
 def contributions_list():
     """List contributions within the user's visibility scope."""
+    access = current_access()
+    if access and access.role.startswith("Secondary"):
+        return redirect(url_for("jointops.dashboard", year=crm_today().year, _anchor="primary-contributions"))
     search = request.args.get("search", "").strip()
     query = scoped_model_query(Contribution).join(Farmer)
 
@@ -6108,6 +6111,8 @@ def contributions_list():
 def add_contribution():
     """Treasurer records money; membership-fee money is linked to the exact member record."""
     access = current_access()
+    if access and access.role.startswith("Secondary"):
+        return redirect(url_for("jointops.dashboard", year=crm_today().year, _anchor="primary-contributions"))
     farmers = own_cooperative_query(Farmer).order_by(Farmer.fullname.asc()).all()
     selected_membership = None
 
@@ -6209,6 +6214,9 @@ def add_contribution():
 @roles_required(*FINANCE_APPROVAL_ROLES)
 def decide_contribution(contribution_id):
     """Chairperson confirms or rejects a Treasurer-recorded contribution."""
+    access = current_access()
+    if access and access.role.startswith("Secondary"):
+        abort(403)
     contribution = scoped_get_or_404(Contribution, contribution_id)
     require_own_cooperative(contribution.cooperative_id)
 
@@ -6282,6 +6290,9 @@ def decide_contribution(contribution_id):
 @roles_required(*FINANCE_RECORD_ROLES)
 def delete_contribution(contribution_id):
     """Treasurer may remove only an unconfirmed/rejected mistaken record."""
+    access = current_access()
+    if access and access.role.startswith("Secondary"):
+        abort(403)
     contribution = scoped_get_or_404(Contribution, contribution_id)
     require_own_cooperative(contribution.cooperative_id)
 

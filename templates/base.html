@@ -367,6 +367,13 @@
                         <span>Payments</span>
                     </a>
 
+                    {% if is_secondary %}
+                    <a href="{{ url_for('jointops.dashboard', _anchor='primary-contributions') }}"
+                       class="nav-item {% if request.endpoint and request.endpoint.startswith('jointops.') %}active{% endif %}">
+                        <span>🏦</span>
+                        <span>Primary Contributions</span>
+                    </a>
+                    {% else %}
                     <a href="{{ url_for('contributions_list') }}"
                        class="nav-item {% if request.endpoint in [
                            'contributions_list',
@@ -376,6 +383,7 @@
                         <span>🏦</span>
                         <span>Contributions</span>
                     </a>
+                    {% endif %}
 
                     <a href="{{ url_for('expenses_list') }}"
                        class="nav-item {% if request.endpoint in [
@@ -495,6 +503,13 @@
                         <span>Payments</span>
                     </a>
 
+                    {% if is_secondary %}
+                    <a href="{{ url_for('jointops.dashboard', _anchor='primary-contributions') }}"
+                       class="nav-item {% if request.endpoint and request.endpoint.startswith('jointops.') %}active{% endif %}">
+                        <span>🏦</span>
+                        <span>Primary Contributions</span>
+                    </a>
+                    {% else %}
                     <a href="{{ url_for('contributions_list') }}"
                        class="nav-item {% if request.endpoint in [
                            'contributions_list',
@@ -503,6 +518,7 @@
                         <span>🏦</span>
                         <span>Contributions</span>
                     </a>
+                    {% endif %}
 
                     <a href="{{ url_for('expenses_list') }}"
                        class="nav-item {% if request.endpoint in [
