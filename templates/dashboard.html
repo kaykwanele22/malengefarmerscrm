@@ -115,7 +115,9 @@
         </div>
         <div>
             {% if is_admin %}<a href="{{ url_for('users_list') }}" class="dash-primary-btn">Manage Users &amp; Access</a>
+            {% elif is_secondary and is_chairperson %}<a href="{{ url_for('jointops.dashboard', _anchor='primary-contributions') }}" class="dash-primary-btn">Review Joint Finance</a>
             {% elif is_chairperson and own_pending_finance > 0 %}<a href="{{ url_for('contributions_list') }}" class="dash-primary-btn">Review {{ own_pending_finance }} Pending Approvals</a>
+            {% elif is_secondary and is_treasurer %}<a href="{{ url_for('jointops.dashboard', _anchor='primary-contributions') }}" class="dash-primary-btn">Record Primary Contribution</a>
             {% elif is_treasurer %}<a href="{{ url_for('add_contribution') }}" class="dash-primary-btn">Record Money</a>
             {% elif is_secondary and is_secretariat %}<a href="{{ url_for('meetings_list') }}" class="dash-primary-btn">Open Joint Meetings</a>
             {% elif is_secretariat %}{% if not is_secondary %}<a href="{{ url_for('add_membership') }}" class="dash-primary-btn">Register Member</a>{% endif %}

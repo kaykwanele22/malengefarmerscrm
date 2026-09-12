@@ -52,7 +52,7 @@ DOCUMENT_ALLOWED_EXTENSIONS = {"pdf", "png", "jpg", "jpeg", "webp", "docx", "xls
 DOCUMENT_TYPES = (
     "Constitution", "Cooperative Certificate", "Land Document", "Contract",
     "Quotation", "Invoice", "Receipt", "Proof of Payment", "Meeting Record",
-    "Financial Document", "Membership Document", "Production Document", "General",
+    "Financial Document", "Membership Document", "Production Document", "Joint Operations Document", "General",
 )
 
 
@@ -266,6 +266,23 @@ def _year_bounds(year):
     return date(year, 1, 1), date(year + 1, 1, 1)
 
 
+def _confirmed_primary_cooperative_contributions(cooperative_id, start_date=None, through_date=None):
+    """Return confirmed Primary-to-Secondary contributions without using a fake farmer record."""
+    try:
+        from joint_operations import PrimaryContributionPayment
+    except (ImportError, AttributeError):
+        return 0.0
+    query = db.session.query(func.coalesce(func.sum(PrimaryContributionPayment.amount), 0)).filter(
+        PrimaryContributionPayment.secondary_cooperative_id == cooperative_id,
+        PrimaryContributionPayment.status == "Confirmed",
+    )
+    if start_date:
+        query = query.filter(PrimaryContributionPayment.payment_date >= start_date)
+    if through_date:
+        query = query.filter(PrimaryContributionPayment.payment_date <= through_date)
+    return float(query.scalar() or 0)
+
+
 def _confirmed_book_balance(cooperative_id, through_date=None):
     contribution_query = db.session.query(func.coalesce(func.sum(Contribution.amount), 0)).filter(
         Contribution.cooperative_id == cooperative_id,
@@ -286,7 +303,10 @@ def _confirmed_book_balance(cooperative_id, through_date=None):
     contributions = contribution_query.scalar() or 0
     payments = payment_query.scalar() or 0
     expenses = expense_query.scalar() or 0
-    return float(contributions) + float(payments) - float(expenses)
+    primary_cooperative_contributions = _confirmed_primary_cooperative_contributions(
+        cooperative_id, through_date=through_date
+    )
+    return float(contributions) + primary_cooperative_contributions + float(payments) - float(expenses)
 
 
 def budget_actual(budget):
@@ -311,7 +331,11 @@ def budget_actual(budget):
         )
         if category and category.casefold() != "all":
             query = query.filter(func.lower(Contribution.category) == category.lower())
-        return float(query.scalar() or 0)
+        legacy_total = float(query.scalar() or 0)
+        joint_total = _confirmed_primary_cooperative_contributions(
+            budget.cooperative_id, start_date=start, through_date=end - timedelta(days=1)
+        )
+        return legacy_total + joint_total
     return float(db.session.query(func.coalesce(func.sum(Payment.amount), 0)).filter(
         Payment.cooperative_id == budget.cooperative_id,
         Payment.status.in_(PAYMENT_VALUE_STATUSES),
@@ -1087,9 +1111,12 @@ def reports_command_centre():
         "month_expenses": float(db.session.query(func.coalesce(func.sum(Expense.amount), 0)).filter(
             Expense.cooperative_id == coop_id, Expense.expense_date >= month_start,
             Expense.status.in_(CONFIRMED_EXPENSE_STATUSES)).scalar() or 0),
-        "month_contributions": float(db.session.query(func.coalesce(func.sum(Contribution.amount), 0)).filter(
-            Contribution.cooperative_id == coop_id, Contribution.contribution_date >= month_start,
-            Contribution.status.in_(CONFIRMED_CONTRIBUTION_STATUSES)).scalar() or 0),
+        "month_contributions": (
+            float(db.session.query(func.coalesce(func.sum(Contribution.amount), 0)).filter(
+                Contribution.cooperative_id == coop_id, Contribution.contribution_date >= month_start,
+                Contribution.status.in_(CONFIRMED_CONTRIBUTION_STATUSES)).scalar() or 0)
+            + _confirmed_primary_cooperative_contributions(coop_id, start_date=month_start)
+        ),
     }
     network = []
     if access.role.startswith("Secondary"):

@@ -18,6 +18,7 @@ SUITES = [
     "phase6_accountability_tests.py",
     "phase7_regression_tests.py",
     "secondary_scope_regression_tests.py",
+    "joint_operations_regression_tests.py",
 ]
 
 

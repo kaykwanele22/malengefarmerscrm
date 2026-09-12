@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+{% block title %}Joint Operations | Malenge Farmers CRM{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{{ url_for('static', filename='css/phase7.css') }}">{% endblock %}
+{% block content %}
+<div class="p7-page">
+    <div class="p7-head">
+        <div>
+            <span class="p7-eyebrow">MFPSU / Secondary Cooperative</span>
+            <h1>Joint Operations</h1>
+            <p>Manage only matters shared by the Primary cooperatives: joint projects, shared assets, procurement, Primary contributions and collective marketing.</p>
+        </div>
+        <div class="p7-actions">
+            <a class="p7-btn" href="{{ url_for('meetings_list') }}">Joint Meetings</a>
+            <a class="p7-btn" href="{{ url_for('accountability_register') }}">Accountability</a>
+            <a class="p7-btn" href="{{ url_for('phase7.documents', type='Joint Operations Document') }}">Joint Documents</a>
+        </div>
+    </div>
+
+    <div class="p7-warning">
+        <strong>Secondary portal rule:</strong> this workspace coordinates the Primary cooperatives; it does not replace their member, farmer, farm, crop or Primary-only finance registers.
+    </div>
+
+    <div class="p7-grid-4">
+        <div class="p7-stat good"><span>Active Joint Projects</span><strong>{{ stats.active_projects }}</strong><small>Shared projects not completed or cancelled</small></div>
+        <div class="p7-stat"><span>Shared Assets</span><strong>{{ stats.shared_assets }}</strong><small>MFPSU assets available across the network</small></div>
+        <div class="p7-stat {% if stats.pending_procurement + stats.pending_contribution_payments > 0 %}warning{% endif %}"><span>Pending Chair Decisions</span><strong>{{ stats.pending_procurement + stats.pending_contribution_payments }}</strong><small>Procurement + Primary contribution confirmations</small></div>
+        <div class="p7-stat {% if stats.outstanding_contributions > 0 %}warning{% else %}good{% endif %}"><span>{{ year }} Primary Contributions Due</span><strong>R {{ "{:,.2f}".format(stats.outstanding_contributions|float) }}</strong><small>Expected less confirmed cooperative contributions</small></div>
+    </div>
+
+    <section class="p7-card">
+        <div class="p7-card-head"><h2>Primary Cooperative Network Summary</h2><span class="p7-badge">Aggregate oversight only</span></div>
+        <div class="p7-card-body">
+            <div class="p7-grid-2">
+                {% for row in primary_summaries %}
+                <div class="p7-card">
+                    <div class="p7-card-head"><h2>{{ row.cooperative.name }}</h2><a class="p7-btn" href="{{ url_for('jointops.primary_summary', primary_id=row.cooperative.id) }}">Open Summary</a></div>
+                    <div class="p7-card-body">
+                        <div class="p7-grid-4">
+                            <div class="p7-stat"><span>Active Farmers</span><strong>{{ row.members }}</strong></div>
+                            <div class="p7-stat"><span>Farms</span><strong>{{ row.farms }}</strong></div>
+                            <div class="p7-stat"><span>Crops</span><strong>{{ row.crops }}</strong></div>
+                            <div class="p7-stat {% if row.open_actions > 0 %}warning{% endif %}"><span>Open Actions</span><strong>{{ row.open_actions }}</strong></div>
+                        </div>
+                    </div>
+                </div>
+                {% else %}<div class="p7-empty">No active Primary cooperatives are linked to this Secondary cooperative.</div>{% endfor %}
+            </div>
+        </div>
+    </section>
+
+    <section class="p7-card">
+        <div class="p7-card-head"><h2>Joint Projects &amp; Production Programmes</h2><span class="p7-badge">Both Primaries / delegated joint work</span></div>
+        {% if can_governance_record %}
+        <div class="p7-card-body">
+            <form class="p7-form" method="POST" action="{{ url_for('jointops.project_create') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="p7-field"><label>Project title</label><input name="title" required placeholder="e.g. Joint Potato Programme 2026"></div>
+                <div class="p7-field"><label>Type</label><select name="project_type" required>{% for item in project_types %}<option>{{ item }}</option>{% endfor %}</select></div>
+                <div class="p7-field"><label>Start date</label><input name="start_date" type="date"></div>
+                <div class="p7-field"><label>End date</label><input name="end_date" type="date"></div>
+                <div class="p7-field"><label>Overall budget (R)</label><input name="budget_amount" type="number" min="0" step="0.01" value="0"></div>
+                <div class="p7-field"><label>Status</label><select name="status"><option>Planned</option><option>In Progress</option><option>On Hold</option></select></div>
+                <div class="p7-field full"><label>Description</label><textarea name="description" placeholder="What is being done jointly and what outcome is expected?"></textarea></div>
+                <div class="p7-field full"><button class="p7-btn primary" type="submit">Create Joint Project</button></div>
+            </form>
+        </div>
+        {% endif %}
+        <div class="p7-table-wrap"><table class="p7-table">
+            <thead><tr><th>Project</th><th>Type</th><th>Budget</th><th>Primary Allocations</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody>
+            {% for project in projects %}
+            <tr>
+                <td><strong>{{ project.title }}</strong><small>{{ project.description or 'No description' }}</small></td>
+                <td>{{ project.project_type }}</td>
+                <td>R {{ "{:,.2f}".format(project.budget_amount|float) }}</td>
+                <td>
+                    {% for allocation in project.allocations %}
+                    <div><strong>{{ allocation.primary_cooperative.name }}</strong><small>R {{ "{:,.2f}".format(allocation.allocated_amount|float) }} · {{ "{:,.2f}".format(allocation.hectares|float) }} ha · {{ allocation.progress_percentage }}%</small></div>
+                    {% else %}<span class="p7-badge warning">No allocation yet</span>{% endfor %}
+                </td>
+                <td><span class="p7-badge {% if project.status in ['On Hold','Cancelled'] %}danger{% elif project.status=='Completed' %}good{% endif %}">{{ project.status }}</span></td>
+                <td>
+                    {% if can_governance_record %}
+                    <details><summary class="p7-btn">Allocate / Update</summary>
+                        <form class="p7-form" method="POST" action="{{ url_for('jointops.project_allocation', project_id=project.id) }}" style="margin-top:10px;min-width:310px">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <div class="p7-field full"><label>Primary cooperative</label><select name="primary_cooperative_id" required>{% for primary in primaries %}<option value="{{ primary.id }}">{{ primary.name }}</option>{% endfor %}</select></div>
+                            <div class="p7-field"><label>Allocation (R)</label><input name="allocated_amount" type="number" min="0" step="0.01" value="0"></div>
+                            <div class="p7-field"><label>Hectares</label><input name="hectares" type="number" min="0" step="0.01" value="0"></div>
+                            <div class="p7-field"><label>Progress %</label><input name="progress_percentage" type="number" min="0" max="100" value="0"></div>
+                            <div class="p7-field full"><label>Notes</label><textarea name="notes"></textarea></div>
+                            <div class="p7-field full"><button class="p7-btn primary" type="submit">Save Allocation</button></div>
+                        </form>
+                    </details>
+                    <form method="POST" action="{{ url_for('jointops.project_status', project_id=project.id) }}" class="p7-actions" style="margin-top:8px">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <select name="status"><option>Planned</option><option>In Progress</option><option>On Hold</option><option>Completed</option><option>Cancelled</option></select>
+                        <button class="p7-btn" type="submit">Update</button>
+                    </form>
+                    {% else %}—{% endif %}
+                </td>
+            </tr>
+            {% else %}<tr><td colspan="6"><div class="p7-empty">No joint projects recorded yet.</div></td></tr>{% endfor %}
+            </tbody>
+        </table></div>
+    </section>
+
+    <section class="p7-card">
+        <div class="p7-card-head"><h2>Shared Assets &amp; Machinery</h2><span class="p7-badge">MFPSU-owned / managed</span></div>
+        {% if can_asset_record %}
+        <div class="p7-card-body">
+            <form class="p7-form" method="POST" action="{{ url_for('jointops.asset_create') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="p7-field"><label>Asset name</label><input name="name" required placeholder="e.g. MFPSU Tractor 01"></div>
+                <div class="p7-field"><label>Category</label><select name="category" required>{% for item in asset_categories %}<option>{{ item }}</option>{% endfor %}</select></div>
+                <div class="p7-field"><label>Identifier / registration</label><input name="identifier"></div>
+                <div class="p7-field"><label>Acquisition date</label><input name="acquisition_date" type="date"></div>
+                <div class="p7-field"><label>Value (R)</label><input name="acquisition_value" type="number" min="0" step="0.01" value="0"></div>
+                <div class="p7-field"><label>Current location</label><input name="location"></div>
+                <div class="p7-field"><label>Status</label><select name="status"><option>Available</option><option>In Use</option><option>Service Due</option><option>Out of Service</option></select></div>
+                <div class="p7-field full"><label>Notes</label><textarea name="notes"></textarea></div>
+                <div class="p7-field full"><button class="p7-btn primary" type="submit">Register Shared Asset</button></div>
+            </form>
+        </div>
+        {% endif %}
+        <div class="p7-table-wrap"><table class="p7-table">
+            <thead><tr><th>Asset</th><th>Category</th><th>Identifier</th><th>Value</th><th>Status</th><th>Schedule Primary Use</th></tr></thead>
+            <tbody>{% for asset in assets %}<tr>
+                <td><strong>{{ asset.name }}</strong><small>{{ asset.location or 'Location not set' }}</small></td>
+                <td>{{ asset.category }}</td><td>{{ asset.identifier or '—' }}</td><td>R {{ "{:,.2f}".format(asset.acquisition_value|float) }}</td><td>{{ asset.status }}</td>
+                <td>{% if can_governance_record %}<details><summary class="p7-btn">Record Usage</summary>
+                    <form class="p7-form" method="POST" action="{{ url_for('jointops.asset_usage_add', asset_id=asset.id) }}" style="margin-top:10px;min-width:330px">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="p7-field full"><label>Primary cooperative</label><select name="primary_cooperative_id" required>{% for primary in primaries %}<option value="{{ primary.id }}">{{ primary.name }}</option>{% endfor %}</select></div>
+                        <div class="p7-field full"><label>Purpose</label><input name="purpose" required></div>
+                        <div class="p7-field"><label>Start</label><input name="start_date" type="date" required></div><div class="p7-field"><label>End</label><input name="end_date" type="date"></div>
+                        <div class="p7-field"><label>Estimated cost</label><input name="estimated_cost" type="number" min="0" step="0.01" value="0"></div><div class="p7-field"><label>Actual cost</label><input name="actual_cost" type="number" min="0" step="0.01" value="0"></div>
+                        <div class="p7-field"><label>Status</label><select name="status"><option>Scheduled</option><option>In Use</option><option>Completed</option></select></div>
+                        <div class="p7-field full"><label>Notes</label><textarea name="notes"></textarea></div>
+                        <div class="p7-field full"><button class="p7-btn primary" type="submit">Record Shared Use</button></div>
+                    </form></details>{% else %}—{% endif %}</td>
+            </tr>{% else %}<tr><td colspan="6"><div class="p7-empty">No shared assets registered yet.</div></td></tr>{% endfor %}</tbody>
+        </table></div>
+        <div class="p7-card-body"><div class="p7-list">{% for usage in usages %}<div class="p7-row"><div><strong>{{ usage.asset.name }} → {{ usage.primary_cooperative.name }}</strong><small>{{ usage.purpose }} · {{ usage.start_date.strftime('%d %b %Y') }}{% if usage.end_date %} to {{ usage.end_date.strftime('%d %b %Y') }}{% endif %}</small></div><span class="p7-badge">{{ usage.status }}</span></div>{% else %}<div class="p7-empty">No shared asset usage recorded yet.</div>{% endfor %}</div></div>
+    </section>
+
+    <section class="p7-card">
+        <div class="p7-card-head"><h2>Joint Procurement</h2><span class="p7-badge">Treasurer records · Chairperson approves</span></div>
+        {% if can_finance_record %}
+        <div class="p7-card-body"><form class="p7-form" method="POST" action="{{ url_for('jointops.procurement_create') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="p7-field"><label>Procurement title</label><input name="title" required placeholder="e.g. Bulk potato seed purchase"></div><div class="p7-field"><label>Category</label><input name="category" required></div>
+            <div class="p7-field"><label>Quantity</label><input name="quantity" type="number" min="0" step="0.01" value="0"></div><div class="p7-field"><label>Unit</label><input name="unit" placeholder="bags / kg / litres"></div>
+            <div class="p7-field"><label>Supplier</label><input name="supplier_name"></div><div class="p7-field"><label>Estimated cost (R)</label><input name="estimated_cost" type="number" min="0" step="0.01" value="0"></div>
+            <div class="p7-field"><label>Joint project</label><select name="project_id"><option value="">General joint procurement</option>{% for project in projects %}<option value="{{ project.id }}">{{ project.title }}</option>{% endfor %}</select></div>
+            <div class="p7-field full"><label>Notes / distribution plan</label><textarea name="notes"></textarea></div><div class="p7-field full"><button class="p7-btn primary" type="submit">Submit for Chairperson Approval</button></div>
+        </form></div>
+        {% endif %}
+        <div class="p7-table-wrap"><table class="p7-table"><thead><tr><th>Procurement</th><th>Quantity</th><th>Estimated</th><th>Actual</th><th>Status</th><th>Action</th></tr></thead><tbody>
+            {% for item in procurements %}<tr><td><strong>{{ item.title }}</strong><small>{{ item.category }} · {{ item.supplier_name or 'Supplier not set' }}</small></td><td>{{ item.quantity }} {{ item.unit or '' }}</td><td>R {{ "{:,.2f}".format(item.estimated_cost|float) }}</td><td>R {{ "{:,.2f}".format(item.actual_cost|float) }}</td><td><span class="p7-badge {% if item.status in ['Pending Approval','Ordered'] %}warning{% elif item.status=='Rejected' %}danger{% endif %}">{{ item.status }}</span></td><td>
+                {% if can_finance_approve and item.status=='Pending Approval' %}<form class="p7-actions" method="POST" action="{{ url_for('jointops.procurement_decision', procurement_id=item.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="p7-btn primary" name="decision" value="approve">Approve</button><button class="p7-btn danger" name="decision" value="reject">Reject</button></form>
+                {% elif can_finance_record and item.status in ['Approved','Ordered','Delivered'] %}<details><summary class="p7-btn">Update Progress</summary><form class="p7-form" method="POST" action="{{ url_for('jointops.procurement_progress', procurement_id=item.id) }}" style="margin-top:8px;min-width:300px"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="p7-field"><label>Status</label><select name="status"><option>Ordered</option><option>Delivered</option><option>Cancelled</option></select></div><div class="p7-field"><label>Actual cost</label><input name="actual_cost" type="number" min="0" step="0.01" value="{{ item.actual_cost }}"></div><div class="p7-field"><label>Order date</label><input name="order_date" type="date" value="{{ item.order_date.isoformat() if item.order_date else '' }}"></div><div class="p7-field"><label>Delivery date</label><input name="delivery_date" type="date" value="{{ item.delivery_date.isoformat() if item.delivery_date else '' }}"></div><div class="p7-field full"><button class="p7-btn primary" type="submit">Save Progress</button></div></form></details>{% else %}—{% endif %}
+            </td></tr>{% else %}<tr><td colspan="6"><div class="p7-empty">No joint procurement records yet.</div></td></tr>{% endfor %}
+        </tbody></table></div>
+    </section>
+
+    <section class="p7-card" id="primary-contributions">
+        <div class="p7-card-head"><h2>Primary Cooperative Contributions to MFPSU</h2><form method="GET"><input name="year" type="number" value="{{ year }}" min="2020" max="2100" style="height:34px;width:90px"><button class="p7-btn" type="submit">Go</button></form></div>
+        <div class="p7-grid-4 p7-card-body"><div class="p7-stat"><span>Expected</span><strong>R {{ "{:,.2f}".format(stats.expected_contributions|float) }}</strong></div><div class="p7-stat good"><span>Confirmed</span><strong>R {{ "{:,.2f}".format(stats.confirmed_contributions|float) }}</strong></div><div class="p7-stat warning"><span>Pending Confirmation</span><strong>R {{ "{:,.2f}".format(stats.pending_contributions|float) }}</strong></div><div class="p7-stat"><span>Outstanding</span><strong>R {{ "{:,.2f}".format(stats.outstanding_contributions|float) }}</strong></div></div>
+        {% if can_finance_record %}
+        <div class="p7-card-body"><form class="p7-form" method="POST" action="{{ url_for('jointops.contribution_account_save') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="p7-field"><label>Primary cooperative</label><select name="primary_cooperative_id" required>{% for primary in primaries %}<option value="{{ primary.id }}">{{ primary.name }}</option>{% endfor %}</select></div><div class="p7-field"><label>Fiscal year</label><input name="fiscal_year" type="number" value="{{ year }}" min="2020" max="2100" required></div><div class="p7-field"><label>Expected contribution (R)</label><input name="expected_amount" type="number" min="0" step="0.01" value="1000" required></div><div class="p7-field full"><label>Notes</label><textarea name="notes"></textarea></div><div class="p7-field full"><button class="p7-btn primary" type="submit">Set / Update Contribution Target</button></div></form></div>
+        {% endif %}
+        <div class="p7-table-wrap"><table class="p7-table"><thead><tr><th>Primary</th><th>Expected</th><th>Confirmed</th><th>Pending</th><th>Outstanding</th><th>Record Payment</th></tr></thead><tbody>
+            {% for account in contribution_accounts %}<tr><td><strong>{{ account.primary_cooperative.name }}</strong><small>{{ account.fiscal_year }}</small></td><td>R {{ "{:,.2f}".format(account.expected_amount|float) }}</td><td>R {{ "{:,.2f}".format(account.confirmed_paid|float) }}</td><td>R {{ "{:,.2f}".format(account.pending_paid|float) }}</td><td>R {{ "{:,.2f}".format(account.outstanding_amount|float) }}</td><td>{% if can_finance_record %}<details><summary class="p7-btn">Record Payment</summary><form class="p7-form" method="POST" action="{{ url_for('jointops.contribution_payment_add', account_id=account.id) }}" style="margin-top:8px;min-width:300px"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="p7-field"><label>Amount (R)</label><input name="amount" type="number" min="0.01" step="0.01" required></div><div class="p7-field"><label>Date</label><input name="payment_date" type="date" required></div><div class="p7-field"><label>Method</label><input name="method" placeholder="Bank / Cash"></div><div class="p7-field"><label>Reference</label><input name="reference"></div><div class="p7-field full"><label>Notes</label><textarea name="notes"></textarea></div><div class="p7-field full"><button class="p7-btn primary" type="submit">Submit for Chairperson Confirmation</button></div></form></details>{% else %}—{% endif %}</td></tr>{% else %}<tr><td colspan="6"><div class="p7-empty">No Primary contribution targets have been set for {{ year }}.</div></td></tr>{% endfor %}
+        </tbody></table></div>
+        <div class="p7-card-body"><div class="p7-list">{% for payment in contribution_payments %}<div class="p7-row"><div><strong>{{ payment.primary_cooperative.name }} · R {{ "{:,.2f}".format(payment.amount|float) }}</strong><small>{{ payment.payment_date.strftime('%d %b %Y') }} · {{ payment.reference or 'No reference' }}</small></div><div class="p7-actions"><span class="p7-badge {% if payment.status=='Pending Confirmation' %}warning{% elif payment.status=='Rejected' %}danger{% endif %}">{{ payment.status }}</span>{% if can_finance_approve and payment.status=='Pending Confirmation' %}<form class="p7-actions" method="POST" action="{{ url_for('jointops.contribution_payment_decision', payment_id=payment.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="p7-btn primary" name="decision" value="approve">Confirm</button><button class="p7-btn danger" name="decision" value="reject">Reject</button></form>{% endif %}</div></div>{% else %}<div class="p7-empty">No cooperative contribution payments recorded yet.</div>{% endfor %}</div></div>
+    </section>
+
+    <section class="p7-card">
+        <div class="p7-card-head"><h2>Joint Marketing &amp; Collective Sales Programmes</h2><span class="p7-badge">Combined market commitments</span></div>
+        {% if can_governance_record %}
+        <div class="p7-card-body"><form class="p7-form" method="POST" action="{{ url_for('jointops.market_contract_create') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="p7-field"><label>Programme / contract title</label><input name="title" required></div><div class="p7-field"><label>Buyer</label><input name="buyer_name" required></div><div class="p7-field"><label>Product</label><input name="product" required></div><div class="p7-field"><label>Target quantity</label><input name="target_quantity" type="number" min="0" step="0.01" value="0"></div><div class="p7-field"><label>Unit</label><input name="unit" placeholder="kg / tonnes / bags"></div><div class="p7-field"><label>Contract value (R)</label><input name="contract_value" type="number" min="0" step="0.01" value="0"></div><div class="p7-field"><label>Delivery date</label><input name="delivery_date" type="date"></div><div class="p7-field"><label>Linked joint project</label><select name="project_id"><option value="">No linked project</option>{% for project in projects %}<option value="{{ project.id }}">{{ project.title }}</option>{% endfor %}</select></div><div class="p7-field"><label>Status</label><select name="status"><option>Planned</option><option>Negotiating</option><option>Contracted</option></select></div><div class="p7-field full"><label>Notes</label><textarea name="notes"></textarea></div><div class="p7-field full"><button class="p7-btn primary" type="submit">Record Joint Marketing Programme</button></div></form></div>
+        {% endif %}
+        <div class="p7-table-wrap"><table class="p7-table"><thead><tr><th>Programme</th><th>Buyer</th><th>Product</th><th>Target</th><th>Value</th><th>Status</th><th></th></tr></thead><tbody>{% for item in contracts %}<tr><td><strong>{{ item.title }}</strong><small>{{ item.project.title if item.project else 'General joint marketing' }}</small></td><td>{{ item.buyer_name }}</td><td>{{ item.product }}</td><td>{{ item.target_quantity }} {{ item.unit or '' }}</td><td>R {{ "{:,.2f}".format(item.contract_value|float) }}</td><td>{{ item.status }}</td><td>{% if can_governance_record %}<form class="p7-actions" method="POST" action="{{ url_for('jointops.market_contract_status', contract_id=item.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><select name="status"><option>Planned</option><option>Negotiating</option><option>Contracted</option><option>Delivering</option><option>Completed</option><option>Cancelled</option></select><button class="p7-btn" type="submit">Update</button></form>{% else %}—{% endif %}</td></tr>{% else %}<tr><td colspan="7"><div class="p7-empty">No joint marketing programmes recorded yet.</div></td></tr>{% endfor %}</tbody></table></div>
+    </section>
+</div>
+{% endblock %}
