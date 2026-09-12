@@ -10,7 +10,7 @@ for _name in ("db","UserAccess","FINANCE_VIEW_ROLES","FINANCE_RECORD_ROLES","FIN
               "current_access","current_cooperative","roles_required","parse_int","parse_float","parse_date",
               "add_audit_log","utc_now"):
     globals()[_name]=getattr(_core,_name)
-from phase7 import _upsert_notification
+from phase7 import _upsert_notification, CooperativeDocument
 
 bp=Blueprint("ledger",__name__)
 ACCOUNT_TYPES=("Bank Account","Cash Box","Mobile Money","Savings","Other")
@@ -107,7 +107,8 @@ def dashboard():
 @roles_required(*FINANCE_VIEW_ROLES)
 def transaction_detail(item_id):
     access,coop=_context(); row=LedgerTransaction.query.filter_by(id=item_id,cooperative_id=coop.id).first_or_404()
-    return render_template("finance_accounts/transaction_detail.html",transaction=row,can_approve=access.role in FINANCE_APPROVAL_ROLES)
+    documents=CooperativeDocument.query.filter_by(cooperative_id=coop.id,entity_type="LedgerTransaction",entity_id=row.id).order_by(CooperativeDocument.created_at.desc()).all()
+    return render_template("finance_accounts/transaction_detail.html",transaction=row,documents=documents,can_record=access.role in FINANCE_RECORD_ROLES,can_approve=access.role in FINANCE_APPROVAL_ROLES)
 
 @bp.route("/finance/accounts",methods=["POST"])
 @roles_required(*FINANCE_RECORD_ROLES)
