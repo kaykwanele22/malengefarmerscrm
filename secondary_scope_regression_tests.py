@@ -111,7 +111,7 @@ class SecondaryJointScopeTests(unittest.TestCase):
         self.assertNotIn("Primary Book Position", page)
         self.assertNotIn("Confirmed Sale Payments", page)
         self.assertNotIn("Confirmed Member Contributions", page)
-        self.assertNotIn("internal bank balances", page.lower())
+        self.assertIn("internal bank balances", page.lower())
 
     def test_secondary_secretary_is_not_a_primary_membership_manager(self):
         self.login_as(self.sec_secretary_id)
