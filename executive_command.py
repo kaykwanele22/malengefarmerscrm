@@ -201,6 +201,12 @@ def register_executive_command(app):
     if "execdash" not in app.blueprints:
         app.register_blueprint(bp)
 
+    # Document access is a cross-cutting executive concern. Install it only
+    # after Phase 7 has registered its endpoint names so existing links keep
+    # working while the view functions receive role/context enforcement.
+    from document_access import install_document_access_controls
+    install_document_access_controls(app)
+
     original_dashboard = app.view_functions.get("dashboard")
     if not original_dashboard or getattr(original_dashboard, "_executive_command_router", False):
         return
