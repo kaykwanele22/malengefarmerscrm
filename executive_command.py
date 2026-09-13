@@ -144,6 +144,7 @@ def _dashboard_data():
     chairperson_decisions = None
     finance_composition = None
     treasurer_work = None
+    secretary_work = None
     network_rows = []
     if cooperative.cooperative_type == "Primary":
         memberships = _core.Membership.query.filter_by(cooperative_id=cooperative_id).all()
@@ -268,6 +269,43 @@ def _dashboard_data():
                 ),
                 "missing_evidence_count": missing_evidence_count,
             }
+
+        if role in {"Primary Secretary", "Primary Vice Secretary"}:
+            membership_attention_count = sum(
+                1
+                for membership in memberships
+                if membership.status in {"Pending", "Suspended"}
+                or not membership.join_date
+            )
+            membership_fee_followup_count = sum(
+                1
+                for membership in valid_fee_memberships
+                if membership.status == "Active" and float(membership.fee_outstanding or 0) > 1e-9
+            )
+
+            draft_meetings = _core.Meeting.query.filter(
+                _core.Meeting.cooperative_id == cooperative_id,
+                _core.Meeting.status != "Confirmed",
+            ).order_by(_core.Meeting.meeting_date.asc()).all()
+            meetings_without_evidence = sum(1 for meeting in draft_meetings if not meeting.documents)
+            draft_resolutions = _core.Resolution.query.filter_by(
+                cooperative_id=cooperative_id,
+                status="Draft",
+            ).count()
+            upcoming_30_count = _core.Meeting.query.filter(
+                _core.Meeting.cooperative_id == cooperative_id,
+                _core.Meeting.meeting_date >= today,
+                _core.Meeting.meeting_date <= today + _core.timedelta(days=30),
+            ).count()
+
+            secretary_work = {
+                "membership_attention_count": membership_attention_count,
+                "membership_fee_followup_count": membership_fee_followup_count,
+                "draft_meeting_count": len(draft_meetings),
+                "meetings_without_evidence": meetings_without_evidence,
+                "draft_resolution_count": draft_resolutions,
+                "upcoming_30_count": upcoming_30_count,
+            }
     elif cooperative.cooperative_type == "Secondary":
         network_rows = _primary_network_rows(cooperative_id)
 
@@ -351,6 +389,7 @@ def _dashboard_data():
         "chairperson_decisions": chairperson_decisions,
         "finance_composition": finance_composition,
         "treasurer_work": treasurer_work,
+        "secretary_work": secretary_work,
         "network_rows": network_rows,
         "alerts": alerts,
     }
