@@ -237,11 +237,12 @@ def _auth_after_request(response):
     if request.method == "POST" and session.get("user_id"):
         finalized = False
         if endpoint == "login" and response.status_code in {301, 302, 303, 307, 308}:
-            # Some deployments keep the 2FA policy flag enabled while a test/admin
-            # bypass has already completed the authentication session. Treat either
-            # a paused policy or an already-complete second factor as final login.
-            if not two_factor_policy_enabled() or two_factor_session_complete():
-                finalized = True
+            location = response.headers.get("Location", "") or ""
+            challenge_paths = (url_for("two_factor_setup"), url_for("two_factor_verify"))
+            # A login redirect is final unless the existing login flow is explicitly
+            # sending the user to a second-factor challenge. This preserves mandatory
+            # 2FA while also supporting environments where 2FA enforcement is paused.
+            finalized = all(path not in location for path in challenge_paths)
         elif endpoint == "two_factor_verify" and two_factor_session_complete():
             finalized = response.status_code in {301, 302, 303, 307, 308}
         elif endpoint == "two_factor_setup" and two_factor_session_complete():
