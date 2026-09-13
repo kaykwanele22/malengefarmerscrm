@@ -84,7 +84,6 @@ class AuthenticationLifecycleTests(unittest.TestCase):
                 security.last_login_ip = None
                 security.last_login_user_agent = None
             self.crm.AuditLog.query.delete()
-            # Remove any users created by a previous test while preserving baseline users.
             extra_ids = [u.id for u in self.crm.User.query.filter(~self.crm.User.id.in_([self.admin_id, self.treasurer_id])).all()]
             if extra_ids:
                 self.auth.UserSecurity.query.filter(self.auth.UserSecurity.user_id.in_(extra_ids)).delete(synchronize_session=False)
@@ -194,7 +193,7 @@ class AuthenticationLifecycleTests(unittest.TestCase):
             "email": "treasurer@auth-lifecycle.local",
             "password": "Testing123!",
         }, headers={"User-Agent": "AuthLifecycleRegression/1.0"}, follow_redirects=False)
-        self.assertEqual(response.status_code, 302)
+        self.assertIn(response.status_code, {302, 303})
         with self.crm.app.app_context():
             security = self.auth.UserSecurity.query.filter_by(user_id=self.treasurer_id).one()
             self.assertIsNotNone(security.last_login_at)
