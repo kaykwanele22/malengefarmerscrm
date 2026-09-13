@@ -19,7 +19,7 @@ if _core is None or not hasattr(_core, "db"):
 
 from account_ledger import FinanceAccount, LedgerTransaction
 from joint_operations import PrimaryContributionAccount, JointProjectAllocation
-from phase7 import BankReconciliation
+from phase7 import BankReconciliation, Budget
 
 
 bp = Blueprint("execdash", __name__)
@@ -161,11 +161,11 @@ def _dashboard_data():
                 cooperative_id=cooperative_id,
                 status="Pending Confirmation",
             ).all()
-            pending_budgets = _core.Budget.query.filter_by(
+            pending_budgets = Budget.query.filter_by(
                 cooperative_id=cooperative_id,
                 status="Pending Approval",
             ).all()
-            pending_reconciliations = _core.BankReconciliation.query.filter_by(
+            pending_reconciliations = BankReconciliation.query.filter_by(
                 cooperative_id=cooperative_id,
                 status="Pending Review",
             ).all()
