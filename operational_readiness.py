@@ -11,7 +11,6 @@ import sys
 
 from flask import Blueprint, jsonify
 from sqlalchemy import text as sql_text
-from sqlalchemy.exc import SQLAlchemyError
 
 
 _core = sys.modules.get("app")
@@ -21,17 +20,24 @@ if _core is None or not hasattr(_core, "db"):
 bp = Blueprint("opsready", __name__)
 
 
+def _safe_session_rollback():
+    """Best-effort cleanup after a failed database probe."""
+    try:
+        _core.db.session.rollback()
+    except Exception:
+        # A broken connection may also reject rollback; readiness must still
+        # return a controlled 503 rather than exposing an internal 500.
+        pass
+
+
 def _database_ready():
     """Return True when the configured database accepts a simple query."""
     try:
         _core.db.session.execute(sql_text("SELECT 1"))
         return True
-    except SQLAlchemyError:
-        _core.db.session.rollback()
-        return False
     except Exception:
         # Readiness responses must never expose driver or connection details.
-        _core.db.session.rollback()
+        _safe_session_rollback()
         return False
 
 
@@ -71,7 +77,10 @@ def readiness_probe():
             "evidence_storage": "ok" if evidence_storage_ok else "unavailable",
         },
     }
-    return jsonify(payload), 200 if ready else 503
+    response = jsonify(payload)
+    if not ready:
+        response.headers["Retry-After"] = "5"
+    return response, 200 if ready else 503
 
 
 def register_operational_readiness(app):
