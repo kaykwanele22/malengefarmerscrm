@@ -1057,7 +1057,8 @@ MEMBERSHIP_FEE_CATEGORY = "Membership Fee"
 MEMBERSHIP_FEE_CATEGORY_ALIASES = {"membership fee", "membership"}
 MEMBER_CREDIT_CATEGORY = "Member Credit"
 MEMBER_CREDIT_CATEGORY_ALIASES = {"member credit", "membership credit", "credit"}
-MAX_PRIMARY_MEMBERSHIP_FEE = max(300.0, float(os.getenv("MAX_PRIMARY_MEMBERSHIP_FEE", "10000")))
+DEFAULT_PRIMARY_MEMBERSHIP_FEE = max(0.0, float(os.getenv("DEFAULT_PRIMARY_MEMBERSHIP_FEE", "300")))
+MAX_PRIMARY_MEMBERSHIP_FEE = max(DEFAULT_PRIMARY_MEMBERSHIP_FEE, float(os.getenv("MAX_PRIMARY_MEMBERSHIP_FEE", "10000")))
 
 # Deferred/extended module permissions. Secondary leadership may view operational
 # records across the network, while Primary Chair/Vice Chair mutate farm operations.
@@ -1967,6 +1968,81 @@ def record_membership_history(membership, event_type, description=None, from_sta
     )
     db.session.add(entry)
     return entry
+
+
+def repair_existing_membership_fee_integrity():
+    """Repair clearly invalid legacy Primary membership fees without deleting finance history.
+
+    Only fee expectations above the configured membership-fee ceiling are
+    normalized automatically, and only when confirmed/pending membership-fee
+    receipts do not already exceed the normal Primary joining fee. Ambiguous
+    records are left untouched for manual review.
+    """
+    candidates = (
+        Membership.query
+        .join(Cooperative, Membership.cooperative_id == Cooperative.id)
+        .filter(
+            Cooperative.cooperative_type == "Primary",
+            Membership.fee_amount > MAX_PRIMARY_MEMBERSHIP_FEE,
+        )
+        .all()
+    )
+    repaired = 0
+    for membership in candidates:
+        confirmed_applied = float(membership.fee_paid_applied or 0)
+        pending_fee = float(membership.fee_pending or 0)
+        if confirmed_applied + pending_fee > DEFAULT_PRIMARY_MEMBERSHIP_FEE + 1e-9:
+            continue
+
+        old_amount = float(membership.fee_amount or 0)
+        membership.fee_amount = DEFAULT_PRIMARY_MEMBERSHIP_FEE
+        membership.updated_at = utc_now()
+        record_membership_history(
+            membership,
+            "FEE_INTEGRITY_REPAIR",
+            description=(
+                f"System repaired invalid expected membership fee from R{old_amount:.2f} "
+                f"to R{DEFAULT_PRIMARY_MEMBERSHIP_FEE:.2f}. Finance records were preserved."
+            ),
+            from_status=membership.status,
+            to_status=membership.status,
+            user_id=None,
+        )
+        add_audit_log(
+            "MEMBERSHIP_FEE_INTEGRITY_REPAIR",
+            "Membership",
+            membership.id,
+            (
+                f"{membership.member_number}: invalid expected fee R{old_amount:.2f} "
+                f"normalized to R{DEFAULT_PRIMARY_MEMBERSHIP_FEE:.2f}; financial history preserved."
+            ),
+            cooperative_id=membership.cooperative_id,
+        )
+        repaired += 1
+
+    if repaired:
+        db.session.commit()
+    return repaired
+
+
+_membership_integrity_checked = False
+
+
+@app.before_request
+def _repair_legacy_membership_fee_integrity_once():
+    """Run the idempotent legacy fee repair once per application process."""
+    global _membership_integrity_checked
+    if _membership_integrity_checked:
+        return None
+    try:
+        repaired = repair_existing_membership_fee_integrity()
+        if repaired:
+            app.logger.warning("Repaired %s invalid legacy membership fee record(s).", repaired)
+        _membership_integrity_checked = True
+    except SQLAlchemyError:
+        db.session.rollback()
+        app.logger.exception("Membership fee integrity repair could not complete.")
+    return None
 
 
 def membership_filtered_query(search="", status="", fee_status="", cooperative_id=None):
@@ -5859,10 +5935,14 @@ def memberships_list():
     active_members = base_query.filter(Membership.status == "Active").count()
     attention_members = base_query.filter(Membership.status.in_(("Pending", "Suspended"))).count()
     fee_memberships = base_query.all()
-    total_expected = sum(float(m.fee_amount or 0) for m in fee_memberships)
-    total_paid = sum(float(m.fee_paid_applied or 0) for m in fee_memberships)
-    total_pending = sum(float(m.fee_pending or 0) for m in fee_memberships)
-    total_outstanding = sum(float(m.fee_outstanding or 0) for m in fee_memberships)
+    valid_fee_memberships = [
+        m for m in fee_memberships
+        if 0 <= float(m.fee_amount or 0) <= MAX_PRIMARY_MEMBERSHIP_FEE
+    ]
+    total_expected = sum(float(m.fee_amount or 0) for m in valid_fee_memberships)
+    total_paid = sum(float(m.fee_paid_applied or 0) for m in valid_fee_memberships)
+    total_pending = sum(float(m.fee_pending or 0) for m in valid_fee_memberships)
+    total_outstanding = sum(float(m.fee_outstanding or 0) for m in valid_fee_memberships)
     total_credit = sum(float(m.fee_credit_confirmed or 0) for m in fee_memberships)
     total_credit_pending = sum(float(m.fee_credit_pending or 0) for m in fee_memberships)
 
@@ -5917,7 +5997,7 @@ def add_membership():
         if Membership.query.filter_by(member_number=member_number).first():
             return "This member number already exists. Please try again.", 400
 
-        fee_amount = parse_float(request.form.get("fee_amount"), 300.0)
+        fee_amount = parse_float(request.form.get("fee_amount"), DEFAULT_PRIMARY_MEMBERSHIP_FEE)
         if fee_amount is None or fee_amount < 0:
             return "Membership fee cannot be negative.", 400
         if fee_amount > MAX_PRIMARY_MEMBERSHIP_FEE:
