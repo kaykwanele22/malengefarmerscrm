@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block title %}Accountability Register | Malenge Farmers CRM{% endblock %}
+{% block title %}Governance | Malenge Farmers CRM{% endblock %}
 {% block extra_css %}<link rel="stylesheet" href="{{ url_for('static', filename='css/accountability.css') }}">{% endblock %}
 {% block content %}
 <div class="acc-page">
   <div class="acc-head">
-    <div><span class="acc-eyebrow">Governance &amp; Accountability</span><h1>Accountability Register</h1><p>One place to see what was decided, who is responsible, what is overdue, and whether proof has been verified.</p></div>
+    <div><span class="acc-eyebrow">Governance</span><h1>What was decided?</h1><p>Meetings, resolutions, responsibility, deadlines, evidence and verification in one place.</p></div>
     <div class="acc-actions"><a class="acc-btn" href="{{ url_for('meetings_list') }}">📎 Meeting Evidence</a>{% if can_record_resolutions %}<a class="acc-btn primary" href="{{ url_for('add_resolution') }}">+ Capture Resolution</a>{% endif %}</div>
   </div>
 
@@ -16,7 +16,7 @@
   </div>
 
   <section class="acc-card">
-    <div class="acc-card-head"><h2>Resolution Accountability</h2></div>
+    <div class="acc-card-head"><h2>Resolutions &amp; Responsibilities</h2></div>
     <div class="acc-card-body">
       <form class="acc-search" method="GET">
         <input name="search" value="{{ search or '' }}" placeholder="Search reference, matter or meeting...">
