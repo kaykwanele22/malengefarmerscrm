@@ -2,6 +2,7 @@ import importlib
 import os
 import tempfile
 import unittest
+from io import BytesIO
 from datetime import timedelta
 from pathlib import Path
 
@@ -249,7 +250,10 @@ class FinanceLedgerRegressionTests(unittest.TestCase):
             "reference": "LOAN-SEP-2026",
             "payment_method": "EFT / Bank Transfer",
             "notes": "September loan instalment",
-        })
+            "budget_justification": "Approved debt repayment budget line for the September instalment.",
+            "evidence_file_1": (BytesIO(b"%PDF-1.4\nproof-one"), "payment-proof.pdf"),
+            "evidence_file_2": (BytesIO(b"%PDF-1.4\nproof-two"), "loan-statement.pdf"),
+        }, content_type="multipart/form-data")
         self.assertEqual(response.status_code, 302)
 
         with c.app.app_context():
@@ -303,6 +307,107 @@ class FinanceLedgerRegressionTests(unittest.TestCase):
         response = self.client.get("/finance/accounts?group=Debt+Repayment")
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"LOAN-SEP-2026", response.data)
+
+    def test_evidence_wall_blocks_medium_transaction_without_proof(self):
+        c, l = self.crm, self.ledger
+        self.login_as("treasurer")
+        self.client.post("/finance/accounts", data={
+            "name": "Evidence Bank", "account_type": "Bank Account", "opening_balance": "5000",
+            "opening_balance_date": c.crm_today().isoformat(),
+        })
+        with c.app.app_context():
+            account_id = l.FinanceAccount.query.filter_by(cooperative_id=self.coop_a, name="Evidence Bank").one().id
+
+        blocked = self.client.post("/finance/transactions", data={
+            "transaction_type": "Expense", "category": "Transport", "amount": "750",
+            "transaction_date": c.crm_today().isoformat(), "from_account_id": str(account_id),
+            "counterparty": "Local Transport", "reference": "MEDIUM-NO-PROOF",
+        })
+        self.assertEqual(blocked.status_code, 400)
+        self.assertIn(b"Medium transactions require 1 evidence file", blocked.data)
+
+        accepted = self.client.post("/finance/transactions", data={
+            "transaction_type": "Expense", "category": "Transport", "amount": "750",
+            "transaction_date": c.crm_today().isoformat(), "from_account_id": str(account_id),
+            "counterparty": "Local Transport", "reference": "MEDIUM-WITH-PROOF",
+            "evidence_file_1": (BytesIO(b"%PDF-1.4\nreceipt"), "receipt.pdf"),
+        }, content_type="multipart/form-data")
+        self.assertEqual(accepted.status_code, 302)
+        with c.app.app_context():
+            tx = l.LedgerTransaction.query.filter_by(reference="MEDIUM-WITH-PROOF").one()
+            self.assertEqual(tx.evidence_tier, "Medium")
+            self.assertFalse(tx.evidence_bypass)
+            self.assertEqual(self.p7.CooperativeDocument.query.filter_by(entity_type="LedgerTransaction", entity_id=tx.id).count(), 1)
+
+    def test_emergency_bypass_requires_reason_and_chairperson_acknowledgement(self):
+        c, l = self.crm, self.ledger
+        self.login_as("treasurer")
+        self.client.post("/finance/accounts", data={
+            "name": "Emergency Bank", "account_type": "Bank Account", "opening_balance": "5000",
+            "opening_balance_date": c.crm_today().isoformat(),
+        })
+        with c.app.app_context():
+            account_id = l.FinanceAccount.query.filter_by(cooperative_id=self.coop_a, name="Emergency Bank").one().id
+
+        response = self.client.post("/finance/transactions", data={
+            "transaction_type": "Expense", "category": "Transport", "amount": "1200",
+            "transaction_date": c.crm_today().isoformat(), "from_account_id": str(account_id),
+            "counterparty": "Emergency Tractor Transport", "reference": "EMERGENCY-001",
+            "evidence_bypass": "yes",
+            "evidence_bypass_reason": "Field breakdown required immediate transport while upload service was unavailable.",
+        })
+        self.assertEqual(response.status_code, 302)
+        with c.app.app_context():
+            tx = l.LedgerTransaction.query.filter_by(reference="EMERGENCY-001").one()
+            tx_id = tx.id
+            self.assertTrue(tx.evidence_bypass)
+            self.assertEqual(tx.evidence_tier, "Medium")
+
+        self.login_as("chair")
+        blocked = self.client.post(f"/finance/transactions/{tx_id}/decision", data={"decision": "approve"})
+        self.assertEqual(blocked.status_code, 400)
+        self.assertIn(b"Acknowledge the emergency evidence bypass", blocked.data)
+
+        approved = self.client.post(
+            f"/finance/transactions/{tx_id}/decision",
+            data={"decision": "approve", "acknowledge_evidence_bypass": "yes", "decision_note": "Emergency reason reviewed."},
+        )
+        self.assertEqual(approved.status_code, 302)
+        with c.app.app_context():
+            tx = c.db.session.get(l.LedgerTransaction, tx_id)
+            self.assertEqual(tx.status, "Confirmed")
+            self.assertIsNotNone(tx.evidence_bypass_acknowledged_at)
+
+    def test_structural_money_cannot_bypass_evidence_wall(self):
+        c, l = self.crm, self.ledger
+        self.login_as("treasurer")
+        self.client.post("/finance/accounts", data={
+            "name": "Structural Bank", "account_type": "Bank Account", "opening_balance": "0",
+        })
+        with c.app.app_context():
+            account_id = l.FinanceAccount.query.filter_by(cooperative_id=self.coop_a, name="Structural Bank").one().id
+
+        blocked = self.client.post("/finance/transactions", data={
+            "transaction_type": "Income", "category": "Loan", "amount": "100",
+            "transaction_date": c.crm_today().isoformat(), "to_account_id": str(account_id),
+            "counterparty": "Standard Bank", "reference": "STRUCTURAL-BYPASS",
+            "evidence_bypass": "yes",
+            "evidence_bypass_reason": "Attempted emergency bypass for a structural transaction.",
+        })
+        self.assertEqual(blocked.status_code, 400)
+        self.assertIn(b"Loans, grants and bulk sales require official supporting evidence", blocked.data)
+
+        accepted = self.client.post("/finance/transactions", data={
+            "transaction_type": "Income", "category": "Loan", "amount": "100",
+            "transaction_date": c.crm_today().isoformat(), "to_account_id": str(account_id),
+            "counterparty": "Standard Bank", "reference": "STRUCTURAL-WITH-PROOF",
+            "evidence_file_1": (BytesIO(b"%PDF-1.4\nloan agreement"), "signed-loan-agreement.pdf"),
+        }, content_type="multipart/form-data")
+        self.assertEqual(accepted.status_code, 302)
+        with c.app.app_context():
+            tx = l.LedgerTransaction.query.filter_by(reference="STRUCTURAL-WITH-PROOF").one()
+            self.assertEqual(tx.evidence_tier, "Structural")
+            self.assertFalse(tx.evidence_bypass)
 
     def test_same_page_ledger_cards_keep_user_at_results_section(self):
         self.login_as("treasurer")

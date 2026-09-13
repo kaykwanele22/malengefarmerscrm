@@ -7123,6 +7123,8 @@ def add_resolution():
             return "Choose an active executive from your cooperative.", 400
         if not title or not resolution_text:
             return "Resolution title and decision text are required.", 400
+        if not due_date:
+            return "Assign a deadline before saving the resolution.", 400
         if priority not in {"Low", "Normal", "High", "Urgent"}:
             return "Choose a valid priority.", 400
 
@@ -7192,6 +7194,8 @@ def edit_resolution(resolution_id):
             return "Choose an active executive from your cooperative.", 400
         if not title or not resolution_text:
             return "Resolution title and decision text are required.", 400
+        if not due_date:
+            return "Assign a deadline before saving the resolution.", 400
         if priority not in {"Low", "Normal", "High", "Urgent"}:
             return "Choose a valid priority.", 400
 
