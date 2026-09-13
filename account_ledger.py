@@ -15,7 +15,7 @@ for _name in (
     "add_audit_log", "utc_now",
 ):
     globals()[_name] = getattr(_core, _name)
-from phase7 import _upsert_notification, CooperativeDocument
+from phase7 import _upsert_notification, _save_document, DOCUMENT_UPLOAD_DIR, CooperativeDocument
 
 bp = Blueprint("ledger", __name__)
 ACCOUNT_TYPES = ("Bank Account", "Cash Box", "Mobile Money", "Savings", "Other")
@@ -39,6 +39,97 @@ CATEGORY_GROUPS = {
     "Other Expenses": ("Packaging", "Bank Charges", "Refund", "Other Expense"),
 }
 SOURCE_MODELS = {"Sale": "Sale", "Payment": "Payment", "Expense": "Expense", "Contribution": "Contribution"}
+
+
+STRUCTURAL_EVIDENCE_CATEGORIES = {"Loan", "Grant", "Bulk Sale"}
+EVIDENCE_FILE_EXTENSIONS = {"pdf", "png", "jpg", "jpeg", "webp"}
+
+
+def _evidence_policy(transaction_type, category, amount):
+    amount = float(amount or 0)
+    if category in STRUCTURAL_EVIDENCE_CATEGORIES:
+        return {
+            "tier": "Structural",
+            "required_files": 1,
+            "bypass_allowed": False,
+            "budget_justification_required": False,
+        }
+    if amount < 500:
+        return {
+            "tier": "Low",
+            "required_files": 0,
+            "bypass_allowed": False,
+            "budget_justification_required": False,
+        }
+    if amount < 10000:
+        return {
+            "tier": "Medium",
+            "required_files": 1,
+            "bypass_allowed": True,
+            "budget_justification_required": False,
+        }
+    return {
+        "tier": "High",
+        "required_files": 2,
+        "bypass_allowed": True,
+        "budget_justification_required": True,
+    }
+
+
+def _transaction_evidence_files():
+    return [
+        item for item in (
+            request.files.get("evidence_file_1"),
+            request.files.get("evidence_file_2"),
+        )
+        if item and item.filename
+    ]
+
+
+def _validate_evidence_file_names(files):
+    for file_storage in files:
+        filename = (file_storage.filename or "").strip()
+        ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+        if ext not in EVIDENCE_FILE_EXTENSIONS:
+            return "Evidence Wall accepts PDF or image files only.", 400
+    return None
+
+
+def _attach_transaction_evidence(row, files):
+    saved_paths = []
+    docs = []
+    try:
+        for index, file_storage in enumerate(files, start=1):
+            original, stored, digest = _save_document(file_storage)
+            saved_paths.append(DOCUMENT_UPLOAD_DIR / stored)
+            doc = CooperativeDocument(
+                cooperative_id=row.cooperative_id,
+                document_type="Financial Document",
+                title=f"Transaction {row.id} evidence {index}",
+                entity_type="LedgerTransaction",
+                entity_id=row.id,
+                original_name=original,
+                stored_name=stored,
+                file_sha256=digest,
+                uploaded_by_user_id=session["user_id"],
+                notes=f"Evidence Wall upload for {row.evidence_tier or 'transaction'} tier.",
+            )
+            db.session.add(doc)
+            db.session.flush()
+            add_audit_log(
+                "DOCUMENT_UPLOADED",
+                "CooperativeDocument",
+                doc.id,
+                f"{doc.document_type}: {doc.title} sha256={digest}",
+                cooperative_id=row.cooperative_id,
+            )
+            docs.append(doc)
+    except Exception:
+        for path in saved_paths:
+            path.unlink(missing_ok=True)
+        raise
+    return docs
+
 
 
 class FinanceAccount(db.Model):
@@ -105,6 +196,11 @@ class LedgerTransaction(db.Model):
     recorded_by_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     decided_by_user_id = db.Column(db.Integer, db.ForeignKey("user.id"))
     decided_at = db.Column(db.DateTime)
+    evidence_tier = db.Column(db.String(24), nullable=True, index=True)
+    evidence_bypass = db.Column(db.Boolean, nullable=False, default=False)
+    evidence_bypass_reason = db.Column(db.Text)
+    evidence_bypass_acknowledged_at = db.Column(db.DateTime)
+    budget_justification = db.Column(db.Text)
     created_at = db.Column(db.DateTime, nullable=False, default=utc_now)
 
     cooperative = db.relationship("Cooperative", foreign_keys=[cooperative_id])
@@ -348,6 +444,14 @@ def _transaction_snapshot(row):
         "decided_by_user_id": row.decided_by_user_id,
         "decided_by_name": row.decided_by.fullname if row.decided_by else None,
         "decided_at": row.decided_at.isoformat() if row.decided_at else None,
+        "evidence_tier": row.evidence_tier,
+        "evidence_bypass": bool(row.evidence_bypass),
+        "evidence_bypass_reason": row.evidence_bypass_reason,
+        "evidence_bypass_acknowledged_at": (
+            row.evidence_bypass_acknowledged_at.isoformat()
+            if row.evidence_bypass_acknowledged_at else None
+        ),
+        "budget_justification": row.budget_justification,
     }, sort_keys=True)
 
 
@@ -579,15 +683,50 @@ def transaction_create():
     payload, error = _transaction_payload_from_request(coop)
     if error:
         return error
+
+    policy = _evidence_policy(payload["transaction_type"], payload["category"], payload["amount"])
+    files = _transaction_evidence_files()
+    file_error = _validate_evidence_file_names(files)
+    if file_error:
+        return file_error
+
+    bypass = request.form.get("evidence_bypass") == "yes"
+    bypass_reason = request.form.get("evidence_bypass_reason", "").strip()
+    budget_justification = request.form.get("budget_justification", "").strip()
+
+    if policy["budget_justification_required"] and len(budget_justification) < 10:
+        return "High-value transactions require a clear approved-budget justification.", 400
+    if len(files) < policy["required_files"]:
+        if not policy["bypass_allowed"] or not bypass:
+            if policy["tier"] == "Structural":
+                return "Loans, grants and bulk sales require official supporting evidence before submission.", 400
+            return f"{policy['tier']} transactions require {policy['required_files']} evidence file(s) before submission, unless the emergency bypass is used.", 400
+        if len(bypass_reason) < 10:
+            return "Explain the emergency reason before bypassing the Evidence Wall.", 400
+    elif bypass:
+        return "Emergency bypass is only needed when required evidence cannot be attached.", 400
+
     row = LedgerTransaction(
         cooperative_id=coop.id,
         status="Pending Confirmation",
         recorded_by_user_id=session["user_id"],
+        evidence_tier=policy["tier"],
+        evidence_bypass=bool(bypass),
+        evidence_bypass_reason=bypass_reason or None,
+        budget_justification=budget_justification or None,
         **payload,
     )
     db.session.add(row)
     db.session.flush()
-    context = f"{row.transaction_type} R{row.amount:.2f}; {row.category}"
+    try:
+        _attach_transaction_evidence(row, files)
+    except ValueError as exc:
+        db.session.rollback()
+        return str(exc), 400
+
+    context = f"{row.transaction_type} R{row.amount:.2f}; {row.category}; evidence tier {row.evidence_tier}"
+    if row.evidence_bypass:
+        context += f"; EMERGENCY BYPASS: {row.evidence_bypass_reason}"
     if row.payment_method:
         context += f"; {row.payment_method}"
     if row.project_reference:
@@ -596,14 +735,18 @@ def transaction_create():
         coop.id,
         FINANCE_APPROVAL_ROLES,
         "Account transaction awaiting approval",
-        f"{row.transaction_type}: R{row.amount:.2f} — {row.category}.",
+        (
+            f"{row.transaction_type}: R{row.amount:.2f} — {row.category}."
+            + (" EMERGENCY BYPASS - NO REQUIRED PROOF." if row.evidence_bypass else "")
+        ),
         "LedgerTransactionApproval",
         row.id,
         "Warning",
+        url_for("ledger.transaction_detail", item_id=row.id),
     )
     add_audit_log("LEDGER_TRANSACTION_RECORDED", "LedgerTransaction", row.id, context, cooperative_id=coop.id)
     db.session.commit()
-    flash("Transaction recorded for Chairperson confirmation.", "success")
+    flash("Transaction submitted for Chairperson approval.", "success")
     return redirect(url_for("ledger.transaction_detail", item_id=row.id))
 
 
@@ -841,6 +984,10 @@ def transaction_decision(item_id):
         return "Choose approve or reject.", 400
     if decision == "approve" and row.from_account_id and row.from_account.confirmed_balance + 1e-9 < float(row.amount):
         return "The paying account does not have enough confirmed funds.", 400
+    if decision == "approve" and row.evidence_bypass:
+        if request.form.get("acknowledge_evidence_bypass") != "yes":
+            return "Acknowledge the emergency evidence bypass before approving this transaction.", 400
+        row.evidence_bypass_acknowledged_at = utc_now()
 
     row.status = "Confirmed" if decision == "approve" else "Rejected"
     row.decision_note = request.form.get("decision_note", "").strip()[:1000] or None
@@ -859,6 +1006,8 @@ def transaction_decision(item_id):
     details = f"{row.transaction_type} R{row.amount:.2f}"
     if row.reversal_of_transaction_id:
         details += f"; reversal of #{row.reversal_of_transaction_id}"
+    if row.evidence_bypass:
+        details += f"; emergency evidence bypass acknowledged: {bool(row.evidence_bypass_acknowledged_at)}"
     if row.decision_note:
         details += f"; note: {row.decision_note}"
     add_audit_log(
