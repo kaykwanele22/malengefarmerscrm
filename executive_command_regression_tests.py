@@ -20,6 +20,7 @@ class ExecutiveCommandRegressionTests(unittest.TestCase):
 
         cls.crm = importlib.import_module("app")
         cls.ledger = importlib.import_module("account_ledger")
+        cls.phase7 = importlib.import_module("phase7")
         cls.crm.app.config.update(TESTING=True, TWO_FACTOR_REQUIRED=False)
 
         with cls.crm.app.app_context():
@@ -83,7 +84,7 @@ class ExecutiveCommandRegressionTests(unittest.TestCase):
         ))
         c.db.session.flush()
 
-        c.db.session.add(cls.ledger.FinanceAccount(
+        account = cls.ledger.FinanceAccount(
             cooperative_id=primary.id,
             name="Main Bank",
             account_type="Bank Account",
@@ -91,6 +92,40 @@ class ExecutiveCommandRegressionTests(unittest.TestCase):
             opening_balance_date=c.crm_today(),
             status="Active",
             created_by_user_id=cls.user_ids["treasurer"],
+        )
+        c.db.session.add(account)
+        c.db.session.flush()
+        c.db.session.add_all([
+            cls.ledger.LedgerTransaction(
+                cooperative_id=primary.id, transaction_type="Income", category="Loan", amount=3000000,
+                transaction_date=c.crm_today(), to_account_id=account.id, status="Confirmed",
+                recorded_by_user_id=cls.user_ids["treasurer"], decided_by_user_id=cls.user_ids["chair"],
+            ),
+            cls.ledger.LedgerTransaction(
+                cooperative_id=primary.id, transaction_type="Income", category="Product Sale", amount=25000,
+                transaction_date=c.crm_today(), to_account_id=account.id, status="Confirmed",
+                recorded_by_user_id=cls.user_ids["treasurer"], decided_by_user_id=cls.user_ids["chair"],
+            ),
+            cls.ledger.LedgerTransaction(
+                cooperative_id=primary.id, transaction_type="Expense", category="Farm Inputs", amount=5000,
+                transaction_date=c.crm_today(), from_account_id=account.id, status="Confirmed",
+                recorded_by_user_id=cls.user_ids["treasurer"], decided_by_user_id=cls.user_ids["chair"],
+            ),
+            cls.ledger.LedgerTransaction(
+                cooperative_id=primary.id, transaction_type="Expense", category="Transport", amount=7500,
+                transaction_date=c.crm_today(), from_account_id=account.id, status="Pending Confirmation",
+                recorded_by_user_id=cls.user_ids["treasurer"],
+            ),
+        ])
+        c.db.session.add(cls.phase7.Budget(
+            cooperative_id=primary.id, fiscal_year=c.crm_today().year, budget_type="Expense",
+            category="Farm Inputs", planned_amount=120000, status="Pending Approval",
+            created_by_user_id=cls.user_ids["treasurer"],
+        ))
+        c.db.session.add(cls.phase7.BankReconciliation(
+            cooperative_id=primary.id, statement_date=c.crm_today(), statement_balance=3021000,
+            book_balance=3021000, difference=0, status="Pending Review",
+            prepared_by_user_id=cls.user_ids["treasurer"],
         ))
         c.db.session.commit()
 
@@ -120,6 +155,27 @@ class ExecutiveCommandRegressionTests(unittest.TestCase):
         self.assertIn(b"Finance Pulse", response.data)
         self.assertIn(b"Membership &amp; production snapshot", response.data)
 
+    def test_primary_chair_gets_decision_centre_and_financial_composition(self):
+        self.login_as("chair")
+        response = self.client.get("/dashboard")
+        self.assertEqual(response.status_code, 200)
+        page = response.get_data(as_text=True)
+        self.assertIn("Chairperson Decision Centre", page)
+        self.assertIn("R 7,500.00 awaiting confirmation", page)
+        self.assertIn("R 120,000.00 awaiting approval", page)
+        self.assertIn("Reconciliations", page)
+        self.assertIn("Financial Composition", page)
+        self.assertIn("R 3,000,000.00", page)
+        self.assertIn("R 25,000.00", page)
+        self.assertIn("R 5,000.00", page)
+
+    def test_treasurer_does_not_get_chairperson_decision_centre(self):
+        self.login_as("treasurer")
+        response = self.client.get("/dashboard")
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(b"Chairperson Decision Centre", response.data)
+        self.assertNotIn(b"Financial Composition", response.data)
+
     def test_primary_secretary_does_not_receive_finance_ledger_snapshot(self):
         self.login_as("secretary")
         response = self.client.get("/dashboard")
@@ -134,7 +190,6 @@ class ExecutiveCommandRegressionTests(unittest.TestCase):
         response = self.client.get("/executive-command-centre")
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Finance Pulse", response.data)
-        self.assertIn(b"R 1,000.00", response.data)
         self.assertIn(b"Source of truth", response.data)
 
     def test_secondary_secretary_sees_network_summary_without_finance(self):
@@ -154,7 +209,8 @@ class ExecutiveCommandRegressionTests(unittest.TestCase):
         self.assertIn("Primary governance &amp; reporting status", page)
         self.assertIn("Primary → Secondary Contribution", page)
         self.assertIn("Joint Allocation", page)
-        self.assertNotIn("R 1,000.00", page)
+        self.assertNotIn("R 3,000,000.00", page)
+        self.assertNotIn("R 25,000.00", page)
         self.assertNotIn("Primary Book Position", page)
         self.assertNotIn("Confirmed Sale Payments", page)
         self.assertNotIn("Confirmed Member Contributions", page)
