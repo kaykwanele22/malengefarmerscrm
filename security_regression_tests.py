@@ -373,6 +373,26 @@ class SecurityRegressionTests(unittest.TestCase):
             self.assertEqual(c.recovery_code_count(user), 1)
 
 
+    def test_disabled_2fa_policy_survives_instance_file_loss(self):
+        c = self.crm
+        with c.app.app_context():
+            original = c.load_system_settings()
+            disabled = dict(original)
+            disabled["two_factor_required"] = False
+            c.save_system_settings(disabled)
+
+            legacy_path = c.system_settings_path()
+            if legacy_path.exists():
+                legacy_path.unlink()
+
+            reloaded = c.load_system_settings()
+            self.assertFalse(reloaded["two_factor_required"])
+            self.assertFalse(c.two_factor_policy_enabled())
+
+            # Restore the suite's default policy for test isolation.
+            c.save_system_settings(original)
+
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
