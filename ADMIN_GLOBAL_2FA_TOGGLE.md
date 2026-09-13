@@ -12,4 +12,4 @@ Open **System Administration → Security**.
 
 Every global policy change is written to Audit Logs as `TWO_FACTOR_GLOBAL_DISABLED` or `TWO_FACTOR_GLOBAL_ENABLED`.
 
-This setting is stored in `instance/system_settings.json`. The environment setting `TWO_FACTOR_REQUIRED=true` must remain enabled if Admin should be able to reactivate 2FA from the CRM.
+The setting is stored durably in the CRM database, so application updates, restarts, and redeployments do **not** switch 2FA back on. `instance/system_settings.json` is only a compatibility mirror. Once Admin disables 2FA, it remains disabled until an Admin explicitly selects **Reactivate 2FA for All**. The environment setting `TWO_FACTOR_REQUIRED=true` must remain enabled if Admin should be able to reactivate 2FA from the CRM.
