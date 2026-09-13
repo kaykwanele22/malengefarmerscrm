@@ -304,6 +304,18 @@ class FinanceLedgerRegressionTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"LOAN-SEP-2026", response.data)
 
+    def test_same_page_ledger_cards_keep_user_at_results_section(self):
+        self.login_as("treasurer")
+        response = self.client.get("/finance/accounts")
+        self.assertEqual(response.status_code, 200)
+        page = response.get_data(as_text=True)
+        self.assertIn('id="finance-categories"', page)
+        self.assertIn('id="ledger-filters"', page)
+        self.assertIn('id="account-balances"', page)
+        self.assertIn('id="transaction-ledger"', page)
+        self.assertIn('status=Confirmed#transaction-ledger', page)
+        self.assertIn('status=Pending+Confirmation#transaction-ledger', page)
+
     def test_rejected_transaction_can_be_corrected_with_history_and_confirmed_is_locked(self):
         c, l = self.crm, self.ledger
         self.login_as("treasurer")
