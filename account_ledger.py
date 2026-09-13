@@ -23,7 +23,7 @@ TRANSACTION_TYPES = ("Opening Balance", "Income", "Expense", "Transfer")
 REVERSAL_TYPE = "Reversal"
 PAYMENT_METHODS = ("Cash", "EFT / Bank Transfer", "Card", "Mobile Money", "Cheque", "Other")
 INCOME_CATEGORIES = ("Product Sale", "Bulk Sale", "Membership Fee", "Primary Contribution", "Grant", "Loan", "Other Income")
-EXPENSE_CATEGORIES = ("Farm Inputs", "Transport", "Packaging", "Equipment", "Wages", "Bank Charges", "Refund", "Other Expense")
+EXPENSE_CATEGORIES = ("Farm Inputs", "Transport", "Packaging", "Equipment", "Wages", "Bank Charges", "Loan Repayment", "Refund", "Other Expense")
 SYSTEM_CATEGORIES = ("Opening Balance", "Transfer")
 ALL_CATEGORIES = INCOME_CATEGORIES + EXPENSE_CATEGORIES + SYSTEM_CATEGORIES
 CATEGORY_GROUPS = {
@@ -35,6 +35,7 @@ CATEGORY_GROUPS = {
     "Machinery": ("Equipment",),
     "Labour": ("Wages",),
     "Transport": ("Transport",),
+    "Debt Repayment": ("Loan Repayment",),
     "Other Expenses": ("Packaging", "Bank Charges", "Refund", "Other Expense"),
 }
 SOURCE_MODELS = {"Sale": "Sale", "Payment": "Payment", "Expense": "Expense", "Contribution": "Contribution"}
