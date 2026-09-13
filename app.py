@@ -6885,6 +6885,14 @@ def accountability_register():
         "closed": all_own.filter_by(status="Closed").count(),
     }
 
+    recent_management_actions = (
+        own_cooperative_query(AuditLog)
+        .filter(AuditLog.user_id.isnot(None))
+        .order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
+        .limit(12)
+        .all()
+    )
+
     return render_template(
         "accountability_register.html",
         resolutions=resolutions,
@@ -6893,6 +6901,7 @@ def accountability_register():
         search=search,
         today=today,
         current_access=access,
+        recent_management_actions=recent_management_actions,
     )
 
 
