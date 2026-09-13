@@ -25,8 +25,6 @@ def _safe_session_rollback():
     try:
         _core.db.session.rollback()
     except Exception:
-        # A broken connection may also reject rollback; readiness must still
-        # return a controlled 503 rather than exposing an internal 500.
         pass
 
 
@@ -36,7 +34,6 @@ def _database_ready():
         _core.db.session.execute(sql_text("SELECT 1"))
         return True
     except Exception:
-        # Readiness responses must never expose driver or connection details.
         _safe_session_rollback()
         return False
 
@@ -45,11 +42,7 @@ def _evidence_storage_ready():
     """Return True when the protected evidence directory is usable."""
     try:
         path = _core.ACCOUNTABILITY_UPLOAD_DIR
-        return bool(
-            path.exists()
-            and path.is_dir()
-            and os.access(path, os.R_OK | os.W_OK)
-        )
+        return bool(path.exists() and path.is_dir() and os.access(path, os.R_OK | os.W_OK))
     except (OSError, TypeError, AttributeError):
         return False
 
@@ -57,10 +50,7 @@ def _evidence_storage_ready():
 @bp.get("/live")
 def liveness_probe():
     """Lightweight process liveness probe; deliberately avoids dependency I/O."""
-    return jsonify(
-        status="alive",
-        application="Malenge Farmers CRM",
-    ), 200
+    return jsonify(status="alive", application="Malenge Farmers CRM"), 200
 
 
 @bp.get("/ready")
@@ -69,7 +59,6 @@ def readiness_probe():
     database_ok = _database_ready()
     evidence_storage_ok = _evidence_storage_ready()
     ready = database_ok and evidence_storage_ok
-
     payload = {
         "status": "ready" if ready else "unavailable",
         "checks": {
@@ -84,11 +73,12 @@ def readiness_probe():
 
 
 def register_operational_readiness(app):
-    """Register deployment probes and disaster-recovery controls once."""
+    """Register operational controls and leadership command surfaces once."""
     if "opsready" not in app.blueprints:
         app.register_blueprint(bp)
 
-    # Disaster recovery is part of the operational hardening surface. Keeping
-    # registration here avoids another application-level circular import.
     from backup_recovery import register_backup_recovery
     register_backup_recovery(app)
+
+    from executive_command import register_executive_command
+    register_executive_command(app)
