@@ -146,10 +146,10 @@
                 </a>
 
                 {% if is_leadership or is_treasurer %}
-                <p class="nav-title">FINANCIAL CONTROL</p>
+                <p class="nav-title">FINANCIALS</p>
                 <a href="{{ url_for('phase7.finance_control') }}"
                    class="nav-item {% if request.endpoint and request.endpoint.startswith('phase7.') and request.endpoint in ['phase7.finance_control','phase7.budget_create','phase7.budget_decision','phase7.reconciliation_create','phase7.reconciliation_review'] %}active{% endif %}">
-                    <span>🏦</span><span>Financial Control</span>
+                    <span>🏦</span><span>Financials</span>
                 </a>
                 <a href="{{ url_for('ledger.dashboard') }}"
                    class="nav-item {% if request.endpoint and request.endpoint.startswith('ledger.') %}active{% endif %}">
@@ -171,13 +171,13 @@
                 {% if is_leadership and not is_secondary %}
                 <a href="{{ url_for('primaryprod.dashboard') }}"
                    class="nav-item {% if request.endpoint and request.endpoint.startswith('primaryprod.') %}active{% endif %}">
-                    <span>🚜</span><span>Production Control</span>
+                    <span>🚜</span><span>Production</span>
                 </a>
                 {% endif %}
                 {% endif %}
 
                 {% if can_view_governance and not is_admin %}
-                <p class="nav-title">GOVERNANCE &amp; ACCOUNTABILITY</p>
+                <p class="nav-title">GOVERNANCE</p>
 
                 <a href="{{ url_for('accountability_register') }}"
                    class="nav-item {% if request.endpoint in [
@@ -319,7 +319,7 @@
                     </a>
                     {% endif %}
 
-                    <p class="nav-title">GOVERNANCE &amp; ACCOUNTABILITY</p>
+                    <p class="nav-title">GOVERNANCE</p>
 
                     <a href="{{ url_for('reports') }}"
                        class="nav-item {% if request.endpoint == 'reports' %}active{% endif %}">
@@ -356,7 +356,7 @@
                     </a>
                     {% endif %}
 
-                    <p class="nav-title">FINANCIAL CONTROL</p>
+                    <p class="nav-title">FINANCIALS</p>
 
                     <a href="{{ url_for('sales_list') }}"
                        class="nav-item {% if request.endpoint in [
@@ -492,7 +492,7 @@
                     </a>
                     {% endif %}
 
-                    <p class="nav-title">{% if is_chairperson %}FINANCIAL OVERSIGHT &amp; APPROVAL{% else %}FINANCIAL CONTROL{% endif %}</p>
+                    <p class="nav-title">FINANCIALS</p>
 
                     {% if is_chairperson %}
                     <a href="{{ url_for('ledger.dashboard', status='Pending Confirmation') }}"
@@ -504,7 +504,7 @@
                     <a href="{{ url_for('phase7.finance_control') }}"
                        class="nav-item {% if request.endpoint == 'phase7.finance_control' %}active{% endif %}">
                         <span>🧮</span>
-                        <span>Financial Oversight</span>
+                        <span>Financials</span>
                     </a>
 
                     <a href="{{ url_for('reports') }}"
@@ -543,7 +543,7 @@
                     {% endif %}
 
                     {% if can_view_audit_logs %}
-                    <p class="nav-title">GOVERNANCE &amp; ACCOUNTABILITY</p>
+                    <p class="nav-title">GOVERNANCE</p>
 
                     <a href="{{ url_for('audit_logs') }}"
                        class="nav-item {% if request.endpoint == 'audit_logs' %}active{% endif %}">
