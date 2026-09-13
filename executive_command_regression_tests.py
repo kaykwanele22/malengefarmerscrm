@@ -309,6 +309,22 @@ class ExecutiveCommandRegressionTests(unittest.TestCase):
             c.Farmer.query.filter_by(fullname="Bad Fee Member").delete()
             c.db.session.commit()
 
+    def test_primary_chairperson_finance_is_presented_as_oversight_not_treasurer_operations(self):
+        self.login_as("chair")
+        response = self.client.get("/dashboard")
+        self.assertEqual(response.status_code, 200)
+        page = response.get_data(as_text=True)
+        self.assertIn("FINANCIAL OVERSIGHT &amp; APPROVAL", page)
+        self.assertIn("Finance Decisions", page)
+        self.assertIn("Financial Oversight", page)
+        self.assertIn("Financial Reports", page)
+        self.assertNotIn(">Sales</span>", page)
+        self.assertNotIn(">Payments</span>", page)
+        self.assertNotIn(">Contributions</span>", page)
+        self.assertNotIn(">Expenses</span>", page)
+        self.assertIn("Decisions requiring your authority", page)
+        self.assertIn("Financial oversight position", page)
+
     def test_primary_treasurer_gets_simple_cashflow_overview_without_losing_controls(self):
         self.login_as("treasurer")
         response = self.client.get("/dashboard")
