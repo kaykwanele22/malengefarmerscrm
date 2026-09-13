@@ -217,6 +217,27 @@ class Phase6AccountabilityTests(unittest.TestCase):
             self.assertEqual(len(task.evidence_files), 1)
             self.assertGreaterEqual(len(task.progress_updates), 3)
 
+    def test_resolution_requires_deadline_and_shows_plain_workflow_help(self):
+        meeting_id = self.create_confirmed_meeting()
+        self.login_as("secretary")
+
+        form = self.client.get("/resolutions/add")
+        self.assertEqual(form.status_code, 200)
+        page = form.get_data(as_text=True)
+        self.assertIn("How this works", page)
+        self.assertIn("Log Resolution", page)
+        self.assertIn("Deadline *", page)
+
+        blocked = self.client.post("/resolutions/add", data={
+            "meeting_id": str(meeting_id),
+            "title": "Deadline required test",
+            "resolution_text": "The cooperative resolved that this action must be completed.",
+            "responsible_user_id": str(self.users["vice"]),
+            "priority": "Normal",
+        })
+        self.assertEqual(blocked.status_code, 400)
+        self.assertIn(b"Assign a deadline", blocked.data)
+
     def test_accountability_register_surfaces_scoped_management_audit_actions(self):
         c = self.crm
         with c.app.app_context():
