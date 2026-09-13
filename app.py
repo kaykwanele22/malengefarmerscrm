@@ -2592,7 +2592,6 @@ def _error_response(status_code, title, message, headers=None):
     for key, value in (headers or {}).items():
         response.headers[key] = value
     return response
-
 # =========================================================
 # APPLICATION CONTEXT PROCESSORS AND REQUEST HANDLERS
 # =========================================================
@@ -8844,7 +8843,12 @@ def admin_backup_create():
     try:
         backup_path = create_database_backup_copy()
     except Exception as exc:
-        return f"Backup could not be created: {exc}", 500
+        app.logger.error(
+            "Backup creation failed request_id=%s error_type=%s",
+            getattr(g, "request_id", None),
+            type(exc).__name__,
+        )
+        return "Backup could not be created. Please try again or contact the administrator with the request reference.", 500
 
     add_audit_log(
         "BACKUP_CREATE",
@@ -8921,7 +8925,12 @@ def admin_backup_restore_file(backup_name):
     try:
         create_database_backup_copy(prefix="pre_restore_backup")
     except Exception as exc:
-        return f"Restore stopped because the safety backup failed: {exc}", 500
+        app.logger.error(
+            "Restore safety backup failed request_id=%s error_type=%s",
+            getattr(g, "request_id", None),
+            type(exc).__name__,
+        )
+        return "Restore stopped because the safety backup could not be created. Please use the request reference for support.", 500
 
     temporary_restore = database_path.with_suffix(".restore.tmp")
 
@@ -8933,7 +8942,12 @@ def admin_backup_restore_file(backup_name):
     except Exception as exc:
         if temporary_restore.exists():
             temporary_restore.unlink(missing_ok=True)
-        return f"Database restore failed: {exc}", 500
+        app.logger.error(
+            "Database restore failed request_id=%s error_type=%s",
+            getattr(g, "request_id", None),
+            type(exc).__name__,
+        )
+        return "Database restore could not be completed. The existing database was left in place; use the request reference for support.", 500
 
     # Current session may no longer exist in the restored snapshot.
     session.clear()
@@ -8950,8 +8964,14 @@ def admin_system_health():
     try:
         db.session.execute(sql_text("SELECT 1"))
     except Exception as exc:
+        db.session.rollback()
         database_ok = False
-        database_error = str(exc)
+        database_error = "The database health check failed. Review server logs using the request reference."
+        app.logger.error(
+            "Database health check failed request_id=%s error_type=%s",
+            getattr(g, "request_id", None),
+            type(exc).__name__,
+        )
 
     backend = db.engine.url.get_backend_name()
     database_path = sqlite_database_path()
@@ -9124,7 +9144,12 @@ def database_backup():
     try:
         backup_path = create_database_backup_copy()
     except Exception as exc:
-        return f"Backup could not be created: {exc}", 500
+        app.logger.error(
+            "Backup creation failed request_id=%s error_type=%s",
+            getattr(g, "request_id", None),
+            type(exc).__name__,
+        )
+        return "Backup could not be created. Please try again or contact the administrator with the request reference.", 500
 
     add_audit_log(
         "BACKUP_CREATE",
