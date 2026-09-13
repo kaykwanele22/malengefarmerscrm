@@ -1024,7 +1024,6 @@ LEADERSHIP_ROLES = {
 }
 
 PRIMARY_OPERATION_RECORD_ROLES = {
-    "Primary Chairperson",
     "Primary Vice Chairperson",
 }
 
