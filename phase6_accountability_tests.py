@@ -217,6 +217,28 @@ class Phase6AccountabilityTests(unittest.TestCase):
             self.assertEqual(len(task.evidence_files), 1)
             self.assertGreaterEqual(len(task.progress_updates), 3)
 
+    def test_accountability_register_surfaces_scoped_management_audit_actions(self):
+        c = self.crm
+        with c.app.app_context():
+            c.add_audit_log(
+                "MANAGEMENT_TEST_ACTION",
+                "Resolution",
+                77,
+                "Management action visible to governance.",
+                cooperative_id=self.coop_id,
+                user_id=self.users["secretary"],
+            )
+            c.db.session.commit()
+
+        self.login_as("chair")
+        response = self.client.get("/accountability")
+        self.assertEqual(response.status_code, 200)
+        page = response.get_data(as_text=True)
+        self.assertIn("Recent Management Actions", page)
+        self.assertIn("Management Test Action", page)
+        self.assertIn("Management action visible to governance.", page)
+        self.assertIn("Primary Secretary Test", page)
+
     def test_other_executives_can_view_but_treasurer_cannot_register_meeting(self):
         meeting_id = self.create_confirmed_meeting()
         self.login_as("treasurer")
