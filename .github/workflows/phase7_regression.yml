@@ -19,6 +19,7 @@ on:
       - crm-hardening-13-security-controls
       - crm-hardening-14-operational-readiness
       - crm-hardening-15-backup-recovery
+      - crm-hardening-16-executive-command-centre
   pull_request:
     branches:
       - main
@@ -115,6 +116,7 @@ jobs:
           - error_feedback_regression_tests.py
           - operational_readiness_regression_tests.py
           - backup_recovery_regression_tests.py
+          - executive_command_regression_tests.py
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
