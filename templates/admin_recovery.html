@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}Disaster Recovery | Malenge Farmers CRM{% endblock %}
+{% block extra_css %}
+<style>
+.recovery-page{display:flex;flex-direction:column;gap:22px}
+.recovery-header{display:flex;justify-content:space-between;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.recovery-header h1{margin:4px 0 8px;color:#123f29;font-size:32px}
+.recovery-header p{margin:0;color:#68766d;font-size:14px;line-height:1.55;max-width:760px}
+.recovery-eyebrow{font-size:11px;font-weight:800;letter-spacing:1.4px;color:#26834f}
+.recovery-card{background:#fff;border:1px solid #e1e9e3;border-radius:16px;box-shadow:0 8px 24px rgba(18,63,41,.04)}
+.recovery-card-pad{padding:22px}
+.recovery-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.recovery-stat{padding:18px;border:1px solid #e3ebe5;border-radius:13px;background:#fff}
+.recovery-stat span{display:block;color:#738077;font-size:10px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px}
+.recovery-stat strong{display:block;color:#173e29;font-size:18px;word-break:break-word}
+.recovery-note,.recovery-warning,.recovery-ok{padding:14px 16px;border-radius:11px;font-size:12px;line-height:1.6}
+.recovery-note{background:#f4f9f5;border:1px solid #d9e7dd;color:#4a6154}
+.recovery-warning{background:#fff8ea;border:1px solid #ead8ad;color:#725b21}
+.recovery-ok{background:#edf8f0;border:1px solid #cde6d4;color:#286b44}
+.recovery-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.recovery-button,.recovery-button-secondary,.recovery-button-danger{min-height:42px;padding:0 15px;border-radius:9px;text-decoration:none;font-size:12px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+.recovery-button{border:0;background:#23794a;color:#fff}
+.recovery-button[disabled]{opacity:.55;cursor:not-allowed}
+.recovery-button-secondary{border:1px solid #d7e3db;background:#f6f9f7;color:#315441}
+.recovery-button-danger{border:1px solid #efcaca;background:#fff5f5;color:#9b3434}
+.recovery-table-wrap{overflow-x:auto}
+.recovery-table{width:100%;border-collapse:collapse;min-width:960px}
+.recovery-table th{padding:12px 14px;background:#f6f9f7;border-bottom:1px solid #e4ebe6;color:#748179;font-size:10px;text-align:left;text-transform:uppercase;letter-spacing:.5px}
+.recovery-table td{padding:14px;border-bottom:1px solid #edf2ee;color:#35483c;font-size:12px;vertical-align:top}
+.recovery-table tr:last-child td{border-bottom:0}
+.recovery-title{margin:0 0 14px;color:#173e29;font-size:20px}
+.recovery-pill{display:inline-flex;align-items:center;padding:4px 9px;border-radius:999px;background:#edf7f0;color:#287148;font-size:10px;font-weight:800}
+.recovery-pill.warning{background:#fff1cc;color:#8c631c}
+.recovery-delete{display:flex;gap:6px;align-items:center}
+.recovery-delete input{height:40px;width:92px;padding:0 9px;border:1px solid #d7e0d9;border-radius:8px}
+@media(max-width:1000px){.recovery-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:650px){.recovery-grid{grid-template-columns:1fr}.recovery-header h1{font-size:27px}}
+</style>
+{% endblock %}
+{% block content %}
+<div class="recovery-page">
+    <div class="recovery-header">
+        <div>
+            <span class="recovery-eyebrow">SYSTEM ADMINISTRATION</span>
+            <h1>Disaster Recovery</h1>
+            <p>Create verified recovery bundles containing the CRM database and protected evidence files. Download every important bundle to storage outside the application host.</p>
+        </div>
+        <div class="recovery-actions">
+            <a href="{{ url_for('admin_backup_restore') }}" class="recovery-button-secondary">Database Backups</a>
+            <form method="POST" action="{{ url_for('backuprecovery.admin_recovery_create') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="recovery-button" {% if not capabilities.can_create_complete_bundle %}disabled{% endif %}>Create Recovery Bundle</button>
+            </form>
+        </div>
+    </div>
+
+    {% if notice %}<div class="recovery-ok">{{ notice }}</div>{% endif %}
+
+    <div class="recovery-grid">
+        <div class="recovery-stat"><span>Database backend</span><strong>{{ capabilities.database_backend }}</strong></div>
+        <div class="recovery-stat"><span>Local retention</span><strong>{{ capabilities.retention }} bundles</strong></div>
+        <div class="recovery-stat"><span>Evidence stores</span><strong>{{ capabilities.evidence_sources|length }}</strong></div>
+        <div class="recovery-stat"><span>Local persistent path configured</span><strong>{{ 'Yes' if capabilities.bundle_directory_persistent else 'No' }}</strong></div>
+    </div>
+
+    {% if capabilities.database_backend == 'postgresql' and not capabilities.pg_dump_available %}
+    <div class="recovery-warning">
+        <strong>PostgreSQL database dump unavailable:</strong> <code>pg_dump</code> is not installed on this application host, so the CRM will not create a partial bundle and label it complete. Use the database provider's snapshot/backup service, or install PostgreSQL client tools before using application-created recovery bundles.
+    </div>
+    {% endif %}
+
+    {% if not capabilities.bundle_directory_persistent %}
+    <div class="recovery-warning">
+        <strong>Local bundle storage is using the application instance directory.</strong> On ephemeral hosting this can disappear during redeploys. Set <code>RECOVERY_BUNDLE_DIR</code> to persistent storage and copy verified bundles off-host.
+    </div>
+    {% endif %}
+
+    <div class="recovery-note">
+        A recovery bundle contains the database snapshot, Phase 6 accountability uploads, Phase 7 controlled documents, and non-secret system settings when present. Every archived file is recorded in a manifest with a SHA-256 digest. Restores are intentionally performed as a controlled maintenance procedure rather than through a one-click web action.
+    </div>
+
+    <section class="recovery-card">
+        <div class="recovery-card-pad">
+            <h2 class="recovery-title">Stored Recovery Bundles</h2>
+            <p style="margin:0;color:#6f7d73;font-size:12px;line-height:1.55">Verify a bundle before relying on it. Keep at least one verified copy outside this server or hosting account.</p>
+        </div>
+        <div class="recovery-table-wrap">
+            <table class="recovery-table">
+                <thead>
+                    <tr><th>Bundle</th><th>Created</th><th>Database</th><th>Evidence files</th><th>Size</th><th>Manifest</th><th>Actions</th></tr>
+                </thead>
+                <tbody>
+                {% for bundle in bundles %}
+                    <tr>
+                        <td><strong>{{ bundle.name }}</strong><br><small>Schema: {{ bundle.schema_revision }}</small></td>
+                        <td>{{ bundle.created_at.strftime('%d %b %Y %H:%M:%S') }}</td>
+                        <td>{{ bundle.database_backend }}</td>
+                        <td>{{ bundle.evidence_file_count }}</td>
+                        <td>{{ bundle.size_mb }} MB</td>
+                        <td><span class="recovery-pill {% if not bundle.manifest_ok %}warning{% endif %}">{{ 'Present' if bundle.manifest_ok else 'Problem' }}</span></td>
+                        <td>
+                            <div class="recovery-actions">
+                                <a class="recovery-button-secondary" href="{{ url_for('backuprecovery.admin_recovery_download', bundle_name=bundle.name) }}">Download</a>
+                                <form method="POST" action="{{ url_for('backuprecovery.admin_recovery_verify', bundle_name=bundle.name) }}">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button class="recovery-button-secondary" type="submit">Verify</button>
+                                </form>
+                                <form class="recovery-delete" method="POST" action="{{ url_for('backuprecovery.admin_recovery_delete', bundle_name=bundle.name) }}" onsubmit="return confirm('Delete this local recovery bundle? Make sure an off-host copy exists first.');">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <input name="confirmation" placeholder="DELETE" aria-label="Type DELETE">
+                                    <button class="recovery-button-danger" type="submit">Delete</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                {% else %}
+                    <tr><td colspan="7">No recovery bundles have been created yet.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+</div>
+{% endblock %}

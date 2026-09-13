@@ -84,6 +84,11 @@ def readiness_probe():
 
 
 def register_operational_readiness(app):
-    """Register deployment probes once."""
+    """Register deployment probes and disaster-recovery controls once."""
     if "opsready" not in app.blueprints:
         app.register_blueprint(bp)
+
+    # Disaster recovery is part of the operational hardening surface. Keeping
+    # registration here avoids another application-level circular import.
+    from backup_recovery import register_backup_recovery
+    register_backup_recovery(app)
