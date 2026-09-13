@@ -39,7 +39,7 @@
 
 {% if can_record and transaction.status=='Rejected' %}
 <section class="p7-card"><div class="p7-card-head"><h2>Correct &amp; Resubmit</h2><span class="p7-badge warning">Creates audit revision</span></div><div class="p7-card-body"><p>Correct the rejected record below. The rejected version will be preserved in Correction History before this transaction returns to Chairperson confirmation.</p>
-<form class="p7-form" method="POST" action="{{ url_for('ledger.transaction_resubmit', item_id=transaction.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<form class="p7-form" method="POST" enctype="multipart/form-data" action="{{ url_for('ledger.transaction_resubmit', item_id=transaction.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 {% if transaction.reversal_of_transaction_id %}
 <div class="p7-grid-2"><div><p><strong>Locked type:</strong> Reversal</p><p><strong>Locked category:</strong> {{ transaction.category }}</p><p><strong>Locked amount:</strong> R {{ "{:,.2f}".format(transaction.amount|float) }}</p></div><div><p><strong>Locked from:</strong> {{ transaction.from_account.name if transaction.from_account else 'External' }}</p><p><strong>Locked to:</strong> {{ transaction.to_account.name if transaction.to_account else 'External' }}</p><p><strong>Original:</strong> #{{ transaction.reversal_of_transaction_id }}</p></div></div>
 <div class="p7-field"><label>Reversal date</label><input name="transaction_date" type="date" min="{{ transaction.reversal_of.transaction_date.isoformat() if transaction.reversal_of else transaction.transaction_date.isoformat() }}" value="{{ transaction.transaction_date.isoformat() }}" required></div>
@@ -62,6 +62,10 @@
 <div class="p7-field"><label>Source record type</label><select name="source_type"><option value="">No linked source</option>{% for x in source_types %}<option value="{{ x }}" {% if transaction.source_type==x %}selected{% endif %}>{{ x }}</option>{% endfor %}</select></div>
 <div class="p7-field"><label>Source record ID</label><input name="source_id" type="number" min="1" value="{{ transaction.source_id or '' }}"></div>
 <div class="p7-field full"><label>Description / notes</label><textarea name="notes">{{ transaction.notes or '' }}</textarea></div>
+<div class="p7-field"><label>Additional evidence file 1</label><input type="file" name="evidence_file_1" accept="application/pdf,image/*"><small>Existing linked evidence still counts.</small></div>
+<div class="p7-field"><label>Additional evidence file 2</label><input type="file" name="evidence_file_2" accept="application/pdf,image/*"></div>
+<div class="p7-field full"><label>Approved budget justification</label><textarea name="budget_justification">{{ transaction.budget_justification or '' }}</textarea><small>Required if the corrected amount is R10,000 or more.</small></div>
+<div class="p7-field full"><label><input type="checkbox" name="evidence_bypass" value="yes"> Bypass Evidence Wall (Emergency)</label><textarea name="evidence_bypass_reason" placeholder="Required when resubmitting without the evidence required for the corrected value.">{{ transaction.evidence_bypass_reason or '' }}</textarea></div>
 {% endif %}
 <div class="p7-field full"><label>What was corrected?</label><textarea name="correction_reason" required placeholder="Explain the correction made before this is returned for approval"></textarea><small>This explanation becomes part of the permanent correction history.</small></div>
 <div class="p7-field full"><button class="p7-btn primary">Save Correction &amp; Resubmit</button></div>
