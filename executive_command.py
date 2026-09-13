@@ -255,7 +255,25 @@ def _dashboard_data():
                 cooperative_id=cooperative_id,
             ).order_by(BankReconciliation.statement_date.desc()).first()
 
+            confirmed_cashflow_rows = LedgerTransaction.query.filter_by(
+                cooperative_id=cooperative_id,
+                status="Confirmed",
+            ).all()
+            money_in = sum(
+                float(row.amount or 0)
+                for row in confirmed_cashflow_rows
+                if row.transaction_type == "Income" and not row.reversal_of_transaction_id
+            )
+            money_out = sum(
+                float(row.amount or 0)
+                for row in confirmed_cashflow_rows
+                if row.transaction_type == "Expense" and not row.reversal_of_transaction_id
+            )
+
             treasurer_work = {
+                "money_in": money_in,
+                "money_out": money_out,
+                "current_position": confirmed_balance,
                 "pending_count": len(pending_rows),
                 "pending_value": sum(float(row.amount or 0) for row in pending_rows),
                 "rejected_count": len(rejected_rows),

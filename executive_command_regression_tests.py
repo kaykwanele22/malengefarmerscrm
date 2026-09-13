@@ -305,18 +305,22 @@ class ExecutiveCommandRegressionTests(unittest.TestCase):
             c.Farmer.query.filter_by(fullname="Bad Fee Member").delete()
             c.db.session.commit()
 
-    def test_primary_treasurer_gets_work_centre_without_approval_authority(self):
+    def test_primary_treasurer_gets_simple_cashflow_overview_without_losing_controls(self):
         self.login_as("treasurer")
         response = self.client.get("/dashboard")
         self.assertEqual(response.status_code, 200)
         page = response.get_data(as_text=True)
-        self.assertIn("Treasurer Work Centre", page)
-        self.assertIn("R 7,500.00 recorded and awaiting independent confirmation", page)
+        self.assertIn("Treasurer Overview", page)
+        self.assertIn("Money In", page)
+        self.assertIn("R 3,025,000.00", page)
+        self.assertIn("Money Out", page)
+        self.assertIn("R 5,000.00", page)
+        self.assertIn("Current Position", page)
+        self.assertIn("Awaiting Approval", page)
+        self.assertIn("R 7,500.00 awaiting Chairperson confirmation", page)
+        self.assertIn("Finance Controls", page)
         self.assertIn("R 2,500.00 requires Treasurer correction", page)
-        self.assertIn("1 budget line", page)
-        self.assertIn("1 reconciliation", page)
         self.assertIn("Evidence Missing", page)
-        self.assertIn(">4<", page)
         self.assertNotIn("Decisions requiring your authority", page)
 
 
