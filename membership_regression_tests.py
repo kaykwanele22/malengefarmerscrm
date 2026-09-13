@@ -134,6 +134,47 @@ class MembershipRegressionTests(unittest.TestCase):
             numbers = [m.member_number for m in c.Membership.query.order_by(c.Membership.id.asc()).all()]
             self.assertEqual(numbers, ["SIYA-0001", "SIYA-0002"])
 
+    def test_membership_fee_cannot_be_finance_scale_amount(self):
+        response = self.register_member(fee="3000000")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn(b"exceeds the allowed maximum", response.data)
+        with self.crm.app.app_context():
+            self.assertEqual(self.crm.Membership.query.count(), 0)
+
+    def test_existing_invalid_membership_fee_is_repaired_without_deleting_record(self):
+        c = self.crm
+        with c.app.app_context():
+            membership = c.Membership(
+                cooperative_id=self.primary_a_id,
+                farmer_id=self.farmer_a_id,
+                member_number="SIYA-LEGACY-BAD-FEE",
+                membership_type="Primary",
+                join_date=date.today(),
+                fee_amount=3000000,
+                fee_paid=0,
+                status="Active",
+            )
+            c.db.session.add(membership)
+            c.db.session.commit()
+            membership_id = membership.id
+
+            repaired = c.repair_existing_membership_fee_integrity()
+            self.assertEqual(repaired, 1)
+
+            membership = c.db.session.get(c.Membership, membership_id)
+            self.assertAlmostEqual(membership.fee_amount, 300.0)
+            self.assertAlmostEqual(membership.fee_outstanding, 300.0)
+            history = c.MembershipHistory.query.filter_by(
+                membership_id=membership_id,
+                event_type="FEE_INTEGRITY_REPAIR",
+            ).one()
+            self.assertIn("R3000000.00", history.description.replace(",", ""))
+            self.assertIsNotNone(c.AuditLog.query.filter_by(
+                entity_type="Membership",
+                entity_id=membership_id,
+                action="MEMBERSHIP_FEE_INTEGRITY_REPAIR",
+            ).first())
+
     def test_secondary_secretary_uses_aggregate_oversight_not_primary_member_register(self):
         self.login_as("secondary_secretary")
         self.assertEqual(self.client.get("/memberships").status_code, 403)

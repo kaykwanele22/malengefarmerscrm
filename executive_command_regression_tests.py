@@ -116,6 +116,12 @@ class ExecutiveCommandRegressionTests(unittest.TestCase):
                 transaction_date=c.crm_today(), from_account_id=account.id, status="Pending Confirmation",
                 recorded_by_user_id=cls.user_ids["treasurer"],
             ),
+            cls.ledger.LedgerTransaction(
+                cooperative_id=primary.id, transaction_type="Expense", category="Packaging", amount=2500,
+                transaction_date=c.crm_today(), from_account_id=account.id, status="Rejected",
+                recorded_by_user_id=cls.user_ids["treasurer"], decided_by_user_id=cls.user_ids["chair"],
+                decision_note="Correct the supporting reference.",
+            ),
         ])
         c.db.session.add(cls.phase7.Budget(
             cooperative_id=primary.id, fiscal_year=c.crm_today().year, budget_type="Expense",
@@ -191,6 +197,56 @@ class ExecutiveCommandRegressionTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Finance Pulse", response.data)
         self.assertIn(b"Source of truth", response.data)
+
+    def test_membership_fee_anomaly_is_excluded_from_treasurer_receivables(self):
+        c = self.crm
+        with c.app.app_context():
+            farmer = c.Farmer(
+                cooperative_id=self.primary_id,
+                fullname="Bad Fee Member",
+                phone="0799999999",
+                location="Malenge",
+                status="Active",
+            )
+            c.db.session.add(farmer)
+            c.db.session.flush()
+            c.db.session.add(c.Membership(
+                cooperative_id=self.primary_id,
+                farmer_id=farmer.id,
+                member_number="CMD-BAD-FEE",
+                membership_type="Primary",
+                fee_amount=3000000,
+                fee_paid=0,
+                status="Active",
+            ))
+            c.db.session.commit()
+
+        self.login_as("treasurer")
+        response = self.client.get("/dashboard")
+        self.assertEqual(response.status_code, 200)
+        page = response.get_data(as_text=True)
+        self.assertIn("Membership fee data needs review", page)
+        self.assertIn("R 300.00", page)
+
+        with c.app.app_context():
+            c.Membership.query.filter_by(member_number="CMD-BAD-FEE").delete()
+            c.Farmer.query.filter_by(fullname="Bad Fee Member").delete()
+            c.db.session.commit()
+
+    def test_primary_treasurer_gets_work_centre_without_approval_authority(self):
+        self.login_as("treasurer")
+        response = self.client.get("/dashboard")
+        self.assertEqual(response.status_code, 200)
+        page = response.get_data(as_text=True)
+        self.assertIn("Treasurer Work Centre", page)
+        self.assertIn("R 7,500.00 recorded and awaiting independent confirmation", page)
+        self.assertIn("R 2,500.00 requires Treasurer correction", page)
+        self.assertIn("1 budget line", page)
+        self.assertIn("1 reconciliation", page)
+        self.assertIn("Evidence Missing", page)
+        self.assertIn(">4<", page)
+        self.assertNotIn("Decisions requiring your authority", page)
+
 
     def test_secondary_secretary_sees_network_summary_without_finance(self):
         self.login_as("secondary_secretary")

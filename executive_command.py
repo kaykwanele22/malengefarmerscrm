@@ -19,7 +19,7 @@ if _core is None or not hasattr(_core, "db"):
 
 from account_ledger import FinanceAccount, LedgerTransaction
 from joint_operations import PrimaryContributionAccount, JointProjectAllocation
-from phase7 import BankReconciliation, Budget
+from phase7 import BankReconciliation, Budget, CooperativeDocument
 
 
 bp = Blueprint("execdash", __name__)
@@ -143,13 +143,24 @@ def _dashboard_data():
     primary_stats = None
     chairperson_decisions = None
     finance_composition = None
+    treasurer_work = None
     network_rows = []
     if cooperative.cooperative_type == "Primary":
         memberships = _core.Membership.query.filter_by(cooperative_id=cooperative_id).all()
+        valid_fee_memberships = [
+            membership
+            for membership in memberships
+            if 0 <= float(getattr(membership, "fee_amount", 0) or 0) <= _core.MAX_PRIMARY_MEMBERSHIP_FEE
+        ]
+        membership_fee_anomaly_count = len(memberships) - len(valid_fee_memberships)
         primary_stats = {
             "member_count": len(memberships),
             "active_member_count": sum(1 for membership in memberships if membership.status == "Active"),
-            "membership_fee_due": sum(max(0.0, float(getattr(membership, "fee_outstanding", 0) or 0)) for membership in memberships),
+            "membership_fee_due": sum(
+                max(0.0, float(getattr(membership, "fee_outstanding", 0) or 0))
+                for membership in valid_fee_memberships
+            ),
+            "membership_fee_anomaly_count": membership_fee_anomaly_count,
             "farmer_count": _core.Farmer.query.filter_by(cooperative_id=cooperative_id).count(),
             "farm_count": _core.Farm.query.filter_by(cooperative_id=cooperative_id).count(),
             "crop_count": _core.Crop.query.filter_by(cooperative_id=cooperative_id).count(),
@@ -201,6 +212,62 @@ def _dashboard_data():
                 ),
                 "pending_value": sum(float(row.amount or 0) for row in pending_ledger_rows),
             }
+
+        if role == "Primary Treasurer":
+            pending_rows = LedgerTransaction.query.filter_by(
+                cooperative_id=cooperative_id,
+                status="Pending Confirmation",
+            ).all()
+            rejected_rows = LedgerTransaction.query.filter_by(
+                cooperative_id=cooperative_id,
+                status="Rejected",
+            ).all()
+            pending_budgets = Budget.query.filter_by(
+                cooperative_id=cooperative_id,
+                status="Pending Approval",
+            ).all()
+            pending_reconciliations = BankReconciliation.query.filter_by(
+                cooperative_id=cooperative_id,
+                status="Pending Review",
+            ).all()
+
+            evidence_rows = LedgerTransaction.query.filter(
+                LedgerTransaction.cooperative_id == cooperative_id,
+                LedgerTransaction.status.in_(("Pending Confirmation", "Confirmed")),
+                LedgerTransaction.reversal_of_transaction_id.is_(None),
+            ).all()
+            evidence_transaction_ids = {
+                row[0]
+                for row in _core.db.session.query(CooperativeDocument.entity_id)
+                .filter(
+                    CooperativeDocument.cooperative_id == cooperative_id,
+                    CooperativeDocument.entity_type == "LedgerTransaction",
+                    CooperativeDocument.entity_id.isnot(None),
+                )
+                .all()
+            }
+            missing_evidence_count = sum(
+                1 for row in evidence_rows if row.id not in evidence_transaction_ids
+            )
+
+            latest_reconciliation = BankReconciliation.query.filter_by(
+                cooperative_id=cooperative_id,
+            ).order_by(BankReconciliation.statement_date.desc()).first()
+
+            treasurer_work = {
+                "pending_count": len(pending_rows),
+                "pending_value": sum(float(row.amount or 0) for row in pending_rows),
+                "rejected_count": len(rejected_rows),
+                "rejected_value": sum(float(row.amount or 0) for row in rejected_rows),
+                "budget_count": len(pending_budgets),
+                "budget_value": sum(float(row.planned_amount or 0) for row in pending_budgets),
+                "reconciliation_count": len(pending_reconciliations),
+                "latest_reconciliation_difference": (
+                    float(latest_reconciliation.difference or 0)
+                    if latest_reconciliation else None
+                ),
+                "missing_evidence_count": missing_evidence_count,
+            }
     elif cooperative.cooperative_type == "Secondary":
         network_rows = _primary_network_rows(cooperative_id)
 
@@ -247,6 +314,19 @@ def _dashboard_data():
             "detail": "Membership records show confirmed amounts still outstanding.",
             "href": url_for("memberships_list", fee="due"),
         })
+    if primary_stats and primary_stats.get("membership_fee_anomaly_count", 0) > 0 and role in {
+        "Primary Secretary", "Primary Vice Secretary", "Primary Chairperson", "Primary Treasurer"
+    }:
+        alerts.append({
+            "severity": "danger",
+            "title": "Membership fee data needs review",
+            "value": str(primary_stats["membership_fee_anomaly_count"]),
+            "detail": (
+                "One or more membership fee amounts exceed the allowed membership-fee range and are excluded "
+                "from fee receivables until corrected."
+            ),
+            "href": url_for("memberships_list"),
+        })
 
     return {
         "current_access": access,
@@ -270,6 +350,7 @@ def _dashboard_data():
         "primary_stats": primary_stats,
         "chairperson_decisions": chairperson_decisions,
         "finance_composition": finance_composition,
+        "treasurer_work": treasurer_work,
         "network_rows": network_rows,
         "alerts": alerts,
     }
