@@ -147,10 +147,20 @@ def _dashboard_data():
     network_rows = []
     if cooperative.cooperative_type == "Primary":
         memberships = _core.Membership.query.filter_by(cooperative_id=cooperative_id).all()
+        valid_fee_memberships = [
+            membership
+            for membership in memberships
+            if 0 <= float(getattr(membership, "fee_amount", 0) or 0) <= _core.MAX_PRIMARY_MEMBERSHIP_FEE
+        ]
+        membership_fee_anomaly_count = len(memberships) - len(valid_fee_memberships)
         primary_stats = {
             "member_count": len(memberships),
             "active_member_count": sum(1 for membership in memberships if membership.status == "Active"),
-            "membership_fee_due": sum(max(0.0, float(getattr(membership, "fee_outstanding", 0) or 0)) for membership in memberships),
+            "membership_fee_due": sum(
+                max(0.0, float(getattr(membership, "fee_outstanding", 0) or 0))
+                for membership in valid_fee_memberships
+            ),
+            "membership_fee_anomaly_count": membership_fee_anomaly_count,
             "farmer_count": _core.Farmer.query.filter_by(cooperative_id=cooperative_id).count(),
             "farm_count": _core.Farm.query.filter_by(cooperative_id=cooperative_id).count(),
             "crop_count": _core.Crop.query.filter_by(cooperative_id=cooperative_id).count(),
@@ -303,6 +313,19 @@ def _dashboard_data():
             "value": f"R {primary_stats['membership_fee_due']:,.2f}",
             "detail": "Membership records show confirmed amounts still outstanding.",
             "href": url_for("memberships_list", fee="due"),
+        })
+    if primary_stats and primary_stats.get("membership_fee_anomaly_count", 0) > 0 and role in {
+        "Primary Secretary", "Primary Vice Secretary", "Primary Chairperson", "Primary Treasurer"
+    }:
+        alerts.append({
+            "severity": "danger",
+            "title": "Membership fee data needs review",
+            "value": str(primary_stats["membership_fee_anomaly_count"]),
+            "detail": (
+                "One or more membership fee amounts exceed the allowed membership-fee range and are excluded "
+                "from fee receivables until corrected."
+            ),
+            "href": url_for("memberships_list"),
         })
 
     return {
