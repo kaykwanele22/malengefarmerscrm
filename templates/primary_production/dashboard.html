@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Production Command Centre | Malenge Farmers CRM{% endblock %}
+{% block title %}Production | Malenge Farmers CRM{% endblock %}
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/phase7.css') }}">
 <style>
@@ -11,9 +11,9 @@
 <div class="p7-page">
   <div class="p7-head">
     <div>
-      <span class="p7-eyebrow">Primary Cooperative Operations</span>
-      <h1>Production Command Centre</h1>
-      <p>Plan crops, coordinate field work, control input usage, monitor production performance and verify completed milestones.</p>
+      <span class="p7-eyebrow">Production</span>
+      <h1>What are we producing?</h1>
+      <p>Plan crops, field work, inputs, harvests and production results.</p>
     </div>
     <div class="p7-actions">
       <a class="p7-btn" href="{{ url_for('crops_list') }}">Crops</a>
