@@ -101,6 +101,18 @@ class SecondaryJointScopeTests(unittest.TestCase):
         self.assertNotIn('href="/crops"', page)
         self.assertNotIn('href="/harvests"', page)
 
+    def test_legacy_secondary_dashboard_contains_no_primary_finance_columns(self):
+        template_path = Path(__file__).parent / "templates" / "dashboard.html"
+        template = template_path.read_text(encoding="utf-8")
+        secondary_start = template.index('{% if is_secondary %}', template.index('Primary Cooperative Network'))
+        secondary_end = template.index('{% endif %}', secondary_start)
+        section = template[secondary_start:secondary_end]
+        self.assertNotIn("Primary Financial Summary", section)
+        self.assertNotIn("<th>Cash Position</th>", section)
+        self.assertNotIn("<th>Pending Approval</th>", section)
+        self.assertNotIn("item.cash_position", section)
+        self.assertNotIn("item.pending_finance", section)
+
     def test_secondary_primary_summary_hides_internal_primary_finance(self):
         self.login_as(self.sec_chair_id)
         response = self.client.get(f"/joint-operations/primary/{self.siyaphumla_id}")
