@@ -314,9 +314,9 @@ class ExecutiveCommandRegressionTests(unittest.TestCase):
         response = self.client.get("/dashboard")
         self.assertEqual(response.status_code, 200)
         page = response.get_data(as_text=True)
-        self.assertIn("FINANCIAL OVERSIGHT &amp; APPROVAL", page)
+        self.assertIn("FINANCIALS", page)
         self.assertIn("Finance Decisions", page)
-        self.assertIn("Financial Oversight", page)
+        self.assertIn("Financials", page)
         self.assertIn("Financial Reports", page)
         self.assertNotIn(">Sales</span>", page)
         self.assertNotIn(">Payments</span>", page)
@@ -324,6 +324,18 @@ class ExecutiveCommandRegressionTests(unittest.TestCase):
         self.assertNotIn(">Expenses</span>", page)
         self.assertIn("Decisions requiring your authority", page)
         self.assertIn("Financial oversight position", page)
+
+    def test_primary_portal_uses_simple_domain_language(self):
+        self.login_as("chair")
+        response = self.client.get("/dashboard")
+        self.assertEqual(response.status_code, 200)
+        page = response.get_data(as_text=True)
+        self.assertIn("MEMBERSHIP", page)
+        self.assertIn("PRODUCTION", page)
+        self.assertIn("FINANCIALS", page)
+        self.assertIn("GOVERNANCE", page)
+        self.assertNotIn("FINANCIAL CONTROL", page)
+        self.assertNotIn("GOVERNANCE &amp; ACCOUNTABILITY", page)
 
     def test_primary_treasurer_gets_simple_cashflow_overview_without_losing_controls(self):
         self.login_as("treasurer")
