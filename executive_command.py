@@ -19,7 +19,7 @@ if _core is None or not hasattr(_core, "db"):
 
 from account_ledger import FinanceAccount, LedgerTransaction
 from joint_operations import PrimaryContributionAccount, JointProjectAllocation
-from phase7 import BankReconciliation, Budget
+from phase7 import BankReconciliation, Budget, CooperativeDocument
 
 
 bp = Blueprint("execdash", __name__)
@@ -143,6 +143,7 @@ def _dashboard_data():
     primary_stats = None
     chairperson_decisions = None
     finance_composition = None
+    treasurer_work = None
     network_rows = []
     if cooperative.cooperative_type == "Primary":
         memberships = _core.Membership.query.filter_by(cooperative_id=cooperative_id).all()
@@ -200,6 +201,62 @@ def _dashboard_data():
                     if row.transaction_type == "Expense" and not row.reversal_of_transaction_id
                 ),
                 "pending_value": sum(float(row.amount or 0) for row in pending_ledger_rows),
+            }
+
+        if role == "Primary Treasurer":
+            pending_rows = LedgerTransaction.query.filter_by(
+                cooperative_id=cooperative_id,
+                status="Pending Confirmation",
+            ).all()
+            rejected_rows = LedgerTransaction.query.filter_by(
+                cooperative_id=cooperative_id,
+                status="Rejected",
+            ).all()
+            pending_budgets = Budget.query.filter_by(
+                cooperative_id=cooperative_id,
+                status="Pending Approval",
+            ).all()
+            pending_reconciliations = BankReconciliation.query.filter_by(
+                cooperative_id=cooperative_id,
+                status="Pending Review",
+            ).all()
+
+            evidence_rows = LedgerTransaction.query.filter(
+                LedgerTransaction.cooperative_id == cooperative_id,
+                LedgerTransaction.status.in_(("Pending Confirmation", "Confirmed")),
+                LedgerTransaction.reversal_of_transaction_id.is_(None),
+            ).all()
+            evidence_transaction_ids = {
+                row[0]
+                for row in _core.db.session.query(CooperativeDocument.entity_id)
+                .filter(
+                    CooperativeDocument.cooperative_id == cooperative_id,
+                    CooperativeDocument.entity_type == "LedgerTransaction",
+                    CooperativeDocument.entity_id.isnot(None),
+                )
+                .all()
+            }
+            missing_evidence_count = sum(
+                1 for row in evidence_rows if row.id not in evidence_transaction_ids
+            )
+
+            latest_reconciliation = BankReconciliation.query.filter_by(
+                cooperative_id=cooperative_id,
+            ).order_by(BankReconciliation.statement_date.desc()).first()
+
+            treasurer_work = {
+                "pending_count": len(pending_rows),
+                "pending_value": sum(float(row.amount or 0) for row in pending_rows),
+                "rejected_count": len(rejected_rows),
+                "rejected_value": sum(float(row.amount or 0) for row in rejected_rows),
+                "budget_count": len(pending_budgets),
+                "budget_value": sum(float(row.planned_amount or 0) for row in pending_budgets),
+                "reconciliation_count": len(pending_reconciliations),
+                "latest_reconciliation_difference": (
+                    float(latest_reconciliation.difference or 0)
+                    if latest_reconciliation else None
+                ),
+                "missing_evidence_count": missing_evidence_count,
             }
     elif cooperative.cooperative_type == "Secondary":
         network_rows = _primary_network_rows(cooperative_id)
@@ -270,6 +327,7 @@ def _dashboard_data():
         "primary_stats": primary_stats,
         "chairperson_decisions": chairperson_decisions,
         "finance_composition": finance_composition,
+        "treasurer_work": treasurer_work,
         "network_rows": network_rows,
         "alerts": alerts,
     }
