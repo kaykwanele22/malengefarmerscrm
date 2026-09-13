@@ -246,5 +246,64 @@ class AuthenticationLifecycleTests(unittest.TestCase):
         self.assertIn(b"Lifecycle Treasurer", response.data)
 
 
+    def test_authenticated_session_has_bounded_window_and_private_cache_headers(self):
+        self.login_session_as(self.treasurer_id, "Lifecycle Treasurer")
+        response = self.client.get("/dashboard", follow_redirects=False)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers.get("Cache-Control"), "no-store, private, max-age=0")
+        self.assertEqual(response.headers.get("Pragma"), "no-cache")
+        self.assertEqual(response.headers.get("Cross-Origin-Opener-Policy"), "same-origin")
+        self.assertEqual(response.headers.get("Cross-Origin-Resource-Policy"), "same-origin")
+        with self.client.session_transaction() as sess:
+            self.assertTrue(sess.get(self.auth._SESSION_STARTED_KEY))
+            self.assertTrue(sess.get(self.auth._SESSION_LAST_SEEN_KEY))
+
+    def test_idle_session_timeout_revokes_login_and_is_audited(self):
+        self.login_session_as(self.treasurer_id, "Lifecycle Treasurer")
+        now = int(self.crm.utc_now().timestamp())
+        with self.client.session_transaction() as sess:
+            sess[self.auth._SESSION_STARTED_KEY] = now - (self.auth.SESSION_IDLE_MINUTES * 60 + 120)
+            sess[self.auth._SESSION_LAST_SEEN_KEY] = now - (self.auth.SESSION_IDLE_MINUTES * 60 + 1)
+
+        response = self.client.get("/dashboard", follow_redirects=False)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/login", response.headers.get("Location", ""))
+        with self.client.session_transaction() as sess:
+            self.assertFalse(bool(sess.get("user_id")))
+        with self.crm.app.app_context():
+            log = self.crm.AuditLog.query.filter_by(
+                action="SESSION_EXPIRED", entity_id=self.treasurer_id
+            ).order_by(self.crm.AuditLog.id.desc()).first()
+            self.assertIsNotNone(log)
+            self.assertIn("inactivity timeout", log.details)
+
+    def test_absolute_session_lifetime_revokes_recently_active_session(self):
+        self.login_session_as(self.treasurer_id, "Lifecycle Treasurer")
+        now = int(self.crm.utc_now().timestamp())
+        with self.client.session_transaction() as sess:
+            sess[self.auth._SESSION_STARTED_KEY] = now - (self.auth.SESSION_ABSOLUTE_HOURS * 60 * 60 + 1)
+            sess[self.auth._SESSION_LAST_SEEN_KEY] = now - 1
+
+        response = self.client.get("/dashboard", follow_redirects=False)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/login", response.headers.get("Location", ""))
+        with self.crm.app.app_context():
+            log = self.crm.AuditLog.query.filter_by(
+                action="SESSION_EXPIRED", entity_id=self.treasurer_id
+            ).order_by(self.crm.AuditLog.id.desc()).first()
+            self.assertIsNotNone(log)
+            self.assertIn("maximum session lifetime", log.details)
+
+    def test_trusted_https_proxy_sets_hsts(self):
+        previous = self.crm.app.config.get("TRUST_PROXY_HEADERS")
+        self.crm.app.config["TRUST_PROXY_HEADERS"] = True
+        try:
+            response = self.client.get("/", headers={"X-Forwarded-Proto": "https"})
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("max-age=31536000", response.headers.get("Strict-Transport-Security", ""))
+        finally:
+            self.crm.app.config["TRUST_PROXY_HEADERS"] = previous
+
+
 if __name__ == "__main__":
     unittest.main()
