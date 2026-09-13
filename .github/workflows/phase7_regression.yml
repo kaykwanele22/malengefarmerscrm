@@ -16,6 +16,7 @@ on:
       - crm-hardening-10-auth-lifecycle
       - crm-hardening-11-database-integrity
       - crm-hardening-12-error-feedback
+      - crm-hardening-13-security-controls
   pull_request:
     branches:
       - main

@@ -30,6 +30,10 @@ bp = Blueprint("authsec", __name__)
 ACCOUNT_LOCK_FAILURES = max(3, int(os.getenv("ACCOUNT_LOCK_FAILURES", "5")))
 ACCOUNT_LOCK_MINUTES = max(1, int(os.getenv("ACCOUNT_LOCK_MINUTES", "15")))
 PASSWORD_MIN_LENGTH = max(10, int(os.getenv("PASSWORD_MIN_LENGTH", "10")))
+SESSION_IDLE_MINUTES = max(5, int(os.getenv("SESSION_IDLE_MINUTES", "30")))
+SESSION_ABSOLUTE_HOURS = max(1, int(os.getenv("SESSION_ABSOLUTE_HOURS", "12")))
+_SESSION_STARTED_KEY = "_security_session_started"
+_SESSION_LAST_SEEN_KEY = "_security_session_last_seen"
 
 
 class UserSecurity(db.Model):
@@ -129,6 +133,7 @@ def _mark_authenticated_login(user):
     security.last_login_user_agent = (request.headers.get("User-Agent", "") or "")[:255] or None
     session["auth_version"] = int(security.auth_version or 1)
     session["_auth_login_recorded_for"] = user.id
+    _establish_session_window(reset=True)
     db.session.commit()
     return security
 
@@ -136,6 +141,58 @@ def _mark_authenticated_login(user):
 def _target_user_id_from_path(prefix):
     match = re.match(rf"^{re.escape(prefix)}(\d+)$", request.path)
     return int(match.group(1)) if match else None
+
+
+def _session_now():
+    return int(utc_now().timestamp())
+
+
+def _establish_session_window(reset=False):
+    """Create or refresh the bounded authenticated-session window."""
+    now = _session_now()
+    if reset or not session.get(_SESSION_STARTED_KEY):
+        session[_SESSION_STARTED_KEY] = now
+    if reset or not session.get(_SESSION_LAST_SEEN_KEY):
+        session[_SESSION_LAST_SEEN_KEY] = now
+    return now
+
+
+def _expire_authenticated_session(user, reason):
+    cooperative_id = user.access_record.cooperative_id if user.access_record else None
+    user_id = user.id
+    session.clear()
+    add_audit_log(
+        "SESSION_EXPIRED",
+        "User",
+        user_id,
+        f"Authenticated session ended after {reason}.",
+        cooperative_id=cooperative_id,
+        user_id=user_id,
+    )
+    db.session.commit()
+    return redirect(url_for("login"))
+
+
+def _enforce_session_window(user):
+    """Expire idle or overlong authenticated sessions and refresh valid activity."""
+    now = _session_now()
+    try:
+        started = int(session.get(_SESSION_STARTED_KEY, now))
+        last_seen = int(session.get(_SESSION_LAST_SEEN_KEY, now))
+    except (TypeError, ValueError):
+        started = now
+        last_seen = now
+
+    session[_SESSION_STARTED_KEY] = started
+    session[_SESSION_LAST_SEEN_KEY] = last_seen
+
+    if now - started > SESSION_ABSOLUTE_HOURS * 60 * 60:
+        return _expire_authenticated_session(user, "the maximum session lifetime")
+    if now - last_seen > SESSION_IDLE_MINUTES * 60:
+        return _expire_authenticated_session(user, "the inactivity timeout")
+
+    session[_SESSION_LAST_SEEN_KEY] = now
+    return None
 
 
 def _password_preflight():
@@ -217,6 +274,11 @@ def _auth_before_request():
     elif int(session_version) != current_version:
         session.clear()
         return redirect(url_for("login"))
+
+    if (request.endpoint or "") != "static":
+        timeout_response = _enforce_session_window(user)
+        if timeout_response is not None:
+            return timeout_response
 
     # Flask saves the session after response hooks, so the login POST may not expose
     # its freshly-created session to this module's after_request callback. Record a
@@ -316,7 +378,27 @@ def _auth_after_request(response):
             _clear_failures(security)
             session["auth_version"] = security.auth_version
             session["_csrf_token"] = os.urandom(24).hex()
+            _establish_session_window(reset=True)
             db.session.commit()
+
+    # Dynamic CRM responses can contain personal, governance or finance data.
+    # Do not allow browsers or shared proxies to retain those pages after logout.
+    if endpoint != "static":
+        response.headers["Cache-Control"] = "no-store, private, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+
+    # Modern cross-origin isolation headers complement the core CSP/frame policy.
+    response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
+    response.headers.setdefault("Cross-Origin-Resource-Policy", "same-origin")
+
+    # Reverse proxies terminate TLS in production, so request.is_secure alone may
+    # not reflect the original HTTPS request. Only trust X-Forwarded-Proto when
+    # TRUST_PROXY_HEADERS is explicitly enabled.
+    forwarded_proto = (request.headers.get("X-Forwarded-Proto", "") or "").split(",", 1)[0].strip().lower()
+    trusted_https = bool(_core.app.config.get("TRUST_PROXY_HEADERS") and forwarded_proto == "https")
+    if request.is_secure or trusted_https:
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 
     return response
 
@@ -354,6 +436,7 @@ def change_required_password():
         _clear_failures(security)
         session["auth_version"] = security.auth_version
         session["_csrf_token"] = os.urandom(24).hex()
+        _establish_session_window(reset=True)
         add_audit_log(
             "PASSWORD_ROTATED_REQUIRED", "User", user.id,
             "Temporary/Admin-reset password replaced by the account holder.",
