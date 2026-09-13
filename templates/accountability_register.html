@@ -4,7 +4,7 @@
 {% block content %}
 <div class="acc-page">
   <div class="acc-head">
-    <div><span class="acc-eyebrow">Governance &amp; Evidence</span><h1>Accountability Register</h1><p>One place to see what was decided, who is responsible, what is overdue, and whether proof has been verified.</p></div>
+    <div><span class="acc-eyebrow">Governance &amp; Accountability</span><h1>Accountability Register</h1><p>One place to see what was decided, who is responsible, what is overdue, and whether proof has been verified.</p></div>
     <div class="acc-actions"><a class="acc-btn" href="{{ url_for('meetings_list') }}">📎 Meeting Evidence</a>{% if can_record_resolutions %}<a class="acc-btn primary" href="{{ url_for('add_resolution') }}">+ Capture Resolution</a>{% endif %}</div>
   </div>
 
