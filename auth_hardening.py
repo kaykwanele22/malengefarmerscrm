@@ -21,7 +21,7 @@ if _core is None or not hasattr(_core, "db"):
 for _name in (
     "db", "User", "UserAccess", "AuditLog", "roles_required", "login_required",
     "current_user", "current_access", "add_audit_log", "utc_now",
-    "client_ip_address", "two_factor_policy_enabled", "two_factor_session_complete",
+    "client_ip_address", "two_factor_policy_enabled", "two_factor_is_required", "two_factor_session_complete",
 ):
     globals()[_name] = getattr(_core, _name)
 
@@ -227,7 +227,7 @@ def _auth_before_request():
     if (
         session.get("_auth_login_recorded_for") != user.id
         and endpoint not in {"two_factor_setup", "two_factor_verify"}
-        and (not two_factor_policy_enabled() or two_factor_session_complete())
+        and (not two_factor_is_required() or two_factor_session_complete())
     ):
         security = _mark_authenticated_login(user)
 
@@ -239,7 +239,7 @@ def _auth_before_request():
     if security.must_change_password and (request.endpoint or "") not in exempt:
         # Existing 2FA remains the first gate. Only force rotation after a complete
         # second factor (or while the global 2FA policy is intentionally paused).
-        if not two_factor_policy_enabled() or two_factor_session_complete():
+        if not two_factor_is_required() or two_factor_session_complete():
             return redirect(url_for("authsec.change_required_password"))
     return None
 
@@ -330,7 +330,7 @@ def change_required_password():
     if not security.must_change_password:
         return redirect(url_for("dashboard"))
 
-    if two_factor_policy_enabled() and not two_factor_session_complete():
+    if two_factor_is_required() and not two_factor_session_complete():
         if user.two_factor_enabled:
             return redirect(url_for("two_factor_verify"))
         return redirect(url_for("two_factor_setup"))
