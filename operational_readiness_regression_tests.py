@@ -62,6 +62,7 @@ class OperationalReadinessRegressionTests(unittest.TestCase):
         payload = response.get_json()
         self.assertEqual(payload["status"], "unavailable")
         self.assertEqual(payload["checks"]["database"], "unavailable")
+        self.assertEqual(response.headers.get("Retry-After"), "5")
         self.assertNotIn("exception", response.get_data(as_text=True).lower())
         self.assertNotIn("database_url", response.get_data(as_text=True).lower())
 
@@ -72,6 +73,7 @@ class OperationalReadinessRegressionTests(unittest.TestCase):
         payload = response.get_json()
         self.assertEqual(payload["status"], "unavailable")
         self.assertEqual(payload["checks"]["evidence_storage"], "unavailable")
+        self.assertEqual(response.headers.get("Retry-After"), "5")
 
 
 if __name__ == "__main__":
