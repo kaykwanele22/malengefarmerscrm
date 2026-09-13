@@ -13,6 +13,7 @@ on:
       - crm-hardening-7-ledger-corrections
       - crm-hardening-8-confirmed-reversals
       - crm-hardening-9-finance-source-of-truth
+      - crm-hardening-10-auth-lifecycle
   pull_request:
     branches:
       - main
@@ -68,6 +69,7 @@ jobs:
           - ledger_regression_tests.py
           - ledger_reversal_regression_tests.py
           - finance_control_source_truth_tests.py
+          - auth_hardening_regression_tests.py
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
