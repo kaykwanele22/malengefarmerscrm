@@ -1,0 +1,149 @@
+* {
+    box-sizing: border-box;
+}
+
+:root {
+    color-scheme: light;
+    font-family: Arial, Helvetica, sans-serif;
+    background: #f3f7f4;
+    color: #173b2b;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    background: #f3f7f4;
+}
+
+.error-shell {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+}
+
+.error-card {
+    width: min(640px, 100%);
+    padding: 38px;
+    background: #ffffff;
+    border: 1px solid #dfe8e2;
+    border-radius: 18px;
+    box-shadow: 0 18px 45px rgba(18, 63, 41, 0.08);
+}
+
+.error-code {
+    display: inline-flex;
+    margin-bottom: 18px;
+    padding: 7px 12px;
+    border-radius: 999px;
+    background: #fde7e7;
+    color: #a02d2d;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: .7px;
+}
+
+h1 {
+    margin: 0 0 12px;
+    font-size: clamp(26px, 5vw, 34px);
+}
+
+.error-message {
+    margin: 0;
+    color: #5f6f65;
+    line-height: 1.65;
+}
+
+.error-reference {
+    margin-top: 22px;
+    padding: 14px 16px;
+    border: 1px solid #dce7df;
+    border-radius: 12px;
+    background: #f8fbf9;
+}
+
+.error-reference span,
+.error-reference small {
+    display: block;
+}
+
+.error-reference span {
+    margin-bottom: 5px;
+    color: #587064;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .55px;
+}
+
+.error-reference code {
+    display: block;
+    overflow-wrap: anywhere;
+    color: #173b2b;
+    font-size: 13px;
+}
+
+.error-reference small {
+    margin-top: 7px;
+    color: #6b7b72;
+    line-height: 1.5;
+}
+
+.error-actions {
+    margin-top: 26px;
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.error-actions a,
+.error-actions button {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 18px;
+    border-radius: 9px;
+    font: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.error-actions a {
+    background: #2e8251;
+    color: #ffffff;
+    border: 1px solid #2e8251;
+}
+
+.error-actions button {
+    background: #f3f7f4;
+    color: #315441;
+    border: 1px solid #d7e3db;
+}
+
+.error-actions a:focus-visible,
+.error-actions button:focus-visible {
+    outline: 3px solid rgba(46, 130, 81, .25);
+    outline-offset: 2px;
+}
+
+@media (max-width: 560px) {
+    .error-shell {
+        padding: 14px;
+    }
+
+    .error-card {
+        padding: 26px 22px;
+    }
+
+    .error-actions {
+        flex-direction: column;
+    }
+
+    .error-actions a,
+    .error-actions button {
+        width: 100%;
+    }
+}
