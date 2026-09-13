@@ -146,9 +146,10 @@
                 </a>
 
                 {% if is_leadership or is_treasurer %}
+                <p class="nav-title">FINANCIAL CONTROL</p>
                 <a href="{{ url_for('phase7.finance_control') }}"
                    class="nav-item {% if request.endpoint and request.endpoint.startswith('phase7.') and request.endpoint in ['phase7.finance_control','phase7.budget_create','phase7.budget_decision','phase7.reconciliation_create','phase7.reconciliation_review'] %}active{% endif %}">
-                    <span>🏦</span><span>Finance Control</span>
+                    <span>🏦</span><span>Financial Control</span>
                 </a>
                 <a href="{{ url_for('ledger.dashboard') }}"
                    class="nav-item {% if request.endpoint and request.endpoint.startswith('ledger.') %}active{% endif %}">
@@ -176,7 +177,7 @@
                 {% endif %}
 
                 {% if can_view_governance and not is_admin %}
-                <p class="nav-title">ACCOUNTABILITY</p>
+                <p class="nav-title">GOVERNANCE &amp; ACCOUNTABILITY</p>
 
                 <a href="{{ url_for('accountability_register') }}"
                    class="nav-item {% if request.endpoint in [
@@ -318,7 +319,7 @@
                     </a>
                     {% endif %}
 
-                    <p class="nav-title">RECORDS</p>
+                    <p class="nav-title">GOVERNANCE &amp; ACCOUNTABILITY</p>
 
                     <a href="{{ url_for('reports') }}"
                        class="nav-item {% if request.endpoint == 'reports' %}active{% endif %}">
@@ -345,7 +346,7 @@
                     </a>
                     {% endif %}
 
-                    <p class="nav-title">FINANCE</p>
+                    {% if not is_secondary %}<p class="nav-title">MEMBERSHIP</p>{% endif %}
 
                     {% if not is_secondary %}
                     <a href="{{ url_for('memberships_list') }}"
@@ -354,6 +355,8 @@
                         <span>Members</span>
                     </a>
                     {% endif %}
+
+                    <p class="nav-title">FINANCIAL CONTROL</p>
 
                     <a href="{{ url_for('sales_list') }}"
                        class="nav-item {% if request.endpoint in [
@@ -429,7 +432,7 @@
                     </a>
                     {% endif %}
 
-                    <p class="nav-title">{% if is_secondary %}JOINT FINANCE{% else %}OPERATIONS{% endif %}</p>
+                    <p class="nav-title">{% if is_secondary %}FINANCIAL CONTROL{% else %}MEMBERSHIP{% endif %}</p>
 
                     {% if not is_secondary %}
                     <a href="{{ url_for('farmers_list') }}"
@@ -450,6 +453,8 @@
                         <span>Members</span>
                     </a>
                     {% endif %}
+
+                    {% if not is_secondary %}<p class="nav-title">PRODUCTION</p>{% endif %}
 
                     {% if not is_secondary %}
                     <a href="{{ url_for('farms_list') }}"
@@ -487,9 +492,7 @@
                     </a>
                     {% endif %}
 
-                    <p class="nav-title">
-                        {% if is_chairperson %}FINANCIAL APPROVAL{% else %}FINANCIAL OVERSIGHT{% endif %}
-                    </p>
+                    <p class="nav-title">FINANCIAL CONTROL</p>
 
                     <a href="{{ url_for('sales_list') }}"
                        class="nav-item {% if request.endpoint in [
@@ -544,7 +547,7 @@
                     </a>
 
                     {% if can_view_audit_logs %}
-                    <p class="nav-title">OVERSIGHT</p>
+                    <p class="nav-title">GOVERNANCE &amp; ACCOUNTABILITY</p>
 
                     <a href="{{ url_for('audit_logs') }}"
                        class="nav-item {% if request.endpoint == 'audit_logs' %}active{% endif %}">
