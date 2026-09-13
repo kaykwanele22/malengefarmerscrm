@@ -100,7 +100,7 @@ class PrimaryProductionCommandTests(unittest.TestCase):
         response = self.client.get("/production-control")
         self.assertEqual(response.status_code, 200)
         page = response.get_data(as_text=True)
-        self.assertIn("Production Command Centre", page)
+        self.assertIn("What are we producing?", page)
         self.assertIn("Chairperson oversight mode", page)
 
         self.login_as("primary_vice")
