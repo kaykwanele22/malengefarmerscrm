@@ -17,6 +17,7 @@ on:
       - crm-hardening-11-database-integrity
       - crm-hardening-12-error-feedback
       - crm-hardening-13-security-controls
+      - crm-hardening-14-operational-readiness
   pull_request:
     branches:
       - main
@@ -111,6 +112,7 @@ jobs:
           - auth_hardening_regression_tests.py
           - database_integrity_regression_tests.py
           - error_feedback_regression_tests.py
+          - operational_readiness_regression_tests.py
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

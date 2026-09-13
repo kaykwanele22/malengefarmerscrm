@@ -9315,6 +9315,10 @@ register_account_ledger(app)
 from auth_hardening import register_auth_hardening
 register_auth_hardening(app)
 
+# Deployment liveness/readiness probes verify the process, database and protected evidence storage.
+from operational_readiness import register_operational_readiness
+register_operational_readiness(app)
+
 
 # =========================================================
 # RUN APPLICATION
