@@ -93,6 +93,7 @@ class FinanceLedgerRegressionTests(unittest.TestCase):
         self.client = self.crm.app.test_client()
         c, l, p = self.crm, self.ledger, self.p7
         with c.app.app_context():
+            l.LedgerTransactionRevision.query.delete()
             l.FinanceReconciliation.query.delete()
             l.LedgerTransaction.query.delete()
             l.FinanceAccount.query.delete()
@@ -218,6 +219,107 @@ class FinanceLedgerRegressionTests(unittest.TestCase):
         no_match = self.client.get("/finance/accounts?q=definitely-no-such-ledger-record")
         self.assertEqual(no_match.status_code, 200)
         self.assertNotIn(f"View #{tx_id}".encode(), no_match.data)
+
+    def test_rejected_transaction_can_be_corrected_with_history_and_confirmed_is_locked(self):
+        c, l = self.crm, self.ledger
+        self.login_as("treasurer")
+        response = self.client.post("/finance/accounts", data={
+            "name": "Correction Bank", "account_type": "Bank Account", "opening_balance": "1000",
+            "opening_balance_date": c.crm_today().isoformat(),
+        })
+        self.assertEqual(response.status_code, 302)
+        with c.app.app_context():
+            account_id = l.FinanceAccount.query.filter_by(cooperative_id=self.coop_a, name="Correction Bank").one().id
+
+        response = self.client.post("/finance/transactions", data={
+            "transaction_type": "Expense", "category": "Farm Inputs", "amount": "220",
+            "transaction_date": c.crm_today().isoformat(), "from_account_id": str(account_id),
+            "counterparty": "Input Supplier", "reference": "WRONG-REF",
+            "payment_method": "Cash", "project_reference": "Potato Project",
+            "notes": "Initial capture",
+        })
+        self.assertEqual(response.status_code, 302)
+        with c.app.app_context():
+            tx = l.LedgerTransaction.query.filter_by(cooperative_id=self.coop_a, reference="WRONG-REF").one()
+            tx_id = tx.id
+
+        self.login_as("chair")
+        response = self.client.post(
+            f"/finance/transactions/{tx_id}/decision",
+            data={"decision": "reject", "decision_note": "Invoice total and reference do not match."},
+        )
+        self.assertEqual(response.status_code, 302)
+        with c.app.app_context():
+            tx = c.db.session.get(l.LedgerTransaction, tx_id)
+            self.assertEqual(tx.status, "Rejected")
+            self.assertEqual(tx.decision_note, "Invoice total and reference do not match.")
+
+        self.login_as("treasurer")
+        response = self.client.post(f"/finance/transactions/{tx_id}/resubmit", data={
+            "transaction_type": "Expense", "category": "Transport", "amount": "180",
+            "transaction_date": c.crm_today().isoformat(), "from_account_id": str(account_id),
+            "counterparty": "Input Supplier", "reference": "INV-180-CORRECT",
+            "payment_method": "EFT / Bank Transfer", "project_reference": "Potato Project",
+            "notes": "Corrected against supplier invoice",
+            "correction_reason": "Corrected invoice amount, category and payment reference.",
+        })
+        self.assertEqual(response.status_code, 302)
+        with c.app.app_context():
+            tx = c.db.session.get(l.LedgerTransaction, tx_id)
+            self.assertEqual(tx.status, "Pending Confirmation")
+            self.assertAlmostEqual(tx.amount, 180.0)
+            self.assertEqual(tx.category, "Transport")
+            self.assertEqual(tx.reference, "INV-180-CORRECT")
+            self.assertEqual(tx.payment_method, "EFT / Bank Transfer")
+            self.assertIsNone(tx.decided_by_user_id)
+            self.assertIsNone(tx.decided_at)
+            self.assertIsNone(tx.decision_note)
+            revision = l.LedgerTransactionRevision.query.filter_by(transaction_id=tx_id).one()
+            self.assertEqual(revision.revision_number, 1)
+            self.assertIn("Corrected invoice amount", revision.reason)
+            self.assertEqual(revision.snapshot.get("status"), "Rejected")
+            self.assertAlmostEqual(revision.snapshot.get("amount"), 220.0)
+            self.assertEqual(revision.snapshot.get("category"), "Farm Inputs")
+            self.assertEqual(revision.snapshot.get("reference"), "WRONG-REF")
+            self.assertEqual(revision.snapshot.get("decision_note"), "Invoice total and reference do not match.")
+
+        second_correction_while_pending = self.client.post(f"/finance/transactions/{tx_id}/resubmit", data={
+            "transaction_type": "Expense", "category": "Transport", "amount": "170",
+            "transaction_date": c.crm_today().isoformat(), "from_account_id": str(account_id),
+            "correction_reason": "Should not be accepted while pending.",
+        })
+        # Invalid browser form state is normalized by the app shell to a safe feedback redirect.
+        self.assertEqual(second_correction_while_pending.status_code, 303)
+
+        detail = self.client.get(f"/finance/transactions/{tx_id}")
+        self.assertEqual(detail.status_code, 200)
+        self.assertIn(b"Correction History", detail.data)
+        self.assertIn(b"Corrected invoice amount", detail.data)
+        self.assertIn(b"R 220.00", detail.data)
+
+        self.login_as("chair")
+        approved = self.client.post(
+            f"/finance/transactions/{tx_id}/decision",
+            data={"decision": "approve", "decision_note": "Corrected invoice verified."},
+        )
+        self.assertEqual(approved.status_code, 302)
+
+        self.login_as("treasurer")
+        locked = self.client.post(f"/finance/transactions/{tx_id}/resubmit", data={
+            "transaction_type": "Expense", "category": "Transport", "amount": "160",
+            "transaction_date": c.crm_today().isoformat(), "from_account_id": str(account_id),
+            "correction_reason": "Attempt to overwrite confirmed entry.",
+        })
+        self.assertEqual(locked.status_code, 303)
+        with c.app.app_context():
+            tx = c.db.session.get(l.LedgerTransaction, tx_id)
+            self.assertEqual(tx.status, "Confirmed")
+            self.assertAlmostEqual(tx.amount, 180.0)
+            self.assertEqual(l.LedgerTransactionRevision.query.filter_by(transaction_id=tx_id).count(), 1)
+
+        confirmed_detail = self.client.get(f"/finance/transactions/{tx_id}")
+        self.assertEqual(confirmed_detail.status_code, 200)
+        self.assertIn(b"locked from direct editing", confirmed_detail.data)
 
     def test_account_reconciliation_uses_confirmed_ledger_and_is_scoped(self):
         c, l, p = self.crm, self.ledger, self.p7
