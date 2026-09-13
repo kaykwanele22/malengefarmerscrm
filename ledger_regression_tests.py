@@ -288,7 +288,8 @@ class FinanceLedgerRegressionTests(unittest.TestCase):
             "transaction_date": c.crm_today().isoformat(), "from_account_id": str(account_id),
             "correction_reason": "Should not be accepted while pending.",
         })
-        self.assertEqual(second_correction_while_pending.status_code, 400)
+        # Invalid browser form state is normalized by the app shell to a safe feedback redirect.
+        self.assertEqual(second_correction_while_pending.status_code, 303)
 
         detail = self.client.get(f"/finance/transactions/{tx_id}")
         self.assertEqual(detail.status_code, 200)
@@ -309,7 +310,7 @@ class FinanceLedgerRegressionTests(unittest.TestCase):
             "transaction_date": c.crm_today().isoformat(), "from_account_id": str(account_id),
             "correction_reason": "Attempt to overwrite confirmed entry.",
         })
-        self.assertEqual(locked.status_code, 400)
+        self.assertEqual(locked.status_code, 303)
         with c.app.app_context():
             tx = c.db.session.get(l.LedgerTransaction, tx_id)
             self.assertEqual(tx.status, "Confirmed")
