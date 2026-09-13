@@ -25,7 +25,7 @@ permissions:
 
 jobs:
   migration:
-    name: Migration integrity
+    name: Migration integrity / SQLite
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -44,6 +44,42 @@ jobs:
           DATABASE_URL: sqlite:////tmp/malenge_migration_test.db
         run: |
           rm -f /tmp/malenge_migration_test.db
+          python -m flask --app app db upgrade
+          python -m flask --app app db current
+
+  postgres-migration:
+    name: Migration integrity / PostgreSQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: malenge_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d malenge_ci"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Build a fresh PostgreSQL database from migrations
+        env:
+          SECRET_KEY: github-actions-postgres-migration-secret
+          APP_ENV: testing
+          TWO_FACTOR_REQUIRED: 'false'
+          DATABASE_URL: postgresql+psycopg://postgres:postgres@127.0.0.1:5432/malenge_ci
+        run: |
           python -m flask --app app db upgrade
           python -m flask --app app db current
 
