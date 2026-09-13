@@ -8,7 +8,7 @@
         <div class="p7-actions"><a class="p7-btn" href="{{ url_for('jointops.dashboard') }}">← Joint Operations</a><a class="p7-btn" href="{{ url_for('phase7.reports_command_centre') }}">Reports Centre</a></div>
     </div>
 
-    <div class="p7-warning"><strong>Privacy and governance boundary:</strong> this page intentionally shows totals and joint allocations only. Secondary executives cannot edit or browse the Primary cooperative's individual records from here.</div>
+    <div class="p7-warning"><strong>Privacy and governance boundary:</strong> this page shows operational aggregates plus only the money shared between this Primary and MFPSU. Internal bank balances, sales income, expenses, member-fee totals and book positions stay inside the Primary cooperative portal.</div>
 
     <div class="p7-grid-4">
         <div class="p7-stat"><span>Active Farmers</span><strong>{{ summary.active_members }}</strong><small>Aggregate count only</small></div>
@@ -19,9 +19,9 @@
 
     <div class="p7-grid-4">
         <div class="p7-stat"><span>Normalised Harvest</span><strong>{{ "{:,.0f}".format(summary.harvest_kg|float) }} kg</strong><small>kg + tonnes normalised where possible</small></div>
-        <div class="p7-stat good"><span>Confirmed Member Contributions</span><strong>R {{ "{:,.2f}".format(summary.member_contributions|float) }}</strong></div>
-        <div class="p7-stat good"><span>Confirmed Sale Payments</span><strong>R {{ "{:,.2f}".format(summary.sale_payments|float) }}</strong></div>
-        <div class="p7-stat {% if summary.book_position < 0 %}warning{% endif %}"><span>Primary Book Position</span><strong>R {{ "{:,.2f}".format(summary.book_position|float) }}</strong><small>Aggregate income less confirmed expenses</small></div>
+        <div class="p7-stat good"><span>Primary → MFPSU Confirmed</span><strong>R {{ "{:,.2f}".format(summary.secondary_contribution_confirmed|float) }}</strong><small>Confirmed inter-cooperative contributions only</small></div>
+        <div class="p7-stat {% if summary.secondary_contribution_outstanding > 0 %}warning{% endif %}"><span>Contribution Outstanding</span><strong>R {{ "{:,.2f}".format(summary.secondary_contribution_outstanding|float) }}</strong><small>Amount still due to MFPSU</small></div>
+        <div class="p7-stat"><span>MFPSU Joint Allocation</span><strong>R {{ "{:,.2f}".format(summary.joint_allocated_amount|float) }}</strong><small>Secondary joint-project allocation to this Primary</small></div>
     </div>
 
     <section class="p7-card">

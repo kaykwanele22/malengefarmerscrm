@@ -101,6 +101,18 @@ class SecondaryJointScopeTests(unittest.TestCase):
         self.assertNotIn('href="/crops"', page)
         self.assertNotIn('href="/harvests"', page)
 
+    def test_secondary_primary_summary_hides_internal_primary_finance(self):
+        self.login_as(self.sec_chair_id)
+        response = self.client.get(f"/joint-operations/primary/{self.siyaphumla_id}")
+        self.assertEqual(response.status_code, 200)
+        page = response.get_data(as_text=True)
+        self.assertIn("Primary → MFPSU", page)
+        self.assertIn("MFPSU Joint Allocation", page)
+        self.assertNotIn("Primary Book Position", page)
+        self.assertNotIn("Confirmed Sale Payments", page)
+        self.assertNotIn("Confirmed Member Contributions", page)
+        self.assertIn("internal bank balances", page.lower())
+
     def test_secondary_secretary_is_not_a_primary_membership_manager(self):
         self.login_as(self.sec_secretary_id)
         self.assertEqual(self.client.get("/farmers").status_code, 403)

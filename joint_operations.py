@@ -875,18 +875,6 @@ def primary_summary(primary_id):
         elif unit in {"tonne", "tonnes", "ton", "tons"}:
             harvest_kg += float(harvest.quantity or 0) * 1000
 
-    confirmed_member_contributions = float(db.session.query(func.coalesce(func.sum(Contribution.amount), 0)).filter(
-        Contribution.cooperative_id == primary.id,
-        Contribution.status.in_(CONFIRMED_CONTRIBUTION_STATUSES),
-    ).scalar() or 0)
-    confirmed_sale_payments = float(db.session.query(func.coalesce(func.sum(Payment.amount), 0)).filter(
-        Payment.cooperative_id == primary.id,
-        Payment.status.in_(PAYMENT_VALUE_STATUSES),
-    ).scalar() or 0)
-    confirmed_expenses = float(db.session.query(func.coalesce(func.sum(Expense.amount), 0)).filter(
-        Expense.cooperative_id == primary.id,
-        Expense.status.in_(CONFIRMED_EXPENSE_STATUSES),
-    ).scalar() or 0)
     open_actions = Task.query.filter(
         Task.cooperative_id == primary.id,
         Task.resolution_id.isnot(None),
@@ -910,10 +898,11 @@ def primary_summary(primary_id):
         "crops": len(crops),
         "harvest_kg": harvest_kg,
         "open_actions": open_actions,
-        "member_contributions": confirmed_member_contributions,
-        "sale_payments": confirmed_sale_payments,
-        "expenses": confirmed_expenses,
-        "book_position": confirmed_member_contributions + confirmed_sale_payments - confirmed_expenses,
+        "joint_allocated_amount": sum(float(item.allocated_amount or 0) for item in allocations),
+        "shared_asset_cost": sum(float(item.actual_cost or 0) for item in usages),
+        "secondary_contribution_confirmed": sum(float(item.confirmed_paid or 0) for item in accounts),
+        "secondary_contribution_pending": sum(float(item.pending_paid or 0) for item in accounts),
+        "secondary_contribution_outstanding": sum(float(item.outstanding_amount or 0) for item in accounts),
     }
     return render_template(
         "joint_operations/primary_summary.html",

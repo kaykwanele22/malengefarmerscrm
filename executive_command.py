@@ -18,6 +18,8 @@ if _core is None or not hasattr(_core, "db"):
     _core = importlib.import_module("app")
 
 from account_ledger import FinanceAccount, LedgerTransaction
+from joint_operations import PrimaryContributionAccount, JointProjectAllocation
+from phase7 import BankReconciliation
 
 
 bp = Blueprint("execdash", __name__)
@@ -45,7 +47,9 @@ def _ledger_snapshot(cooperative_id):
 
 
 def _primary_network_rows(secondary_id):
+    """Secondary oversight without exposing a Primary cooperative's internal finances."""
     rows = []
+    today = _core.crm_today()
     primaries = _core.Cooperative.query.filter_by(
         parent_id=secondary_id,
         cooperative_type="Primary",
@@ -53,16 +57,48 @@ def _primary_network_rows(secondary_id):
     ).order_by(_core.Cooperative.name.asc()).all()
 
     for cooperative in primaries:
-        accounts, confirmed_balance, pending_change, pending_count = _ledger_snapshot(cooperative.id)
+        contribution_accounts = PrimaryContributionAccount.query.filter_by(
+            secondary_cooperative_id=secondary_id,
+            primary_cooperative_id=cooperative.id,
+            fiscal_year=today.year,
+        ).all()
+        expected_contribution = sum(float(item.expected_amount or 0) for item in contribution_accounts)
+        confirmed_contribution = sum(float(item.confirmed_paid or 0) for item in contribution_accounts)
+        pending_contribution = sum(float(item.pending_paid or 0) for item in contribution_accounts)
+        outstanding_contribution = max(expected_contribution - confirmed_contribution, 0.0)
+
+        allocated_amount = float(
+            _core.db.session.query(_core.func.coalesce(_core.func.sum(JointProjectAllocation.allocated_amount), 0))
+            .filter(
+                JointProjectAllocation.secondary_cooperative_id == secondary_id,
+                JointProjectAllocation.primary_cooperative_id == cooperative.id,
+            )
+            .scalar() or 0
+        )
+
+        latest_reconciliation = BankReconciliation.query.filter_by(
+            cooperative_id=cooperative.id,
+        ).order_by(BankReconciliation.statement_date.desc()).first()
+
+        open_actions = _core.Task.query.filter(
+            _core.Task.cooperative_id == cooperative.id,
+            _core.Task.resolution_id.isnot(None),
+            _core.Task.status.notin_(["Verified", "Completed", "Closed"]),
+        ).count()
+
         rows.append({
             "cooperative": cooperative,
             "member_count": _core.Membership.query.filter_by(cooperative_id=cooperative.id).count(),
             "farm_count": _core.Farm.query.filter_by(cooperative_id=cooperative.id).count(),
             "crop_count": _core.Crop.query.filter_by(cooperative_id=cooperative.id).count(),
-            "confirmed_balance": confirmed_balance,
-            "pending_change": pending_change,
-            "pending_count": pending_count,
-            "account_count": len(accounts),
+            "financial_reporting_status": "Submitted" if latest_reconciliation else "Outstanding",
+            "financial_reporting_date": latest_reconciliation.statement_date if latest_reconciliation else None,
+            "expected_contribution": expected_contribution,
+            "confirmed_contribution": confirmed_contribution,
+            "pending_contribution": pending_contribution,
+            "outstanding_contribution": outstanding_contribution,
+            "joint_allocated_amount": allocated_amount,
+            "open_actions": open_actions,
         })
     return rows
 

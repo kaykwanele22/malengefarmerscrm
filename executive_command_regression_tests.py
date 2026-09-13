@@ -41,6 +41,7 @@ class ExecutiveCommandRegressionTests(unittest.TestCase):
             "chair": ("Primary Chairperson", primary.id),
             "secretary": ("Primary Secretary", primary.id),
             "treasurer": ("Primary Treasurer", primary.id),
+            "secondary_chair": ("Secondary Chairperson", secondary.id),
             "secondary_secretary": ("Secondary Secretary", secondary.id),
         }
         cls.user_ids = {}
@@ -140,10 +141,23 @@ class ExecutiveCommandRegressionTests(unittest.TestCase):
         self.login_as("secondary_secretary")
         response = self.client.get("/dashboard")
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Primary cooperative summary", response.data)
+        self.assertIn(b"Primary governance &amp; reporting status", response.data)
         self.assertIn(b"Executive Primary", response.data)
-        self.assertIn(b"Entity boundary", response.data)
+        self.assertIn(b"Secondary portal rule", response.data)
         self.assertNotIn(b"Confirmed Balance", response.data)
+
+    def test_secondary_chair_cannot_see_primary_internal_financial_position(self):
+        self.login_as("secondary_chair")
+        response = self.client.get("/dashboard")
+        self.assertEqual(response.status_code, 200)
+        page = response.get_data(as_text=True)
+        self.assertIn("Primary governance &amp; reporting status", page)
+        self.assertIn("Primary → Secondary Contribution", page)
+        self.assertIn("Joint Allocation", page)
+        self.assertNotIn("R 1,000.00", page)
+        self.assertNotIn("Primary Book Position", page)
+        self.assertNotIn("Confirmed Sale Payments", page)
+        self.assertNotIn("Confirmed Member Contributions", page)
 
     def test_admin_keeps_system_administration_dashboard(self):
         self.login_as("admin")
