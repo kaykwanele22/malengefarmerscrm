@@ -20,6 +20,7 @@ from phase7 import _upsert_notification, CooperativeDocument
 bp = Blueprint("ledger", __name__)
 ACCOUNT_TYPES = ("Bank Account", "Cash Box", "Mobile Money", "Savings", "Other")
 TRANSACTION_TYPES = ("Opening Balance", "Income", "Expense", "Transfer")
+REVERSAL_TYPE = "Reversal"
 PAYMENT_METHODS = ("Cash", "EFT / Bank Transfer", "Card", "Mobile Money", "Cheque", "Other")
 INCOME_CATEGORIES = ("Product Sale", "Bulk Sale", "Membership Fee", "Primary Contribution", "Grant", "Loan", "Other Income")
 EXPENSE_CATEGORIES = ("Farm Inputs", "Transport", "Packaging", "Equipment", "Wages", "Bank Charges", "Refund", "Other Expense")
@@ -90,6 +91,13 @@ class LedgerTransaction(db.Model):
     project_reference = db.Column(db.String(140), index=True)
     source_type = db.Column(db.String(60))
     source_id = db.Column(db.Integer)
+    reversal_of_transaction_id = db.Column(
+        db.Integer,
+        db.ForeignKey("ledger_transaction.id"),
+        nullable=True,
+        unique=True,
+        index=True,
+    )
     status = db.Column(db.String(40), nullable=False, default="Pending Confirmation", index=True)
     notes = db.Column(db.Text)
     decision_note = db.Column(db.Text)
@@ -103,6 +111,12 @@ class LedgerTransaction(db.Model):
     to_account = db.relationship("FinanceAccount", foreign_keys=[to_account_id], backref=db.backref("incoming_transactions", lazy=True))
     recorded_by = db.relationship("User", foreign_keys=[recorded_by_user_id])
     decided_by = db.relationship("User", foreign_keys=[decided_by_user_id])
+    reversal_of = db.relationship(
+        "LedgerTransaction",
+        remote_side=[id],
+        foreign_keys=[reversal_of_transaction_id],
+        backref=db.backref("reversal_transaction", uselist=False),
+    )
 
 
 class LedgerTransactionRevision(db.Model):
@@ -225,6 +239,12 @@ def _confirmed_account_balance_through(account, through_date):
     return total
 
 
+def _category_reporting_amount(row):
+    """Return the category amount after accounting for confirmed reversals."""
+    amount = float(row.amount or 0)
+    return -amount if row.reversal_of_transaction_id else amount
+
+
 def _transaction_payload_from_request(coop, exclude_transaction_id=None):
     kind = request.form.get("transaction_type", "").strip()
     if kind not in TRANSACTION_TYPES:
@@ -320,6 +340,7 @@ def _transaction_snapshot(row):
         "project_reference": row.project_reference,
         "source_type": row.source_type,
         "source_id": row.source_id,
+        "reversal_of_transaction_id": row.reversal_of_transaction_id,
         "status": row.status,
         "notes": row.notes,
         "decision_note": row.decision_note,
@@ -334,6 +355,19 @@ def _next_revision_number(transaction_id):
         LedgerTransactionRevision.transaction_id == transaction_id
     ).scalar()
     return int(current or 0) + 1
+
+
+def _add_revision(row, reason):
+    revision = LedgerTransactionRevision(
+        transaction_id=row.id,
+        cooperative_id=row.cooperative_id,
+        revision_number=_next_revision_number(row.id),
+        reason=reason[:250],
+        snapshot_json=_transaction_snapshot(row),
+        changed_by_user_id=session["user_id"],
+    )
+    db.session.add(revision)
+    return revision
 
 
 @bp.route("/finance/accounts")
@@ -392,7 +426,7 @@ def dashboard():
             LedgerTransaction.status == "Confirmed",
             LedgerTransaction.category.in_(categories),
         ).all()
-        group_totals[label] = sum(float(r.amount or 0) for r in rows)
+        group_totals[label] = sum(_category_reporting_amount(r) for r in rows)
 
     return render_template(
         "finance_accounts/dashboard.html",
@@ -572,6 +606,90 @@ def transaction_create():
     return redirect(url_for("ledger.transaction_detail", item_id=row.id))
 
 
+@bp.route("/finance/transactions/<int:item_id>/reverse", methods=["POST"])
+@roles_required(*FINANCE_RECORD_ROLES)
+def transaction_reverse(item_id):
+    access, coop = _context()
+    original = LedgerTransaction.query.filter_by(id=item_id, cooperative_id=coop.id).first_or_404()
+    if original.status != "Confirmed":
+        return "Only confirmed transactions can be reversed.", 400
+    if original.reversal_of_transaction_id:
+        return "A reversal transaction cannot itself be reversed.", 400
+    existing = LedgerTransaction.query.filter_by(
+        cooperative_id=coop.id,
+        reversal_of_transaction_id=original.id,
+    ).first()
+    if existing:
+        return f"Transaction #{original.id} already has reversal transaction #{existing.id}.", 409
+
+    try:
+        reversal_date = parse_date(request.form.get("reversal_date"))
+    except ValueError:
+        return "Enter a valid reversal date.", 400
+    if not reversal_date:
+        return "Reversal date is required.", 400
+    if reversal_date < original.transaction_date:
+        return "A reversal cannot be dated before the original transaction.", 400
+
+    reason = request.form.get("reversal_reason", "").strip()
+    if len(reason) < 3:
+        return "Explain why the confirmed transaction must be reversed.", 400
+
+    payment_method = request.form.get("payment_method", "").strip() or original.payment_method
+    if payment_method and payment_method not in PAYMENT_METHODS:
+        return "Choose a valid payment method.", 400
+
+    reference = request.form.get("reference", "").strip()[:120] or None
+    counterparty = request.form.get("counterparty", "").strip()[:180] or original.counterparty
+    project_reference = request.form.get("project_reference", "").strip()[:140] or original.project_reference
+    extra_notes = request.form.get("notes", "").strip()
+    notes = f"Reversal reason: {reason}"
+    if extra_notes:
+        notes += f"\n{extra_notes}"
+
+    reversal = LedgerTransaction(
+        cooperative_id=coop.id,
+        transaction_type=REVERSAL_TYPE,
+        category=original.category,
+        amount=float(original.amount),
+        transaction_date=reversal_date,
+        from_account_id=original.to_account_id,
+        to_account_id=original.from_account_id,
+        counterparty=counterparty,
+        reference=reference,
+        payment_method=payment_method,
+        project_reference=project_reference,
+        source_type=None,
+        source_id=None,
+        reversal_of_transaction_id=original.id,
+        status="Pending Confirmation",
+        notes=notes,
+        recorded_by_user_id=session["user_id"],
+    )
+    db.session.add(reversal)
+    db.session.flush()
+    _notify(
+        coop.id,
+        FINANCE_APPROVAL_ROLES,
+        "Confirmed transaction reversal awaiting approval",
+        f"Reversal #{reversal.id} for transaction #{original.id}: R{reversal.amount:.2f} — {reversal.category}.",
+        "LedgerTransactionApproval",
+        reversal.id,
+        "Warning",
+        url_for("ledger.transaction_detail", item_id=reversal.id),
+    )
+    add_audit_log(
+        "LEDGER_TRANSACTION_REVERSAL_RECORDED",
+        "LedgerTransaction",
+        reversal.id,
+        f"Reversal of #{original.id}; R{reversal.amount:.2f}; reason: {reason[:250]}",
+        cooperative_id=coop.id,
+    )
+    db.session.commit()
+    flash("Reversal recorded for Chairperson confirmation. The original confirmed transaction remains unchanged.", "success")
+    return redirect(url_for("ledger.transaction_detail", item_id=reversal.id))
+
+
 @bp.route("/finance/transactions/<int:item_id>/resubmit", methods=["POST"])
 @roles_required(*FINANCE_RECORD_ROLES)
 def transaction_resubmit(item_id):
@@ -584,22 +702,46 @@ def transaction_resubmit(item_id):
     if len(correction_reason) < 3:
         return "Explain what was corrected before resubmitting.", 400
 
-    payload, error = _transaction_payload_from_request(coop, exclude_transaction_id=row.id)
-    if error:
-        return error
+    revision = _add_revision(row, correction_reason)
 
-    revision = LedgerTransactionRevision(
-        transaction_id=row.id,
-        cooperative_id=coop.id,
-        revision_number=_next_revision_number(row.id),
-        reason=correction_reason[:250],
-        snapshot_json=_transaction_snapshot(row),
-        changed_by_user_id=session["user_id"],
-    )
-    db.session.add(revision)
+    if row.reversal_of_transaction_id:
+        original = LedgerTransaction.query.filter_by(
+            id=row.reversal_of_transaction_id,
+            cooperative_id=coop.id,
+            status="Confirmed",
+        ).first()
+        if original is None:
+            db.session.rollback()
+            return "The original confirmed transaction for this reversal is unavailable.", 400
+        try:
+            transaction_date = parse_date(request.form.get("transaction_date"))
+        except ValueError:
+            db.session.rollback()
+            return "Enter a valid reversal date.", 400
+        if not transaction_date or transaction_date < original.transaction_date:
+            db.session.rollback()
+            return "The reversal date must be on or after the original transaction date.", 400
+        payment_method = request.form.get("payment_method", "").strip() or None
+        if payment_method and payment_method not in PAYMENT_METHODS:
+            db.session.rollback()
+            return "Choose a valid payment method.", 400
 
-    for field, value in payload.items():
-        setattr(row, field, value)
+        row.transaction_date = transaction_date
+        row.counterparty = request.form.get("counterparty", "").strip()[:180] or None
+        row.reference = request.form.get("reference", "").strip()[:120] or None
+        row.payment_method = payment_method
+        row.project_reference = request.form.get("project_reference", "").strip()[:140] or None
+        row.notes = request.form.get("notes", "").strip() or row.notes
+        audit_action = "LEDGER_REVERSAL_CORRECTED_RESUBMITTED"
+    else:
+        payload, error = _transaction_payload_from_request(coop, exclude_transaction_id=row.id)
+        if error:
+            db.session.rollback()
+            return error
+        for field, value in payload.items():
+            setattr(row, field, value)
+        audit_action = "LEDGER_TRANSACTION_CORRECTED_RESUBMITTED"
+
     row.status = "Pending Confirmation"
     row.decided_by_user_id = None
     row.decided_at = None
@@ -616,7 +758,7 @@ def transaction_resubmit(item_id):
         url_for("ledger.transaction_detail", item_id=row.id),
     )
     add_audit_log(
-        "LEDGER_TRANSACTION_CORRECTED_RESUBMITTED",
+        audit_action,
         "LedgerTransaction",
         row.id,
         f"Revision {revision.revision_number}; reason: {revision.reason}",
@@ -696,7 +838,7 @@ def transaction_decision(item_id):
     decision = request.form.get("decision", "").lower()
     if decision not in {"approve", "reject"}:
         return "Choose approve or reject.", 400
-    if decision == "approve" and row.transaction_type in {"Expense", "Transfer"} and row.from_account.confirmed_balance + 1e-9 < float(row.amount):
+    if decision == "approve" and row.from_account_id and row.from_account.confirmed_balance + 1e-9 < float(row.amount):
         return "The paying account does not have enough confirmed funds.", 400
 
     row.status = "Confirmed" if decision == "approve" else "Rejected"
@@ -714,6 +856,8 @@ def transaction_decision(item_id):
         url_for("ledger.transaction_detail", item_id=row.id),
     )
     details = f"{row.transaction_type} R{row.amount:.2f}"
+    if row.reversal_of_transaction_id:
+        details += f"; reversal of #{row.reversal_of_transaction_id}"
     if row.decision_note:
         details += f"; note: {row.decision_note}"
     add_audit_log(
