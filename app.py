@@ -2126,25 +2126,91 @@ ROLE_PERMISSION_MATRIX = [
 
 
 def system_settings_path():
-    """Return the JSON file used for lightweight global CRM settings."""
+    """Return the legacy JSON settings path used as a local compatibility mirror."""
     Path(app.instance_path).mkdir(parents=True, exist_ok=True)
     return Path(app.instance_path) / "system_settings.json"
 
 
-def load_system_settings():
-    """Load safe non-secret CRM settings from JSON."""
-    settings = dict(DEFAULT_SYSTEM_SETTINGS)
-    path = system_settings_path()
+def _ensure_system_settings_table(connection):
+    """Create the durable key/value settings table on databases upgraded in place."""
+    connection.execute(sql_text(
+        "CREATE TABLE IF NOT EXISTS system_setting ("
+        "setting_key VARCHAR(100) PRIMARY KEY, "
+        "setting_value TEXT NOT NULL"
+        ")"
+    ))
 
-    if path.exists():
+
+def _load_database_system_settings():
+    """Load durable settings from the application database."""
+    try:
+        with db.engine.begin() as connection:
+            _ensure_system_settings_table(connection)
+            rows = connection.execute(
+                sql_text("SELECT setting_key, setting_value FROM system_setting")
+            ).fetchall()
+    except SQLAlchemyError:
+        app.logger.exception("Could not load durable system settings from the database.")
+        return {}
+
+    saved = {}
+    for key, value in rows:
+        if key not in DEFAULT_SYSTEM_SETTINGS:
+            continue
         try:
-            saved = json.loads(path.read_text(encoding="utf-8"))
-            if isinstance(saved, dict):
-                for key in DEFAULT_SYSTEM_SETTINGS:
-                    if key in saved:
-                        settings[key] = saved[key]
-        except (OSError, ValueError, TypeError):
-            pass
+            saved[key] = json.loads(value)
+        except (TypeError, ValueError):
+            saved[key] = value
+    return saved
+
+
+def _save_database_system_settings(settings):
+    """Persist settings in the database so deploys/restarts cannot reset policy."""
+    with db.engine.begin() as connection:
+        _ensure_system_settings_table(connection)
+        for key in DEFAULT_SYSTEM_SETTINGS:
+            if key not in settings:
+                continue
+            connection.execute(
+                sql_text("DELETE FROM system_setting WHERE setting_key = :key"),
+                {"key": key},
+            )
+            connection.execute(
+                sql_text(
+                    "INSERT INTO system_setting (setting_key, setting_value) "
+                    "VALUES (:key, :value)"
+                ),
+                {"key": key, "value": json.dumps(settings[key], ensure_ascii=False)},
+            )
+
+
+def load_system_settings():
+    """Load safe non-secret CRM settings, preferring durable database values."""
+    settings = dict(DEFAULT_SYSTEM_SETTINGS)
+    saved = _load_database_system_settings()
+
+    # Upgrade path: older releases stored the Admin's 2FA choice only in the
+    # instance filesystem. Import that file once when the database has no
+    # durable settings yet, then keep the database authoritative.
+    if not saved:
+        path = system_settings_path()
+        if path.exists():
+            try:
+                legacy = json.loads(path.read_text(encoding="utf-8"))
+                if isinstance(legacy, dict):
+                    saved = {
+                        key: legacy[key]
+                        for key in DEFAULT_SYSTEM_SETTINGS
+                        if key in legacy
+                    }
+                    if saved:
+                        _save_database_system_settings({**settings, **saved})
+            except (OSError, ValueError, TypeError, SQLAlchemyError):
+                app.logger.exception("Could not import legacy system settings.")
+
+    for key in DEFAULT_SYSTEM_SETTINGS:
+        if key in saved:
+            settings[key] = saved[key]
 
     try:
         timeout = int(settings.get("session_timeout_minutes", 480))
@@ -2163,12 +2229,22 @@ def load_system_settings():
 
 
 def save_system_settings(settings):
-    """Persist safe CRM settings."""
-    path = system_settings_path()
-    path.write_text(
-        json.dumps(settings, indent=2, ensure_ascii=False),
-        encoding="utf-8"
-    )
+    """Persist safe CRM settings durably in the database.
+
+    A JSON compatibility mirror is also written when possible, but the
+    database is authoritative so application updates/redeployments do not
+    silently re-enable 2FA.
+    """
+    _save_database_system_settings(settings)
+
+    try:
+        path = system_settings_path()
+        path.write_text(
+            json.dumps(settings, indent=2, ensure_ascii=False),
+            encoding="utf-8"
+        )
+    except OSError:
+        app.logger.warning("Could not write the legacy system settings mirror.")
 
 
 def apply_session_timeout():
