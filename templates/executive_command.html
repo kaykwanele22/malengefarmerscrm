@@ -56,12 +56,22 @@
   {% endif %}
 
   {% if is_primary and role == 'Primary Treasurer' and treasurer_work %}
-  <section class="ec-card"><div class="ec-card-head"><div><p class="ec-eyebrow">Treasurer Work Centre</p><h2>Finance recording, correction &amp; reconciliation queue</h2></div><a href="{{ url_for('ledger.dashboard') }}">Open ledger →</a></div><div class="ec-card-body"><div class="ec-grid-4">
-    <div class="ec-stat {% if treasurer_work.pending_count %}attention{% else %}good{% endif %}"><span>Awaiting Chairperson</span><strong>{{ treasurer_work.pending_count }}</strong><small>R {{ "{:,.2f}".format(treasurer_work.pending_value|float) }} recorded and awaiting independent confirmation</small></div>
+  <section class="ec-card"><div class="ec-card-head"><div><p class="ec-eyebrow">Treasurer Overview</p><h2>Money in, money out &amp; current position</h2></div><a href="{{ url_for('ledger.dashboard') }}">Open detailed ledger →</a></div><div class="ec-card-body">
+    <div class="ec-grid-4">
+      <div class="ec-stat good"><span>Money In</span><strong>R {{ "{:,.2f}".format(treasurer_work.money_in|float) }}</strong><small>Confirmed income recorded in this Primary cooperative</small></div>
+      <div class="ec-stat"><span>Money Out</span><strong>R {{ "{:,.2f}".format(treasurer_work.money_out|float) }}</strong><small>Confirmed expenses recorded in this Primary cooperative</small></div>
+      <div class="ec-stat"><span>Current Position</span><strong>R {{ "{:,.2f}".format(treasurer_work.current_position|float) }}</strong><small>Confirmed balance across the cooperative's finance accounts</small></div>
+      <div class="ec-stat {% if treasurer_work.pending_count %}attention{% else %}good{% endif %}"><span>Awaiting Approval</span><strong>{{ treasurer_work.pending_count }}</strong><small>R {{ "{:,.2f}".format(treasurer_work.pending_value|float) }} awaiting Chairperson confirmation</small></div>
+    </div>
+    <div class="ec-note" style="margin-top:14px"><strong>Simple view, full controls underneath:</strong> record income and expenses normally. The ledger, evidence, budget, reconciliation and approval controls remain unchanged.</div>
+  </div></section>
+
+  <section class="ec-card"><div class="ec-card-head"><div><p class="ec-eyebrow">Finance Controls</p><h2>Corrections, evidence &amp; reconciliation</h2></div><a href="{{ url_for('phase7.finance_control') }}">Open finance controls →</a></div><div class="ec-card-body"><div class="ec-grid-4">
     <div class="ec-stat {% if treasurer_work.rejected_count %}danger{% else %}good{% endif %}"><span>Rejected / Correct</span><strong>{{ treasurer_work.rejected_count }}</strong><small>R {{ "{:,.2f}".format(treasurer_work.rejected_value|float) }} requires Treasurer correction before resubmission</small></div>
     <div class="ec-stat {% if treasurer_work.budget_count or treasurer_work.reconciliation_count %}attention{% else %}good{% endif %}"><span>Control Queue</span><strong>{{ treasurer_work.budget_count + treasurer_work.reconciliation_count }}</strong><small>{{ treasurer_work.budget_count }} budget line{% if treasurer_work.budget_count != 1 %}s{% endif %} · {{ treasurer_work.reconciliation_count }} reconciliation{% if treasurer_work.reconciliation_count != 1 %}s{% endif %} awaiting Chairperson review</small></div>
     <div class="ec-stat {% if treasurer_work.missing_evidence_count %}attention{% else %}good{% endif %}"><span>Evidence Missing</span><strong>{{ treasurer_work.missing_evidence_count }}</strong><small>Confirmed or pending ledger entries without a linked supporting document</small></div>
-  </div>{% if treasurer_work.latest_reconciliation_difference is not none %}<div class="ec-note" style="margin-top:14px"><strong>Latest reconciliation difference:</strong> R {{ "{:,.2f}".format(treasurer_work.latest_reconciliation_difference|float) }}. The Treasurer prepares and explains reconciliation; the Chairperson performs the independent review.</div>{% else %}<div class="ec-note" style="margin-top:14px"><strong>Reconciliation:</strong> no bank reconciliation has been recorded yet. The Treasurer should prepare one from the latest statement for Chairperson review.</div>{% endif %}</div></section>
+    <div class="ec-stat"><span>Latest Reconciliation</span><strong>{% if treasurer_work.latest_reconciliation_difference is not none %}R {{ "{:,.2f}".format(treasurer_work.latest_reconciliation_difference|float) }}{% else %}—{% endif %}</strong><small>{% if treasurer_work.latest_reconciliation_difference is not none %}Difference between bank statement and books{% else %}No bank reconciliation recorded yet{% endif %}</small></div>
+  </div></div></section>
   {% endif %}
 
   {% if is_primary and role in ['Primary Secretary','Primary Vice Secretary'] and secretary_work %}
