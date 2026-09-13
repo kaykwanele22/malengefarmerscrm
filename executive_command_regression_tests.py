@@ -41,6 +41,7 @@ class ExecutiveCommandRegressionTests(unittest.TestCase):
             "admin": ("Admin", None),
             "chair": ("Primary Chairperson", primary.id),
             "secretary": ("Primary Secretary", primary.id),
+            "vice_secretary": ("Primary Vice Secretary", primary.id),
             "treasurer": ("Primary Treasurer", primary.id),
             "secondary_chair": ("Secondary Chairperson", secondary.id),
             "secondary_secretary": ("Secondary Secretary", secondary.id),
@@ -133,6 +134,46 @@ class ExecutiveCommandRegressionTests(unittest.TestCase):
             book_balance=3021000, difference=0, status="Pending Review",
             prepared_by_user_id=cls.user_ids["treasurer"],
         ))
+
+        draft_meeting = c.Meeting(
+            cooperative_id=primary.id,
+            meeting_number="CMD-MTG-001",
+            meeting_type="Executive Meeting",
+            title="Draft Governance Meeting",
+            meeting_date=c.crm_today(),
+            venue="Malenge",
+            quorum_status="Recorded",
+            status="Draft",
+            created_by_user_id=cls.user_ids["secretary"],
+        )
+        confirmed_meeting = c.Meeting(
+            cooperative_id=primary.id,
+            meeting_number="CMD-MTG-002",
+            meeting_type="General Meeting",
+            title="Confirmed Governance Meeting",
+            meeting_date=c.crm_today(),
+            venue="Malenge",
+            quorum_status="Met",
+            status="Confirmed",
+            created_by_user_id=cls.user_ids["secretary"],
+            confirmed_by_user_id=cls.user_ids["chair"],
+            confirmed_at=c.utc_now(),
+        )
+        c.db.session.add_all([draft_meeting, confirmed_meeting])
+        c.db.session.flush()
+        c.db.session.add(c.Resolution(
+            cooperative_id=primary.id,
+            meeting_id=confirmed_meeting.id,
+            resolution_number="CMD-RES-001",
+            title="Draft Member Resolution",
+            resolution_text="Follow up incomplete member records.",
+            responsible_role="Primary Secretary",
+            responsible_user_id=cls.user_ids["secretary"],
+            due_date=c.crm_today(),
+            priority="Normal",
+            status="Draft",
+            created_by_user_id=cls.user_ids["secretary"],
+        ))
         c.db.session.commit()
 
     @classmethod
@@ -190,6 +231,37 @@ class ExecutiveCommandRegressionTests(unittest.TestCase):
         self.assertIn(b"Membership &amp; production snapshot", response.data)
         self.assertNotIn(b"Finance Pulse", response.data)
         self.assertNotIn(b"Confirmed Balance", response.data)
+
+    def test_primary_secretary_gets_governance_records_work_centre(self):
+        self.login_as("secretary")
+        response = self.client.get("/dashboard")
+        self.assertEqual(response.status_code, 200)
+        page = response.get_data(as_text=True)
+        self.assertIn("Secretary Work Centre", page)
+        self.assertIn("Membership Records", page)
+        self.assertIn("Fee Follow-up", page)
+        self.assertIn("Meeting Evidence Queue", page)
+        self.assertIn("Draft Resolutions", page)
+        self.assertIn("Secretary boundary", page)
+        self.assertNotIn("Treasurer Work Centre", page)
+        self.assertNotIn("Chairperson Decision Centre", page)
+
+    def test_primary_vice_secretary_gets_same_admin_queue_without_finance(self):
+        self.login_as("vice_secretary")
+        response = self.client.get("/dashboard")
+        self.assertEqual(response.status_code, 200)
+        page = response.get_data(as_text=True)
+        self.assertIn("Secretary Work Centre", page)
+        self.assertIn("Meeting Evidence Queue", page)
+        self.assertNotIn("Finance Pulse", page)
+        self.assertNotIn("Finance Ledger", page)
+
+    def test_primary_chair_does_not_get_secretary_work_centre(self):
+        self.login_as("chair")
+        response = self.client.get("/dashboard")
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(b"Secretary Work Centre", response.data)
+
 
     def test_primary_treasurer_sees_ledger_source_of_truth(self):
         self.login_as("treasurer")
