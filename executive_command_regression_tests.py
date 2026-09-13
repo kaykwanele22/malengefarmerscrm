@@ -40,6 +40,7 @@ class ExecutiveCommandRegressionTests(unittest.TestCase):
         users = {
             "admin": ("Admin", None),
             "chair": ("Primary Chairperson", primary.id),
+            "vice": ("Primary Vice Chairperson", primary.id),
             "secretary": ("Primary Secretary", primary.id),
             "vice_secretary": ("Primary Vice Secretary", primary.id),
             "treasurer": ("Primary Treasurer", primary.id),
@@ -315,9 +316,9 @@ class ExecutiveCommandRegressionTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         page = response.get_data(as_text=True)
         self.assertIn("FINANCIALS", page)
-        self.assertIn("Finance Decisions", page)
+        self.assertIn("Awaiting My Approval", page)
+        self.assertIn("Financial Position", page)
         self.assertIn("Financials", page)
-        self.assertIn("Financial Reports", page)
         self.assertNotIn(">Sales</span>", page)
         self.assertNotIn(">Payments</span>", page)
         self.assertNotIn(">Contributions</span>", page)
@@ -336,6 +337,42 @@ class ExecutiveCommandRegressionTests(unittest.TestCase):
         self.assertIn("GOVERNANCE", page)
         self.assertNotIn("FINANCIAL CONTROL", page)
         self.assertNotIn("GOVERNANCE &amp; ACCOUNTABILITY", page)
+
+    def test_blueprint_role_focus_cards_match_each_primary_office(self):
+        self.login_as("chair")
+        page = self.client.get("/dashboard").get_data(as_text=True)
+        self.assertIn("Current Financial Position", page)
+        self.assertIn("Production Position", page)
+        self.assertIn("Awaiting My Approval", page)
+
+        self.login_as("vice")
+        page = self.client.get("/dashboard").get_data(as_text=True)
+        self.assertIn("Active Cultivation", page)
+        self.assertIn("Expected Harvests", page)
+        self.assertIn("Overdue Operations", page)
+        self.assertNotIn("Financial Position", page)
+        self.assertNotIn("Finance Ledger", page)
+
+        self.login_as("secretary")
+        page = self.client.get("/dashboard").get_data(as_text=True)
+        self.assertIn("Institutional Registry", page)
+        self.assertIn("Active Mandates", page)
+        self.assertIn("Records Needing Attention", page)
+
+        self.login_as("treasurer")
+        page = self.client.get("/dashboard").get_data(as_text=True)
+        self.assertIn("Seasonal Budget Burn", page)
+        self.assertIn("Reconciliation Integrity", page)
+        self.assertIn("Transactions Needing Action", page)
+        self.assertNotIn("Membership Register", page)
+
+    def test_four_pillars_are_visible_in_plain_language(self):
+        self.login_as("chair")
+        page = self.client.get("/dashboard").get_data(as_text=True)
+        self.assertIn("Who is here?", page)
+        self.assertIn("What are we producing?", page)
+        self.assertIn("Where is the money?", page)
+        self.assertIn("What was decided?", page)
 
     def test_primary_treasurer_gets_simple_cashflow_overview_without_losing_controls(self):
         self.login_as("treasurer")
