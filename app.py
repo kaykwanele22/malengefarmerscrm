@@ -1057,6 +1057,7 @@ MEMBERSHIP_FEE_CATEGORY = "Membership Fee"
 MEMBERSHIP_FEE_CATEGORY_ALIASES = {"membership fee", "membership"}
 MEMBER_CREDIT_CATEGORY = "Member Credit"
 MEMBER_CREDIT_CATEGORY_ALIASES = {"member credit", "membership credit", "credit"}
+MAX_PRIMARY_MEMBERSHIP_FEE = max(300.0, float(os.getenv("MAX_PRIMARY_MEMBERSHIP_FEE", "10000")))
 
 # Deferred/extended module permissions. Secondary leadership may view operational
 # records across the network, while Primary Chair/Vice Chair mutate farm operations.
@@ -5919,6 +5920,11 @@ def add_membership():
         fee_amount = parse_float(request.form.get("fee_amount"), 300.0)
         if fee_amount is None or fee_amount < 0:
             return "Membership fee cannot be negative.", 400
+        if fee_amount > MAX_PRIMARY_MEMBERSHIP_FEE:
+            return (
+                f"Membership fee exceeds the allowed maximum of R{MAX_PRIMARY_MEMBERSHIP_FEE:,.2f}. "
+                "Use the finance ledger for loans, grants and other large amounts."
+            ), 400
 
         try:
             join_date = parse_date(request.form.get("join_date"))
@@ -6001,6 +6007,11 @@ def edit_membership(membership_id):
         fee_amount = parse_float(request.form.get("fee_amount"), membership.fee_amount or 0)
         if fee_amount is None or fee_amount < 0:
             return "Membership fee cannot be negative.", 400
+        if fee_amount > MAX_PRIMARY_MEMBERSHIP_FEE:
+            return (
+                f"Membership fee exceeds the allowed maximum of R{MAX_PRIMARY_MEMBERSHIP_FEE:,.2f}. "
+                "Use the finance ledger for loans, grants and other large amounts."
+            ), 400
         recorded_fee_total = float(membership.fee_paid or 0) + float(membership.fee_pending or 0)
         if recorded_fee_total > fee_amount + 1e-9:
             return "Membership fee cannot be set below the amount already recorded as paid or pending confirmation.", 400
