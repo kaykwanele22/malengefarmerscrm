@@ -33,6 +33,7 @@ from flask import (
     abort,
     g,
     has_request_context,
+    jsonify,
     redirect,
     send_file,
     render_template,
@@ -45,6 +46,7 @@ from flask import (
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from sqlalchemy import func, or_, text as sql_text
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
@@ -2544,95 +2546,52 @@ def _safe_feedback_target():
     return url_for("login")
 
 
+def _wants_json_error():
+    """Return True when an error should use the API JSON envelope."""
+    if request.path.startswith("/api/v1/"):
+        return True
+
+    best = request.accept_mimetypes.best_match(["application/json", "text/html"])
+    if best != "application/json":
+        return False
+    return request.accept_mimetypes["application/json"] > request.accept_mimetypes["text/html"]
+
+
 def _render_branded_error(status_code, title, message):
-    """Render a branded error page."""
+    """Render the reusable branded error page without exposing internals."""
     destination = url_for("dashboard") if logged_in() else url_for("home")
     destination_label = "Back to Dashboard" if logged_in() else "Back to Home"
-
-    return render_template_string(
-        """
-        <!DOCTYPE html>
-        <html lang="en">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>{{ status_code }} | Malenge Farmers CRM</title>
-            <style>
-                * { box-sizing: border-box; }
-                body {
-                    margin: 0;
-                    min-height: 100vh;
-                    display: grid;
-                    place-items: center;
-                    padding: 24px;
-                    font-family: Arial, Helvetica, sans-serif;
-                    background: #f3f7f4;
-                    color: #173b2b;
-                }
-                .error-card {
-                    width: min(620px, 100%);
-                    padding: 38px;
-                    background: #ffffff;
-                    border: 1px solid #dfe8e2;
-                    border-radius: 18px;
-                    box-shadow: 0 18px 45px rgba(18, 63, 41, 0.08);
-                }
-                .error-code {
-                    display: inline-flex;
-                    margin-bottom: 18px;
-                    padding: 7px 12px;
-                    border-radius: 999px;
-                    background: #fde7e7;
-                    color: #a02d2d;
-                    font-size: 12px;
-                    font-weight: 800;
-                    letter-spacing: .7px;
-                }
-                h1 { margin: 0 0 12px; font-size: 30px; }
-                p { margin: 0; color: #5f6f65; line-height: 1.65; }
-                .actions { margin-top: 26px; display: flex; gap: 12px; flex-wrap: wrap; }
-                a, button {
-                    min-height: 44px;
-                    display: inline-flex;
-                    align-items: center;
-                    justify-content: center;
-                    padding: 0 18px;
-                    border-radius: 9px;
-                    font-size: 14px;
-                    font-weight: 700;
-                    text-decoration: none;
-                    cursor: pointer;
-                }
-                a { background: #2e8251; color: #fff; }
-                button { 
-                    background: #f3f7f4; 
-                    color: #315441; 
-                    border: 1px solid #d7e3db;
-                    font-family: inherit;
-                }
-            </style>
-        </head>
-        <body>
-            <section class="error-card">
-                <div class="error-code">ERROR {{ status_code }}</div>
-                <h1>{{ title }}</h1>
-                <p>{{ message }}</p>
-                <div class="actions">
-                    <button type="button" onclick="history.back()">Go Back</button>
-                    <a href="{{ destination }}">{{ destination_label }}</a>
-                </div>
-            </section>
-        </body>
-        </html>
-        """,
+    return render_template(
+        "errors/error.html",
         status_code=status_code,
         title=title,
         message=message,
+        request_id=getattr(g, "request_id", None),
         destination=destination,
         destination_label=destination_label,
     )
 
 
+def _error_response(status_code, title, message, headers=None):
+    """Build one safe HTML or JSON error response with a request reference."""
+    request_id = getattr(g, "request_id", None)
+    if _wants_json_error():
+        response = jsonify({
+            "error": {
+                "status": int(status_code),
+                "title": str(title),
+                "message": str(message),
+                "request_id": request_id,
+            }
+        })
+        response.status_code = int(status_code)
+    else:
+        response = app.make_response(_render_branded_error(status_code, title, message))
+        response.status_code = int(status_code)
+
+    for key, value in (headers or {}).items():
+        response.headers[key] = value
+    return response
 # =========================================================
 # APPLICATION CONTEXT PROCESSORS AND REQUEST HANDLERS
 # =========================================================
@@ -2853,7 +2812,11 @@ def load_form_feedback():
 def improve_error_experience(response):
     """Enhance error responses with better user experience."""
     # Turn simple POST validation errors into a redirect back to the form
-    if request.method == "POST" and response.status_code in {400, 401}:
+    if (
+            request.method == "POST"
+            and response.status_code in {400, 401}
+            and not _wants_json_error()
+    ):
         message = _plain_error_message(response)
 
         if message:
@@ -2864,8 +2827,8 @@ def improve_error_experience(response):
             session["_malenge_form_action"] = request.path
             return redirect(_safe_feedback_target(), code=303)
 
-    # Replace simple non-form HTTP errors with a branded page
-    if response.status_code in {400, 401, 403, 404, 413, 429, 500}:
+    # Replace simple non-form HTTP errors with a consistent HTML/JSON response.
+    if response.status_code in {400, 401, 403, 404, 405, 409, 413, 422, 429, 500, 503}:
         message = _plain_error_message(response)
 
         if message:
@@ -2874,18 +2837,19 @@ def improve_error_experience(response):
                 401: "Sign-in required",
                 403: "Access denied",
                 404: "Page not found",
+                405: "Action not allowed",
+                409: "Record conflict",
                 413: "Request too large",
+                422: "Information could not be processed",
                 429: "Too many attempts",
                 500: "Something went wrong",
+                503: "Service temporarily unavailable",
             }
-            html_response = _render_branded_error(
+            return _error_response(
                 response.status_code,
                 titles.get(response.status_code, "Request could not be completed"),
                 message,
             )
-            branded = app.make_response(html_response)
-            branded.status_code = response.status_code
-            return branded
 
     # Inject a reusable validation banner into any HTML page after a failed form
     form_error = getattr(g, "malenge_form_error", None)
@@ -8879,7 +8843,12 @@ def admin_backup_create():
     try:
         backup_path = create_database_backup_copy()
     except Exception as exc:
-        return f"Backup could not be created: {exc}", 500
+        app.logger.error(
+            "Backup creation failed request_id=%s error_type=%s",
+            getattr(g, "request_id", None),
+            type(exc).__name__,
+        )
+        return "Backup could not be created. Please try again or contact the administrator with the request reference.", 500
 
     add_audit_log(
         "BACKUP_CREATE",
@@ -8956,7 +8925,12 @@ def admin_backup_restore_file(backup_name):
     try:
         create_database_backup_copy(prefix="pre_restore_backup")
     except Exception as exc:
-        return f"Restore stopped because the safety backup failed: {exc}", 500
+        app.logger.error(
+            "Restore safety backup failed request_id=%s error_type=%s",
+            getattr(g, "request_id", None),
+            type(exc).__name__,
+        )
+        return "Restore stopped because the safety backup could not be created. Please use the request reference for support.", 500
 
     temporary_restore = database_path.with_suffix(".restore.tmp")
 
@@ -8968,7 +8942,12 @@ def admin_backup_restore_file(backup_name):
     except Exception as exc:
         if temporary_restore.exists():
             temporary_restore.unlink(missing_ok=True)
-        return f"Database restore failed: {exc}", 500
+        app.logger.error(
+            "Database restore failed request_id=%s error_type=%s",
+            getattr(g, "request_id", None),
+            type(exc).__name__,
+        )
+        return "Database restore could not be completed. The existing database was left in place; use the request reference for support.", 500
 
     # Current session may no longer exist in the restored snapshot.
     session.clear()
@@ -8985,8 +8964,14 @@ def admin_system_health():
     try:
         db.session.execute(sql_text("SELECT 1"))
     except Exception as exc:
+        db.session.rollback()
         database_ok = False
-        database_error = str(exc)
+        database_error = "The database health check failed. Review server logs using the request reference."
+        app.logger.error(
+            "Database health check failed request_id=%s error_type=%s",
+            getattr(g, "request_id", None),
+            type(exc).__name__,
+        )
 
     backend = db.engine.url.get_backend_name()
     database_path = sqlite_database_path()
@@ -9159,7 +9144,12 @@ def database_backup():
     try:
         backup_path = create_database_backup_copy()
     except Exception as exc:
-        return f"Backup could not be created: {exc}", 500
+        app.logger.error(
+            "Backup creation failed request_id=%s error_type=%s",
+            getattr(g, "request_id", None),
+            type(exc).__name__,
+        )
+        return "Backup could not be created. Please try again or contact the administrator with the request reference.", 500
 
     add_audit_log(
         "BACKUP_CREATE",
@@ -9180,58 +9170,121 @@ def database_backup():
 # =========================================================
 @app.errorhandler(400)
 def bad_request(error):
-    """Handle bad requests, including CSRF validation failures."""
+    """Handle malformed or invalid requests."""
     message = getattr(error, "description", None) or "The request could not be completed because some information is invalid."
-    return _render_branded_error(400, "Please check the information", message), 400
+    return _error_response(400, "Please check the information", message)
 
 
 @app.errorhandler(401)
 def unauthorized(error):
     """Handle unauthenticated requests."""
     message = getattr(error, "description", None) or "Please sign in with an authorized Malenge Farmers CRM account."
-    return _render_branded_error(401, "Sign-in required", message), 401
+    return _error_response(401, "Sign-in required", message)
 
 
 @app.errorhandler(403)
 def forbidden(error):
     """Handle permission failures."""
     message = getattr(error, "description", None) or "You do not have permission to access this page."
-    return _render_branded_error(403, "Access denied", message), 403
+    return _error_response(403, "Access denied", message)
 
 
 @app.errorhandler(404)
 def page_not_found(_error):
-    """Handle unknown routes."""
-    return _render_branded_error(404, "Page not found", "The requested page was not found."), 404
+    """Handle unknown routes and scoped records."""
+    return _error_response(404, "Page not found", "The requested page or record was not found.")
+
+
+@app.errorhandler(405)
+def method_not_allowed(_error):
+    """Handle unsupported HTTP methods without exposing framework details."""
+    return _error_response(405, "Action not allowed", "That action is not available for this page or API endpoint.")
+
+
+@app.errorhandler(409)
+def conflict(error):
+    """Handle application-level record conflicts."""
+    message = getattr(error, "description", None) or "This change conflicts with an existing CRM record."
+    return _error_response(409, "Record conflict", message)
 
 
 @app.errorhandler(413)
 def request_too_large(_error):
     """Handle requests larger than the configured application limit."""
-    return _render_branded_error(
+    return _error_response(
         413,
         "Request too large",
-        "The submitted request is larger than the CRM allows.",
-    ), 413
+        "The submitted request is larger than the CRM allows. Reduce the upload size and try again.",
+    )
+
+
+@app.errorhandler(422)
+def unprocessable(error):
+    """Handle structurally valid requests whose values cannot be processed."""
+    message = getattr(error, "description", None) or "The submitted information could not be processed."
+    return _error_response(422, "Information could not be processed", message)
 
 
 @app.errorhandler(429)
 def too_many_requests(error):
     """Handle authentication throttling and other rate limits."""
     message = getattr(error, "description", None) or "Too many requests were received. Please wait and try again."
-    return _render_branded_error(429, "Too many attempts", message), 429
+    return _error_response(429, "Too many attempts", message)
+
+
+@app.errorhandler(IntegrityError)
+def database_integrity_error(error):
+    """Rollback failed writes and return a safe conflict message."""
+    db.session.rollback()
+    app.logger.warning(
+        "Database integrity conflict request_id=%s method=%s path=%s error_type=%s",
+        getattr(g, "request_id", None),
+        request.method,
+        request.path,
+        type(error).__name__,
+    )
+    return _error_response(
+        409,
+        "Record conflict",
+        "This change conflicts with an existing record or relationship. Review the information and try again.",
+    )
+
+
+@app.errorhandler(SQLAlchemyError)
+def database_error(error):
+    """Rollback database failures and avoid leaking connection/query details."""
+    db.session.rollback()
+    app.logger.error(
+        "Database failure request_id=%s method=%s path=%s error_type=%s",
+        getattr(g, "request_id", None),
+        request.method,
+        request.path,
+        type(error).__name__,
+    )
+    return _error_response(
+        503,
+        "Service temporarily unavailable",
+        "The CRM could not complete the database operation. Please try again shortly.",
+    )
 
 
 @app.errorhandler(500)
-def internal_error(_error):
+def internal_error(error):
     """Handle unexpected server failures without exposing internals."""
     db.session.rollback()
-    return _render_branded_error(
+    original = getattr(error, "original_exception", None)
+    app.logger.error(
+        "Unhandled server error request_id=%s method=%s path=%s error_type=%s",
+        getattr(g, "request_id", None),
+        request.method,
+        request.path,
+        type(original or error).__name__,
+    )
+    return _error_response(
         500,
         "Something went wrong",
-        "An internal server error occurred. Please try again.",
-    ), 500
-
+        "An unexpected CRM error occurred. Please try again. If it continues, share the reference shown below with the administrator.",
+    )
 
 # =========================================================
 # PHASE 7 COOPERATIVE OPERATIONS SUITE
