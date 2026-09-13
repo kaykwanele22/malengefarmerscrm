@@ -141,6 +141,8 @@ def _dashboard_data():
         accounts, confirmed_balance, pending_change, pending_finance = _ledger_snapshot(cooperative_id)
 
     primary_stats = None
+    chairperson_decisions = None
+    finance_composition = None
     network_rows = []
     if cooperative.cooperative_type == "Primary":
         memberships = _core.Membership.query.filter_by(cooperative_id=cooperative_id).all()
@@ -153,6 +155,52 @@ def _dashboard_data():
             "crop_count": _core.Crop.query.filter_by(cooperative_id=cooperative_id).count(),
             "harvest_count": _core.Harvest.query.filter_by(cooperative_id=cooperative_id).count(),
         }
+
+        if role == "Primary Chairperson":
+            pending_ledger_rows = LedgerTransaction.query.filter_by(
+                cooperative_id=cooperative_id,
+                status="Pending Confirmation",
+            ).all()
+            pending_budgets = _core.Budget.query.filter_by(
+                cooperative_id=cooperative_id,
+                status="Pending Approval",
+            ).all()
+            pending_reconciliations = _core.BankReconciliation.query.filter_by(
+                cooperative_id=cooperative_id,
+                status="Pending Review",
+            ).all()
+            chairperson_decisions = {
+                "finance_count": len(pending_ledger_rows),
+                "finance_value": sum(float(row.amount or 0) for row in pending_ledger_rows),
+                "budget_count": len(pending_budgets),
+                "budget_value": sum(float(row.planned_amount or 0) for row in pending_budgets),
+                "reconciliation_count": len(pending_reconciliations),
+                "verification_count": awaiting_verification,
+            }
+
+            confirmed_rows = LedgerTransaction.query.filter_by(
+                cooperative_id=cooperative_id,
+                status="Confirmed",
+            ).all()
+            finance_composition = {
+                "cash_bank": confirmed_balance,
+                "sales_income": sum(
+                    float(row.amount or 0)
+                    for row in confirmed_rows
+                    if row.category in {"Product Sale", "Bulk Sale"} and not row.reversal_of_transaction_id
+                ),
+                "grants_loans": sum(
+                    float(row.amount or 0)
+                    for row in confirmed_rows
+                    if row.category in {"Grant", "Loan"} and not row.reversal_of_transaction_id
+                ),
+                "expenses": sum(
+                    float(row.amount or 0)
+                    for row in confirmed_rows
+                    if row.transaction_type == "Expense" and not row.reversal_of_transaction_id
+                ),
+                "pending_value": sum(float(row.amount or 0) for row in pending_ledger_rows),
+            }
     elif cooperative.cooperative_type == "Secondary":
         network_rows = _primary_network_rows(cooperative_id)
 
@@ -220,6 +268,8 @@ def _dashboard_data():
         "positions_filled": positions_filled,
         "positions_vacant": positions_vacant,
         "primary_stats": primary_stats,
+        "chairperson_decisions": chairperson_decisions,
+        "finance_composition": finance_composition,
         "network_rows": network_rows,
         "alerts": alerts,
     }
