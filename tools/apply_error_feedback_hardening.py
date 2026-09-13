@@ -15,6 +15,17 @@ def replace_once(text, old, new, label):
     return text.replace(old, new, 1)
 
 
+def replace_all_known(text, old, new, expected_count, label):
+    if old not in text:
+        if new in text:
+            return text
+        raise RuntimeError(f"Could not find {label} target.")
+    count = text.count(old)
+    if count != expected_count:
+        raise RuntimeError(f"Expected {expected_count} {label} targets, found {count}.")
+    return text.replace(old, new)
+
+
 def regex_once(text, pattern, replacement, label):
     updated, count = re.subn(pattern, replacement, text, count=1, flags=re.S)
     if count != 1:
@@ -89,7 +100,7 @@ def _error_response(status_code, title, message, headers=None):
 
     text = regex_once(
         text,
-        r"def _render_branded_error\(status_code, title, message\):.*?(?=\n\n# =========================================================\n# APPLICATION CONTEXT PROCESSORS AND REQUEST HANDLERS)",
+        r"def _wants_json_error\(\):.*?(?=\n# =========================================================\n# APPLICATION CONTEXT PROCESSORS AND REQUEST HANDLERS)|def _render_branded_error\(status_code, title, message\):.*?(?=\n\n# =========================================================\n# APPLICATION CONTEXT PROCESSORS AND REQUEST HANDLERS)",
         error_helpers.rstrip(),
         "branded error helper block",
     )
@@ -148,11 +159,107 @@ def _error_response(status_code, title, message, headers=None):
                 message,
             )
 '''
+    if old_response_block in text:
+        text = replace_once(
+            text,
+            old_response_block,
+            new_response_block,
+            "after-request error response block",
+        )
+
+    # Backup and restore failures must never echo OS paths, SQL details or exception
+    # messages into the browser. The request reference and exception type are enough
+    # to correlate a user report with server logs.
+    backup_failure_old = '''    try:
+        backup_path = create_database_backup_copy()
+    except Exception as exc:
+        return f"Backup could not be created: {exc}", 500
+'''
+    backup_failure_new = '''    try:
+        backup_path = create_database_backup_copy()
+    except Exception as exc:
+        app.logger.error(
+            "Backup creation failed request_id=%s error_type=%s",
+            getattr(g, "request_id", None),
+            type(exc).__name__,
+        )
+        return "Backup could not be created. Please try again or contact the administrator with the request reference.", 500
+'''
+    text = replace_all_known(
+        text,
+        backup_failure_old,
+        backup_failure_new,
+        2,
+        "backup exception leakage",
+    )
+
+    safety_backup_old = '''    try:
+        create_database_backup_copy(prefix="pre_restore_backup")
+    except Exception as exc:
+        return f"Restore stopped because the safety backup failed: {exc}", 500
+'''
+    safety_backup_new = '''    try:
+        create_database_backup_copy(prefix="pre_restore_backup")
+    except Exception as exc:
+        app.logger.error(
+            "Restore safety backup failed request_id=%s error_type=%s",
+            getattr(g, "request_id", None),
+            type(exc).__name__,
+        )
+        return "Restore stopped because the safety backup could not be created. Please use the request reference for support.", 500
+'''
     text = replace_once(
         text,
-        old_response_block,
-        new_response_block,
-        "after-request error response block",
+        safety_backup_old,
+        safety_backup_new,
+        "restore safety backup exception leakage",
+    )
+
+    restore_failure_old = '''    except Exception as exc:
+        if temporary_restore.exists():
+            temporary_restore.unlink(missing_ok=True)
+        return f"Database restore failed: {exc}", 500
+'''
+    restore_failure_new = '''    except Exception as exc:
+        if temporary_restore.exists():
+            temporary_restore.unlink(missing_ok=True)
+        app.logger.error(
+            "Database restore failed request_id=%s error_type=%s",
+            getattr(g, "request_id", None),
+            type(exc).__name__,
+        )
+        return "Database restore could not be completed. The existing database was left in place; use the request reference for support.", 500
+'''
+    text = replace_once(
+        text,
+        restore_failure_old,
+        restore_failure_new,
+        "restore exception leakage",
+    )
+
+    health_failure_old = '''    try:
+        db.session.execute(sql_text("SELECT 1"))
+    except Exception as exc:
+        database_ok = False
+        database_error = str(exc)
+'''
+    health_failure_new = '''    try:
+        db.session.execute(sql_text("SELECT 1"))
+    except Exception as exc:
+        db.session.rollback()
+        database_ok = False
+        database_error = "The database health check failed. Review server logs using the request reference."
+        app.logger.error(
+            "Database health check failed request_id=%s error_type=%s",
+            getattr(g, "request_id", None),
+            type(exc).__name__,
+        )
+'''
+    text = replace_once(
+        text,
+        health_failure_old,
+        health_failure_new,
+        "system health exception leakage",
     )
 
     handlers = '''# =========================================================
