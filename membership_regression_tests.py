@@ -134,6 +134,13 @@ class MembershipRegressionTests(unittest.TestCase):
             numbers = [m.member_number for m in c.Membership.query.order_by(c.Membership.id.asc()).all()]
             self.assertEqual(numbers, ["SIYA-0001", "SIYA-0002"])
 
+    def test_membership_fee_cannot_be_finance_scale_amount(self):
+        response = self.register_member(fee="3000000")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn(b"exceeds the allowed maximum", response.data)
+        with self.crm.app.app_context():
+            self.assertEqual(self.crm.Membership.query.count(), 0)
+
     def test_secondary_secretary_uses_aggregate_oversight_not_primary_member_register(self):
         self.login_as("secondary_secretary")
         self.assertEqual(self.client.get("/memberships").status_code, 403)
