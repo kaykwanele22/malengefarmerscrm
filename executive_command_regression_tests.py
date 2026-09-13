@@ -198,6 +198,41 @@ class ExecutiveCommandRegressionTests(unittest.TestCase):
         self.assertIn(b"Finance Pulse", response.data)
         self.assertIn(b"Source of truth", response.data)
 
+    def test_membership_fee_anomaly_is_excluded_from_treasurer_receivables(self):
+        c = self.crm
+        with c.app.app_context():
+            farmer = c.Farmer(
+                cooperative_id=self.primary_id,
+                fullname="Bad Fee Member",
+                phone="0799999999",
+                location="Malenge",
+                status="Active",
+            )
+            c.db.session.add(farmer)
+            c.db.session.flush()
+            c.db.session.add(c.Membership(
+                cooperative_id=self.primary_id,
+                farmer_id=farmer.id,
+                member_number="CMD-BAD-FEE",
+                membership_type="Primary",
+                fee_amount=3000000,
+                fee_paid=0,
+                status="Active",
+            ))
+            c.db.session.commit()
+
+        self.login_as("treasurer")
+        response = self.client.get("/dashboard")
+        self.assertEqual(response.status_code, 200)
+        page = response.get_data(as_text=True)
+        self.assertIn("Membership fee data needs review", page)
+        self.assertIn("R 300.00", page)
+
+        with c.app.app_context():
+            c.Membership.query.filter_by(member_number="CMD-BAD-FEE").delete()
+            c.Farmer.query.filter_by(fullname="Bad Fee Member").delete()
+            c.db.session.commit()
+
     def test_primary_treasurer_gets_work_centre_without_approval_authority(self):
         self.login_as("treasurer")
         response = self.client.get("/dashboard")
