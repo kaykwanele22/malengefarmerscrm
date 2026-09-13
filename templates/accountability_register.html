@@ -43,5 +43,23 @@
       {% else %}<tr><td colspan="7"><div class="acc-empty">No accountability records found. Confirm meeting evidence, then capture the decisions that require action.</div></td></tr>{% endfor %}
     </tbody></table></div>
   </section>
+
+  <section class="acc-card">
+    <div class="acc-card-head"><div><span class="acc-eyebrow">Management Transparency</span><h2>Recent Management Actions</h2></div></div>
+    <div class="acc-card-body">
+      <p class="acc-muted">Existing permanent audit records are shown here so governance can see who acted, what was affected and when. This does not change or replace the audit trail.</p>
+      <div class="acc-timeline">
+        {% for log in recent_management_actions %}
+        <div class="acc-event">
+          <strong>{{ log.action|replace('_', ' ')|title }} · {{ log.entity_type }}</strong>
+          <p>{{ log.details or ('Record #' ~ log.entity_id if log.entity_id else 'System action') }}</p>
+          <small>{{ log.user.fullname if log.user else 'System' }} · {{ format_sast(log.created_at) }}</small>
+        </div>
+        {% else %}
+        <div class="acc-empty">No management actions have been recorded for this cooperative yet.</div>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
 </div>
 {% endblock %}
