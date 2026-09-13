@@ -237,7 +237,10 @@ def _auth_after_request(response):
     if request.method == "POST" and session.get("user_id"):
         finalized = False
         if endpoint == "login" and response.status_code in {301, 302, 303, 307, 308}:
-            if not two_factor_policy_enabled():
+            # Some deployments keep the 2FA policy flag enabled while a test/admin
+            # bypass has already completed the authentication session. Treat either
+            # a paused policy or an already-complete second factor as final login.
+            if not two_factor_policy_enabled() or two_factor_session_complete():
                 finalized = True
         elif endpoint == "two_factor_verify" and two_factor_session_complete():
             finalized = response.status_code in {301, 302, 303, 307, 308}
