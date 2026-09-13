@@ -220,7 +220,7 @@
 
     {% elif is_secretariat %}
     <section class="dash-section">
-        <div class="dash-section-head"><div><p class="eyebrow">{% if is_secretary %}Secretary Command Centre{% else %}Vice Secretary Command Centre{% endif %}</p><h2>{% if is_secondary %}Joint Governance &amp; Records{% else %}Governance, Membership &amp; Records{% endif %}</h2></div><a href="{{ url_for('meetings_list') }}">Meetings →</a></div>
+        <div class="dash-section-head"><div><p class="eyebrow">Governance &amp; Accountability</p><h2>{% if is_secretary %}Secretary Command Centre{% else %}Vice Secretary Command Centre{% endif %}</h2></div><a href="{{ url_for('meetings_list') }}">Meetings →</a></div>
         <div class="dash-section-body">
             <div class="dash-stat-grid">
                 {% if is_secondary %}
@@ -255,7 +255,7 @@
 
     {% elif is_treasurer %}
     <section class="dash-section">
-        <div class="dash-section-head"><div><p class="eyebrow">Treasurer Command Centre</p><h2>Finance Recording &amp; Reconciliation</h2></div><a href="{{ url_for('reports') }}">Financial Reports →</a></div>
+        <div class="dash-section-head"><div><p class="eyebrow">Financial Control</p><h2>Treasurer Command Centre</h2></div><a href="{{ url_for('reports') }}">Financial Reports →</a></div>
         <div class="dash-section-body">
             <div class="dash-stat-grid">
                 <div class="dash-stat"><span>Confirmed Contributions</span><strong>R {{ "{:,.0f}".format(own_contributions_value|float) }}</strong><small>Chairperson-confirmed money in</small></div>
