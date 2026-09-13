@@ -130,6 +130,13 @@ def _attach_transaction_evidence(row, files):
         raise
     return docs
 
+def _linked_evidence_count(transaction_id):
+    return CooperativeDocument.query.filter_by(
+        entity_type="LedgerTransaction",
+        entity_id=transaction_id,
+    ).count()
+
+
 
 
 class FinanceAccount(db.Model):
@@ -882,8 +889,48 @@ def transaction_resubmit(item_id):
         if error:
             db.session.rollback()
             return error
+
+        policy = _evidence_policy(payload["transaction_type"], payload["category"], payload["amount"])
+        files = _transaction_evidence_files()
+        file_error = _validate_evidence_file_names(files)
+        if file_error:
+            db.session.rollback()
+            return file_error
+
+        existing_evidence = _linked_evidence_count(row.id)
+        bypass = request.form.get("evidence_bypass") == "yes"
+        bypass_reason = request.form.get("evidence_bypass_reason", "").strip()
+        budget_justification = request.form.get("budget_justification", "").strip()
+        total_evidence = existing_evidence + len(files)
+
+        if policy["budget_justification_required"] and len(budget_justification) < 10:
+            db.session.rollback()
+            return "High-value transactions require a clear approved-budget justification.", 400
+        if total_evidence < policy["required_files"]:
+            if not policy["bypass_allowed"] or not bypass:
+                db.session.rollback()
+                if policy["tier"] == "Structural":
+                    return "Loans, grants and bulk sales require official supporting evidence before resubmission.", 400
+                return f"{policy['tier']} transactions require {policy['required_files']} evidence file(s) before resubmission, unless the emergency bypass is used.", 400
+            if len(bypass_reason) < 10:
+                db.session.rollback()
+                return "Explain the emergency reason before bypassing the Evidence Wall.", 400
+        elif bypass:
+            db.session.rollback()
+            return "Emergency bypass is only needed when required evidence cannot be attached.", 400
+
         for field, value in payload.items():
             setattr(row, field, value)
+        row.evidence_tier = policy["tier"]
+        row.evidence_bypass = bool(bypass)
+        row.evidence_bypass_reason = bypass_reason or None
+        row.evidence_bypass_acknowledged_at = None
+        row.budget_justification = budget_justification or None
+        try:
+            _attach_transaction_evidence(row, files)
+        except ValueError as exc:
+            db.session.rollback()
+            return str(exc), 400
         audit_action = "LEDGER_TRANSACTION_CORRECTED_RESUBMITTED"
 
     row.status = "Pending Confirmation"
