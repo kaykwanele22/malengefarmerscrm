@@ -41,6 +41,7 @@
 .admin-field input,.admin-field select,.admin-field textarea{width:100%;padding:11px 12px;border:1px solid #cad6ce;border-radius:9px;background:#fff;color:#27382e;font:inherit;font-size:13px;box-sizing:border-box}
 .admin-field textarea{min-height:110px;resize:vertical}
 .admin-form-actions{grid-column:1/-1;padding-top:18px;display:flex;justify-content:flex-end;gap:10px;border-top:1px solid #edf2ee}
+.admin-header-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 @media(max-width:1050px){.admin-stats{grid-template-columns:repeat(2,1fr)}.admin-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:700px){.admin-stats,.admin-grid,.admin-form-grid{grid-template-columns:1fr}}
 </style>
@@ -51,20 +52,22 @@
         <div>
             <span class="admin-eyebrow">SYSTEM ADMINISTRATION</span>
             <h1>Backup &amp; Restore</h1>
-            <p>Create, download and restore verified CRM database backups.</p>
+            <p>Create, download and restore database-only backups, or use Disaster Recovery for complete database + evidence bundles.</p>
         </div>
-        {% if database_backend == 'sqlite' %}
-        <form method="POST" action="{{ url_for('admin_backup_create') }}">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button type="submit" class="admin-button">💾 Create Backup</button>
-        </form>
-        {% endif %}
+        <div class="admin-header-actions">
+            <a href="{{ url_for('backuprecovery.admin_recovery') }}" class="admin-button-secondary">Disaster Recovery</a>
+            {% if database_backend == 'sqlite' %}
+            <form method="POST" action="{{ url_for('admin_backup_create') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="admin-button">💾 Create DB Backup</button>
+            </form>
+            {% endif %}
+        </div>
     </div>
 
     {% if database_backend != 'sqlite' %}
     <div class="admin-warning">
-        Built-in file backup and restore currently supports SQLite only. When the CRM moves to PostgreSQL,
-        production backups should use the database provider's backup/snapshot system.
+        Built-in database-file backup and restore supports SQLite only. PostgreSQL production databases should use the provider snapshot service or a verified recovery bundle created with <code>pg_dump</code> available on the host.
     </div>
     {% else %}
     <div class="admin-warning">
@@ -74,13 +77,12 @@
     {% endif %}
 
     <div class="admin-warning">
-        <strong>Phase 6 evidence backup:</strong> the database backup below does not include uploaded meeting/task evidence files.
-        A complete accountability backup must also preserve the configured <code>ACCOUNTABILITY_UPLOAD_DIR</code> folder.
+        <strong>Database-only backup:</strong> the files below do not include Phase 6 accountability uploads or Phase 7 controlled documents. Use <a href="{{ url_for('backuprecovery.admin_recovery') }}">Disaster Recovery</a> to create a verified bundle containing the database and protected evidence stores together.
     </div>
 
     <section class="admin-card">
         <div class="admin-card-pad">
-            <h2 class="admin-section-title">Saved Backups</h2>
+            <h2 class="admin-section-title">Saved Database Backups</h2>
         </div>
         <div class="admin-table-wrap">
             <table class="admin-table">
@@ -94,22 +96,20 @@
                     <td>
                         <div style="display:flex;gap:8px;flex-wrap:wrap">
                             <a href="{{ url_for('admin_backup_download', backup_name=backup.name) }}" class="admin-button-secondary">Download</a>
-
                             <form method="POST" action="{{ url_for('admin_backup_restore_file', backup_name=backup.name) }}" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <input name="confirmation" placeholder="Type RESTORE" style="height:42px;padding:0 10px;border:1px solid #d8dfda;border-radius:8px;width:120px">
                                 <button type="submit" class="admin-button-danger" onclick="return confirm('Restore this backup and replace the current database?');">Restore</button>
                             </form>
-
                             <form method="POST" action="{{ url_for('admin_backup_delete', backup_name=backup.name) }}" onsubmit="return confirm('Delete this stored backup file?');">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <button type="submit" class="admin-button-danger">Delete</button>
                             </form>
                         </div>
                     </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="4">No saved backups yet. Create your first backup above.</td></tr>
+                <tr><td colspan="4">No saved database backups yet.</td></tr>
                 {% endfor %}
                 </tbody>
             </table>
