@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}{{ target_user.fullname }} Security | Malenge Farmers CRM{% endblock %}
+{% block content %}
+<div style="max-width:1180px;margin:26px auto;padding:0 18px">
+  <div style="display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap;margin-bottom:20px">
+    <div><div style="font-size:12px;font-weight:800;letter-spacing:.7px;color:#2e8251">ADMIN / ACCOUNT SECURITY</div><h1 style="margin:5px 0 6px;color:#173b2b">{{ target_user.fullname }}</h1><p style="margin:0;color:#607067">{{ target_user.email }} · {{ access.role if access else 'Unassigned' }} · {{ access.status if access else 'Unknown' }}</p></div>
+    <a href="{{ url_for('users_list') }}" style="padding:10px 15px;border:1px solid #ccd9d1;border-radius:8px;text-decoration:none;color:#315441;font-weight:700">Back to Users</a>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;margin-bottom:20px">
+    <div style="background:#fff;border:1px solid #dfe8e2;border-radius:13px;padding:18px"><small>Account Lock</small><h3 style="margin:7px 0">{% if security.locked_until and security.locked_until > now %}Locked{% else %}Available{% endif %}</h3><small>{% if security.locked_until and security.locked_until > now %}Until {{ format_sast(security.locked_until) }}{% else %}{{ security.failed_login_count }} failed password attempt(s){% endif %}</small></div>
+    <div style="background:#fff;border:1px solid #dfe8e2;border-radius:13px;padding:18px"><small>Password</small><h3 style="margin:7px 0">{% if security.must_change_password %}Rotation Required{% else %}Current{% endif %}</h3><small>{% if security.password_changed_at %}Changed {{ format_sast(security.password_changed_at) }}{% else %}No recorded rotation date{% endif %}</small></div>
+    <div style="background:#fff;border:1px solid #dfe8e2;border-radius:13px;padding:18px"><small>Last Successful Login</small><h3 style="margin:7px 0">{% if security.last_login_at %}{{ format_sast(security.last_login_at, '%d %b %Y') }}{% else %}Not recorded{% endif %}</h3><small>{{ security.last_login_ip or 'No IP recorded' }}</small></div>
+    <div style="background:#fff;border:1px solid #dfe8e2;border-radius:13px;padding:18px"><small>2FA</small><h3 style="margin:7px 0">{{ 'Enabled' if target_user.two_factor_enabled else 'Not Enrolled' }}</h3><small>Session version {{ security.auth_version }}</small></div>
+  </div>
+
+  {% if security.locked_until or security.failed_login_count %}<form method="POST" action="{{ url_for('authsec.unlock_user', user_id=target_user.id) }}" style="margin-bottom:20px"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" style="min-height:42px;border:0;border-radius:8px;background:#2e8251;color:white;padding:0 16px;font-weight:800;cursor:pointer">Clear Login Lock</button></form>{% endif %}
+
+  <section style="background:#fff;border:1px solid #dfe8e2;border-radius:14px;overflow:hidden">
+    <div style="padding:18px;border-bottom:1px solid #e6eee9"><h2 style="margin:0;color:#173b2b">Security &amp; Access Activity</h2></div>
+    <div style="overflow:auto"><table style="width:100%;border-collapse:collapse;min-width:820px"><thead><tr style="background:#f5f8f6;text-align:left"><th style="padding:12px">Time</th><th>Action</th><th>Details</th><th>IP</th><th>Request</th></tr></thead><tbody>{% for log in logs %}<tr style="border-top:1px solid #edf2ef"><td style="padding:12px;white-space:nowrap">{{ format_sast(log.created_at) }}</td><td><strong>{{ log.action }}</strong></td><td>{{ log.details or '—' }}</td><td>{{ log.ip_address or '—' }}</td><td>{{ (log.request_method or '') ~ ' ' ~ (log.request_path or '') }}</td></tr>{% else %}<tr><td colspan="5" style="padding:28px;text-align:center;color:#6d7b73">No account activity has been recorded yet.</td></tr>{% endfor %}</tbody></table></div>
+  </section>
+</div>
+{% endblock %}

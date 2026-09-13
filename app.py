@@ -9258,6 +9258,10 @@ register_bulk_trade(app)
 from account_ledger import register_account_ledger
 register_account_ledger(app)
 
+# Persistent login security, password lifecycle and account activity controls.
+from auth_hardening import register_auth_hardening
+register_auth_hardening(app)
+
 
 # =========================================================
 # RUN APPLICATION
