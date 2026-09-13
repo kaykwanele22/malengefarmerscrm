@@ -145,6 +145,7 @@ def _dashboard_data():
     finance_composition = None
     treasurer_work = None
     secretary_work = None
+    role_focus = None
     network_rows = []
     if cooperative.cooperative_type == "Primary":
         memberships = _core.Membership.query.filter_by(cooperative_id=cooperative_id).all()
@@ -167,6 +168,17 @@ def _dashboard_data():
             "crop_count": _core.Crop.query.filter_by(cooperative_id=cooperative_id).count(),
             "harvest_count": _core.Harvest.query.filter_by(cooperative_id=cooperative_id).count(),
         }
+
+        active_crop_rows = _core.Crop.query.filter(
+            _core.Crop.cooperative_id == cooperative_id,
+            _core.Crop.status.in_(("Planted", "Growing", "Ready for Harvest", "Partially Harvested")),
+        ).all()
+        active_crop_count = len(active_crop_rows)
+        active_area_hectares = sum(float(row.area_planted or 0) for row in active_crop_rows)
+        expected_harvest_count = sum(
+            1 for row in active_crop_rows
+            if row.expected_harvest_date and row.expected_harvest_date >= today
+        )
 
         if role == "Primary Chairperson":
             pending_ledger_rows = LedgerTransaction.query.filter_by(
@@ -324,8 +336,158 @@ def _dashboard_data():
                 "draft_resolution_count": draft_resolutions,
                 "upcoming_30_count": upcoming_30_count,
             }
+
+        if role == "Primary Chairperson":
+            decision_total = (
+                (chairperson_decisions or {}).get("finance_count", 0)
+                + (chairperson_decisions or {}).get("budget_count", 0)
+                + (chairperson_decisions or {}).get("reconciliation_count", 0)
+                + (chairperson_decisions or {}).get("verification_count", 0)
+            )
+            role_focus = {
+                "metric_1_label": "Current Financial Position",
+                "metric_1_value": f"R {confirmed_balance:,.2f}",
+                "metric_1_detail": "Confirmed bank, cash and controlled-account position",
+                "metric_2_label": "Production Position",
+                "metric_2_value": f"{active_crop_count} active crops",
+                "metric_2_detail": f"{active_area_hectares:,.2f} ha under active cultivation",
+                "queue_label": "Awaiting My Approval",
+                "queue_value": decision_total,
+                "queue_detail": "Transactions, budgets, reconciliations and verification items",
+                "queue_href": url_for("ledger.dashboard", status="Pending Confirmation"),
+            }
+        elif role == "Primary Vice Chairperson":
+            role_focus = {
+                "metric_1_label": "Active Cultivation",
+                "metric_1_value": f"{active_crop_count} crops",
+                "metric_1_detail": f"{active_area_hectares:,.2f} ha currently active",
+                "metric_2_label": "Expected Harvests",
+                "metric_2_value": expected_harvest_count,
+                "metric_2_detail": "Active crops with an upcoming expected harvest date",
+                "queue_label": "Overdue Operations",
+                "queue_value": overdue_responsibilities,
+                "queue_detail": "Operational responsibilities past their deadline",
+                "queue_href": url_for("accountability_register"),
+            }
+        elif role in {"Primary Secretary", "Primary Vice Secretary"}:
+            secretary_attention = 0
+            if secretary_work:
+                secretary_attention = (
+                    secretary_work.get("membership_attention_count", 0)
+                    + secretary_work.get("draft_meeting_count", 0)
+                    + secretary_work.get("draft_resolution_count", 0)
+                )
+            role_focus = {
+                "metric_1_label": "Institutional Registry",
+                "metric_1_value": primary_stats["member_count"],
+                "metric_1_detail": f'{primary_stats["active_member_count"]} active members',
+                "metric_2_label": "Active Mandates",
+                "metric_2_value": open_responsibilities,
+                "metric_2_detail": "Assigned, in-progress or awaiting-verification resolutions",
+                "queue_label": "Records Needing Attention",
+                "queue_value": secretary_attention,
+                "queue_detail": "Membership, meeting-evidence and draft-resolution follow-up",
+                "queue_href": url_for("accountability_register"),
+            }
+        elif role == "Primary Treasurer":
+            approved_expense_budgets = Budget.query.filter_by(
+                cooperative_id=cooperative_id,
+                fiscal_year=today.year,
+                budget_type="Expense",
+                status="Approved",
+            ).all()
+            planned_expense_budget = sum(float(row.planned_amount or 0) for row in approved_expense_budgets)
+            confirmed_expense_spend = sum(
+                float(row.amount or 0)
+                for row in LedgerTransaction.query.filter_by(
+                    cooperative_id=cooperative_id,
+                    status="Confirmed",
+                    transaction_type="Expense",
+                ).all()
+                if not row.reversal_of_transaction_id
+            )
+            burn_percent = (
+                (confirmed_expense_spend / planned_expense_budget) * 100
+                if planned_expense_budget > 0 else 0.0
+            )
+            reconciliation_state = "Not started"
+            reconciliation_detail = "No bank reconciliation recorded yet"
+            if treasurer_work and treasurer_work.get("latest_reconciliation_difference") is not None:
+                difference = float(treasurer_work["latest_reconciliation_difference"] or 0)
+                reconciliation_state = "Balanced" if abs(difference) < 0.005 else "Attention"
+                reconciliation_detail = f"Latest statement difference: R {difference:,.2f}"
+            action_count = (
+                (treasurer_work or {}).get("rejected_count", 0)
+                + (treasurer_work or {}).get("missing_evidence_count", 0)
+                + (treasurer_work or {}).get("pending_count", 0)
+            )
+            role_focus = {
+                "metric_1_label": "Seasonal Budget Burn",
+                "metric_1_value": f"{burn_percent:,.1f}%",
+                "metric_1_detail": f"R {confirmed_expense_spend:,.2f} of R {planned_expense_budget:,.2f} approved expense budget",
+                "metric_2_label": "Reconciliation Integrity",
+                "metric_2_value": reconciliation_state,
+                "metric_2_detail": reconciliation_detail,
+                "queue_label": "Transactions Needing Action",
+                "queue_value": action_count,
+                "queue_detail": "Pending, rejected or evidence-incomplete transaction work",
+                "queue_href": url_for("ledger.dashboard"),
+            }
+
     elif cooperative.cooperative_type == "Secondary":
         network_rows = _primary_network_rows(cooperative_id)
+        if role == "Secondary Chairperson":
+            role_focus = {
+                "metric_1_label": "Network Reporting",
+                "metric_1_value": sum(1 for row in network_rows if row["financial_reporting_status"] == "Submitted"),
+                "metric_1_detail": f"{len(network_rows)} Primary cooperatives in the network",
+                "metric_2_label": "Open Shared Actions",
+                "metric_2_value": sum(row["open_actions"] for row in network_rows),
+                "metric_2_detail": "Aggregate shared accountability only; no Primary raw records",
+                "queue_label": "Awaiting My Approval",
+                "queue_value": pending_finance + awaiting_verification,
+                "queue_detail": "Secondary-level financial and accountability decisions",
+                "queue_href": url_for("ledger.dashboard", status="Pending Confirmation"),
+            }
+        elif role == "Secondary Vice Chairperson":
+            role_focus = {
+                "metric_1_label": "Joint Operations",
+                "metric_1_value": len(network_rows),
+                "metric_1_detail": "Active Primary cooperatives participating in the network",
+                "metric_2_label": "Open Shared Actions",
+                "metric_2_value": sum(row["open_actions"] for row in network_rows),
+                "metric_2_detail": "Aggregate operations requiring follow-up",
+                "queue_label": "Overdue Operations",
+                "queue_value": overdue_responsibilities,
+                "queue_detail": "Secondary responsibilities past their deadline",
+                "queue_href": url_for("accountability_register"),
+            }
+        elif role in {"Secondary Secretary", "Secondary Vice Secretary"}:
+            role_focus = {
+                "metric_1_label": "Primary Cooperatives",
+                "metric_1_value": len(network_rows),
+                "metric_1_detail": "Aggregate institutional registry only",
+                "metric_2_label": "Active Mandates",
+                "metric_2_value": open_responsibilities,
+                "metric_2_detail": "Secondary resolutions still active",
+                "queue_label": "Records Needing Attention",
+                "queue_value": awaiting_verification + overdue_responsibilities,
+                "queue_detail": "Secondary governance records requiring follow-up",
+                "queue_href": url_for("accountability_register"),
+            }
+        elif role == "Secondary Treasurer":
+            role_focus = {
+                "metric_1_label": "Secondary Financial Position",
+                "metric_1_value": f"R {confirmed_balance:,.2f}",
+                "metric_1_detail": "Secondary accounts only; Primary internal accounts remain private",
+                "metric_2_label": "Primary Contributions",
+                "metric_2_value": f"R {sum(row['confirmed_contribution'] for row in network_rows):,.2f}",
+                "metric_2_detail": "Confirmed Primary-to-Secondary contributions",
+                "queue_label": "Transactions Needing Action",
+                "queue_value": pending_finance,
+                "queue_detail": "Secondary ledger transactions awaiting decision",
+                "queue_href": url_for("ledger.dashboard"),
+            }
 
     alerts = []
     if pending_finance:
@@ -408,6 +570,7 @@ def _dashboard_data():
         "finance_composition": finance_composition,
         "treasurer_work": treasurer_work,
         "secretary_work": secretary_work,
+        "role_focus": role_focus,
         "network_rows": network_rows,
         "alerts": alerts,
     }

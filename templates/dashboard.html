@@ -103,7 +103,7 @@
                 {% else %}Primary Cooperative Secretariat{% endif %}
             </p>
             <h1>{% if is_admin %}CRM Administration Dashboard{% elif is_secondary %}{{ current_cooperative.name if current_cooperative else 'Secondary Cooperative' }} Dashboard{% else %}{{ current_cooperative.name if current_cooperative else 'Primary Cooperative' }} Dashboard{% endif %}</h1>
-            <p>{% if is_admin %}System-wide account, security, backup and configuration administration.{% elif current_cooperative %}{{ role }} · {{ current_cooperative.name }}{% else %}{{ role }} · Cooperative assignment required{% endif %}</p>
+            <p>{% if is_admin %}System setup, users, security, backup and configuration. Operational cooperative actions remain with cooperative executives.{% elif current_cooperative %}{{ role }} · {{ current_cooperative.name }}{% else %}{{ role }} · Cooperative assignment required{% endif %}</p>
             <div class="dash-hero-meta">
                 {% if not is_admin and current_cooperative %}
                 <span class="dash-hero-pill">{{ current_cooperative.cooperative_type }} Cooperative</span>

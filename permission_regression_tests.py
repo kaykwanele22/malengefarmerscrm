@@ -265,9 +265,18 @@ class PermissionRegressionTests(unittest.TestCase):
         for url in ["/farmers", "/memberships", "/farms", "/crops", "/harvests", "/sales", "/payments", "/contributions", "/expenses", "/reports", "/settings"]:
             self.assert_status(url, 200)
         self.assert_status("/farmers/add", 403)
+        self.assert_status("/crops/add", 403)
+        self.assert_status("/harvests/add", 403)
         self.assert_status("/sales/add", 403)
         self.assert_status("/contributions/add", 403)
         self.assert_status("/expenses/add", 403)
+
+    def test_primary_vice_chair_owns_production_recording_but_not_finance(self):
+        self.login_as("primary_vice_chair")
+        for url in ["/crops", "/harvests", "/crops/add", "/harvests/add"]:
+            self.assert_status(url, 200)
+        for url in ["/sales", "/payments", "/contributions", "/expenses"]:
+            self.assert_status(url, 403)
 
     def test_primary_vice_chair_cannot_approve_finance(self):
         self.login_as("primary_vice_chair")
