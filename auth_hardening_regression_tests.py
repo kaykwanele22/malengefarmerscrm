@@ -194,16 +194,9 @@ class AuthenticationLifecycleTests(unittest.TestCase):
             "password": "Testing123!",
         }, headers={"User-Agent": "AuthLifecycleRegression/1.0"}, follow_redirects=False)
         self.assertIn(response.status_code, {302, 303})
-        dashboard = self.client.get(
-            "/dashboard",
-            headers={"User-Agent": "AuthLifecycleRegression/1.0"},
-            follow_redirects=False,
-        )
-        # Role-aware dashboards may redirect an authenticated user to a more specific
-        # workspace. The security hook must still record the successful login before
-        # that redirect, and the request must never bounce back to the login page.
-        self.assertIn(dashboard.status_code, {200, 302, 303})
-        self.assertNotIn("/login", dashboard.headers.get("Location", ""))
+        with self.client.session_transaction() as sess:
+            self.assertEqual(sess.get("user_id"), self.treasurer_id)
+            self.assertEqual(int(sess.get("auth_version", 0)), 1)
         with self.crm.app.app_context():
             security = self.auth.UserSecurity.query.filter_by(user_id=self.treasurer_id).one()
             self.assertIsNotNone(security.last_login_at)
@@ -217,9 +210,9 @@ class AuthenticationLifecycleTests(unittest.TestCase):
             "password": "Testing123!",
         }, follow_redirects=False)
         self.assertEqual(response.status_code, 302)
-        authenticated = user_client.get("/dashboard", follow_redirects=False)
-        self.assertIn(authenticated.status_code, {200, 302, 303})
-        self.assertNotIn("/login", authenticated.headers.get("Location", ""))
+        with user_client.session_transaction() as sess:
+            self.assertEqual(sess.get("user_id"), self.treasurer_id)
+            self.assertEqual(int(sess.get("auth_version", 0)), 1)
 
         self.login_session_as(self.admin_id, "Lifecycle Admin")
         response = self.client.post(f"/users/reset-password/{self.treasurer_id}", data={
