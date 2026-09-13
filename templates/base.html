@@ -492,59 +492,55 @@
                     </a>
                     {% endif %}
 
-                    <p class="nav-title">FINANCIAL CONTROL</p>
+                    <p class="nav-title">{% if is_chairperson %}FINANCIAL OVERSIGHT &amp; APPROVAL{% else %}FINANCIAL CONTROL{% endif %}</p>
 
-                    <a href="{{ url_for('sales_list') }}"
-                       class="nav-item {% if request.endpoint in [
-                           'sales_list',
-                           'add_sale',
-                           'edit_sale'
-                       ] %}active{% endif %}">
-                        <span>🛒</span>
-                        <span>Sales</span>
+                    {% if is_chairperson %}
+                    <a href="{{ url_for('ledger.dashboard', status='Pending Confirmation') }}"
+                       class="nav-item {% if request.endpoint and request.endpoint.startswith('ledger.') %}active{% endif %}">
+                        <span>✅</span>
+                        <span>Finance Decisions</span>
                     </a>
 
-                    <a href="{{ url_for('payments_list') }}"
-                       class="nav-item {% if request.endpoint in [
-                           'payments_list',
-                           'add_payment',
-                           'edit_payment'
-                       ] %}active{% endif %}">
-                        <span>💰</span>
-                        <span>Payments</span>
-                    </a>
-
-                    {% if is_secondary %}
-                    <a href="{{ url_for('jointops.dashboard', _anchor='primary-contributions') }}"
-                       class="nav-item {% if request.endpoint and request.endpoint.startswith('jointops.') %}active{% endif %}">
-                        <span>🏦</span>
-                        <span>Primary Contributions</span>
-                    </a>
-                    {% else %}
-                    <a href="{{ url_for('contributions_list') }}"
-                       class="nav-item {% if request.endpoint in [
-                           'contributions_list',
-                           'decide_contribution'
-                       ] %}active{% endif %}">
-                        <span>🏦</span>
-                        <span>Contributions</span>
-                    </a>
-                    {% endif %}
-
-                    <a href="{{ url_for('expenses_list') }}"
-                       class="nav-item {% if request.endpoint in [
-                           'expenses_list',
-                           'decide_expense'
-                       ] %}active{% endif %}">
-                        <span>🧾</span>
-                        <span>Expenses</span>
+                    <a href="{{ url_for('phase7.finance_control') }}"
+                       class="nav-item {% if request.endpoint == 'phase7.finance_control' %}active{% endif %}">
+                        <span>🧮</span>
+                        <span>Financial Oversight</span>
                     </a>
 
                     <a href="{{ url_for('reports') }}"
                        class="nav-item {% if request.endpoint == 'reports' %}active{% endif %}">
                         <span>📈</span>
-                        <span>Reports</span>
+                        <span>Financial Reports</span>
                     </a>
+                    {% else %}
+                    <a href="{{ url_for('sales_list') }}"
+                       class="nav-item {% if request.endpoint in ['sales_list','add_sale','edit_sale'] %}active{% endif %}">
+                        <span>🛒</span><span>Sales</span>
+                    </a>
+                    <a href="{{ url_for('payments_list') }}"
+                       class="nav-item {% if request.endpoint in ['payments_list','add_payment','edit_payment'] %}active{% endif %}">
+                        <span>💰</span><span>Payments</span>
+                    </a>
+                    {% if is_secondary %}
+                    <a href="{{ url_for('jointops.dashboard', _anchor='primary-contributions') }}"
+                       class="nav-item {% if request.endpoint and request.endpoint.startswith('jointops.') %}active{% endif %}">
+                        <span>🏦</span><span>Primary Contributions</span>
+                    </a>
+                    {% else %}
+                    <a href="{{ url_for('contributions_list') }}"
+                       class="nav-item {% if request.endpoint in ['contributions_list','decide_contribution'] %}active{% endif %}">
+                        <span>🏦</span><span>Contributions</span>
+                    </a>
+                    {% endif %}
+                    <a href="{{ url_for('expenses_list') }}"
+                       class="nav-item {% if request.endpoint in ['expenses_list','decide_expense'] %}active{% endif %}">
+                        <span>🧾</span><span>Expenses</span>
+                    </a>
+                    <a href="{{ url_for('reports') }}"
+                       class="nav-item {% if request.endpoint == 'reports' %}active{% endif %}">
+                        <span>📈</span><span>Reports</span>
+                    </a>
+                    {% endif %}
 
                     {% if can_view_audit_logs %}
                     <p class="nav-title">GOVERNANCE &amp; ACCOUNTABILITY</p>
