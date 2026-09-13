@@ -11,6 +11,7 @@ on:
       - crm-hardening-5-opening-balance-integrity
       - crm-hardening-6-transaction-context
       - crm-hardening-7-ledger-corrections
+      - crm-hardening-8-confirmed-reversals
   pull_request:
     branches:
       - main
@@ -64,6 +65,7 @@ jobs:
           - joint_operations_regression_tests.py
           - actionable_options_regression_tests.py
           - ledger_regression_tests.py
+          - ledger_reversal_regression_tests.py
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
