@@ -220,6 +220,90 @@ class FinanceLedgerRegressionTests(unittest.TestCase):
         self.assertEqual(no_match.status_code, 200)
         self.assertNotIn(f"View #{tx_id}".encode(), no_match.data)
 
+    def test_loan_repayment_records_as_money_out_and_supports_evidence(self):
+        c, l, p = self.crm, self.ledger, self.p7
+        self.login_as("treasurer")
+        response = self.client.post("/finance/accounts", data={
+            "name": "Siyaphumla Main Bank",
+            "account_type": "Bank Account",
+            "institution": "Standard Bank",
+            "account_last4": "7788",
+            "opening_balance": "3000000",
+            "opening_balance_date": c.crm_today().isoformat(),
+        })
+        self.assertEqual(response.status_code, 302)
+
+        with c.app.app_context():
+            account_id = l.FinanceAccount.query.filter_by(
+                cooperative_id=self.coop_a,
+                name="Siyaphumla Main Bank",
+            ).one().id
+
+        response = self.client.post("/finance/transactions", data={
+            "transaction_type": "Expense",
+            "category": "Loan Repayment",
+            "amount": "50000",
+            "transaction_date": c.crm_today().isoformat(),
+            "from_account_id": str(account_id),
+            "counterparty": "Standard Bank",
+            "reference": "LOAN-SEP-2026",
+            "payment_method": "EFT / Bank Transfer",
+            "notes": "September loan instalment",
+        })
+        self.assertEqual(response.status_code, 302)
+
+        with c.app.app_context():
+            tx = l.LedgerTransaction.query.filter_by(
+                cooperative_id=self.coop_a,
+                reference="LOAN-SEP-2026",
+            ).one()
+            tx_id = tx.id
+            self.assertEqual(tx.status, "Pending Confirmation")
+            self.assertEqual(tx.transaction_type, "Expense")
+            self.assertEqual(tx.category, "Loan Repayment")
+            self.assertEqual(tx.counterparty, "Standard Bank")
+
+            doc = p.CooperativeDocument(
+                cooperative_id=self.coop_a,
+                document_type="Receipt",
+                title="Standard Bank repayment proof",
+                entity_type="LedgerTransaction",
+                entity_id=tx_id,
+                original_name="loan-repayment-proof.pdf",
+                stored_name="loan-repayment-proof-test.pdf",
+                file_sha256="1" * 64,
+                uploaded_by_user_id=self.users["treasurer"],
+            )
+            c.db.session.add(doc)
+            c.db.session.commit()
+
+        self.login_as("chair")
+        response = self.client.post(
+            f"/finance/transactions/{tx_id}/decision",
+            data={"decision": "approve", "decision_note": "Proof checked."},
+        )
+        self.assertEqual(response.status_code, 302)
+
+        with c.app.app_context():
+            tx = c.db.session.get(l.LedgerTransaction, tx_id)
+            account = c.db.session.get(l.FinanceAccount, account_id)
+            self.assertEqual(tx.status, "Confirmed")
+            self.assertAlmostEqual(account.confirmed_balance, 2950000.0)
+            self.assertEqual(c.Membership.query.filter(
+                c.Membership.farmer.has(fullname="Standard Bank")
+            ).count(), 0)
+
+        self.login_as("treasurer")
+        response = self.client.get(f"/finance/transactions/{tx_id}")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Loan Repayment", response.data)
+        self.assertIn(b"Standard Bank", response.data)
+        self.assertIn(b"Standard Bank repayment proof", response.data)
+
+        response = self.client.get("/finance/accounts?group=Debt+Repayment")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"LOAN-SEP-2026", response.data)
+
     def test_rejected_transaction_can_be_corrected_with_history_and_confirmed_is_locked(self):
         c, l = self.crm, self.ledger
         self.login_as("treasurer")
