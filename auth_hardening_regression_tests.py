@@ -75,6 +75,11 @@ class AuthenticationLifecycleTests(unittest.TestCase):
     def setUp(self):
         self.client = self.crm.app.test_client()
         with self.crm.app.app_context():
+            # Keep tests isolated: password-reset coverage mutates the Treasurer's
+            # credential, so restore the seeded credentials before every test.
+            for user_id in (self.admin_id, self.treasurer_id):
+                user = self.crm.db.session.get(self.crm.User, user_id)
+                user.password = self.crm.generate_password_hash("Testing123!")
             for security in self.auth.UserSecurity.query.all():
                 security.failed_login_count = 0
                 security.locked_until = None
