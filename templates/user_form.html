@@ -63,13 +63,13 @@
             {% if not user %}
             <div class="form-field">
                 <label for="password">Temporary Password *</label>
-                <input id="password" name="password" type="password" required minlength="8">
-                <span class="form-help">At least 8 characters.</span>
+                <input id="password" name="password" type="password" required minlength="10">
+                <span class="form-help">At least 10 characters with uppercase, lowercase, a number and a symbol.</span>
             </div>
 
             <div class="form-field">
                 <label for="confirm_password">Confirm Password *</label>
-                <input id="confirm_password" name="confirm_password" type="password" required minlength="8">
+                <input id="confirm_password" name="confirm_password" type="password" required minlength="10">
             </div>
 
             <div class="form-field">
@@ -105,7 +105,8 @@
 
             <div class="form-note">
                 This page creates a <strong>CRM login</strong>. It does not register a cooperative member.
-                Cooperative membership remains the Secretary's responsibility.
+                Cooperative membership remains the Secretary's responsibility. The password entered here is temporary:
+                the user must replace it with their own password at first sign-in.
             </div>
             {% else %}
             <div class="form-note">

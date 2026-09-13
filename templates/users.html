@@ -50,6 +50,7 @@
 .user-tool{min-height:32px;padding:0 10px;display:inline-flex;align-items:center;justify-content:center;border:1px solid #d7e3db;border-radius:7px;background:#f6f9f7;color:#315441;text-decoration:none;font-size:10px;font-weight:800}
 .user-tool.password{background:#fffaf0;border-color:#eadfbf;color:#725c26}
 .user-tool.twofa{background:#eef7ff;border-color:#cfe0ef;color:#2b5f84}
+.user-tool.security{background:#f0f7f2;border-color:#cfe3d5;color:#285b3a}
 .user-tool-form{margin:0;display:inline-flex}.user-tool-form button{font-family:inherit;cursor:pointer}
 .access-form-wrapper{padding:13px 16px 15px}
 .access-form-title{margin-bottom:10px;color:#173e29;font-size:11px;font-weight:800}
@@ -145,6 +146,7 @@
 <div class="users-list">
     {% for user in users %}
     {% set access = access_map.get(user.id) %}
+    {% set security = auth_security_state(user.id) %}
     {% if access %}
         {% if access.status == "Active" %}{% set card_status = "active" %}
         {% elif access.status == "Inactive" %}{% set card_status = "inactive" %}
@@ -174,6 +176,7 @@
                 <span class="access-badge {{ card_status }}">{{ access.status }}</span>
                 <span class="access-badge role">{{ access.role }}</span>
                 <span class="access-badge {% if not two_factor_policy_enabled() %}pending{% elif user.two_factor_enabled %}active{% else %}pending{% endif %}">2FA {{ 'Paused' if not two_factor_policy_enabled() else ('Enabled' if user.two_factor_enabled else 'Required') }}</span>
+                {% if security.locked %}<span class="access-badge inactive">Login Locked</span>{% elif security.must_change_password %}<span class="access-badge pending">Password Change Required</span>{% endif %}
                 {% else %}
                 <span class="access-badge pending">No Access Record</span>
                 {% endif %}
@@ -191,6 +194,7 @@
         <div class="user-tools">
             <a href="{{ url_for('edit_user', user_id=user.id) }}" class="user-tool">Edit Details</a>
             <a href="{{ url_for('reset_user_password', user_id=user.id) }}" class="user-tool password">Reset Password</a>
+            <a href="{{ url_for('authsec.user_security_history', user_id=user.id) }}" class="user-tool security">Security &amp; Activity</a>
             {% if user.two_factor_enabled and (not current_access or user.id != current_access.user_id) %}
             <form method="POST" action="{{ url_for('reset_user_two_factor', user_id=user.id) }}" class="user-tool-form" onsubmit="return confirm('Reset Google Authenticator for this user? They will have to enroll again at next sign-in.')">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
