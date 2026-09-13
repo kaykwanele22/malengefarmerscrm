@@ -194,6 +194,12 @@ class AuthenticationLifecycleTests(unittest.TestCase):
             "password": "Testing123!",
         }, headers={"User-Agent": "AuthLifecycleRegression/1.0"}, follow_redirects=False)
         self.assertIn(response.status_code, {302, 303})
+        dashboard = self.client.get(
+            "/dashboard",
+            headers={"User-Agent": "AuthLifecycleRegression/1.0"},
+            follow_redirects=False,
+        )
+        self.assertEqual(dashboard.status_code, 200)
         with self.crm.app.app_context():
             security = self.auth.UserSecurity.query.filter_by(user_id=self.treasurer_id).one()
             self.assertIsNotNone(security.last_login_at)

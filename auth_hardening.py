@@ -128,6 +128,7 @@ def _mark_authenticated_login(user):
     security.last_login_ip = client_ip_address()
     security.last_login_user_agent = (request.headers.get("User-Agent", "") or "")[:255] or None
     session["auth_version"] = int(security.auth_version or 1)
+    session["_auth_login_recorded_for"] = user.id
     db.session.commit()
     return security
 
@@ -216,6 +217,19 @@ def _auth_before_request():
     elif int(session_version) != current_version:
         session.clear()
         return redirect(url_for("login"))
+
+    # Flask saves the session after response hooks, so the login POST may not expose
+    # its freshly-created session to this module's after_request callback. Record a
+    # successful login exactly once on the first subsequent authenticated request.
+    # Second-factor challenge endpoints are excluded so this never treats an
+    # unfinished Google Authenticator challenge as a completed login.
+    endpoint = request.endpoint or ""
+    if (
+        session.get("_auth_login_recorded_for") != user.id
+        and endpoint not in {"two_factor_setup", "two_factor_verify"}
+        and (not two_factor_policy_enabled() or two_factor_session_complete())
+    ):
+        security = _mark_authenticated_login(user)
 
     exempt = {
         "home", "login", "logout", "health", "static",
